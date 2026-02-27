@@ -1,0 +1,617 @@
+import { useState, useMemo, useCallback, Component } from 'react'
+import type { ReactNode, ErrorInfo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { LanguageSwitcher } from '../components/LanguageSwitcher'
+import { Toast } from '../components/Toast'
+import { useOpportunities, useArbitrageStats, usePlatforms, useOrderBook, useSubscriptionStatus } from '../api/hooks'
+import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
+import { ApiError } from '../api/client'
+import { formatRelativeTime } from '../utils/time'
+import type { Opportunity, NewOpportunityEvent, OrderBookAnalysisResponse, ArbitrageTier } from '../api/types'
+
+type SortMode = 'profit' | 'profitUsd' | 'newest'
+type TypeFilter = 'all' | 'binary' | 'multi'
+
+// --- Error Boundary ---
+
+class CardErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false }
+  }
+  static getDerivedStateFromError(_: Error) {
+    return { hasError: true }
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('Card render error:', error, info)
+  }
+  render() {
+    if (this.state.hasError) return null
+    return this.props.children
+  }
+}
+
+// --- OrderBook Panel (per-card) ---
+
+function OrderBookPanel({ data, isLoading, isError, isOpen, locale }: {
+  data: OrderBookAnalysisResponse | undefined
+  isLoading: boolean
+  isError: boolean
+  isOpen: boolean
+  locale: string
+}) {
+  const { t } = useTranslation()
+
+  const ob = data
+  const tiersSummary = ob?.tiers
+  const hasTiers = (tiersSummary?.tiers.length ?? 0) > 0
+
+  const summaryRow = ob && tiersSummary ? (
+    <div className="ob-summary">
+      <div className="ob-summary-item">
+        <span className="ob-summary-label">{t('scanner.tiersBestProfit')}</span>
+        <span className="ob-summary-value ob-summary-value--green">
+          {hasTiers ? `+${tiersSummary.bestProfitPercentage.toFixed(2)}%` : '—'}
+        </span>
+      </div>
+      <div className="ob-summary-item">
+        <span className="ob-summary-label">{t('scanner.tiersTotalContracts')}</span>
+        <span className={`ob-summary-value ${!hasTiers ? 'ob-summary-value--warn' : ''}`}>
+          {hasTiers ? tiersSummary.totalQuantity.toFixed(0) : t('scanner.noTiers')}
+        </span>
+      </div>
+      <div className="ob-summary-item">
+        <span className="ob-summary-label">{t('scanner.tiersTotalInvestment')}</span>
+        <span className="ob-summary-value">${tiersSummary.totalInvestment.toFixed(2)}</span>
+      </div>
+      <div className="ob-summary-item">
+        <span className="ob-summary-label">{t('scanner.tiersTotalGrossProfit')}</span>
+        <span className="ob-summary-value ob-summary-value--green">
+          ${tiersSummary.totalGrossProfit.toFixed(2)}
+        </span>
+      </div>
+      <div className="ob-summary-item">
+        <span className="ob-summary-label">{t('scanner.tiersAvgProfit')}</span>
+        <span className="ob-summary-value">+{tiersSummary.weightedAvgProfit.toFixed(2)}%</span>
+      </div>
+    </div>
+  ) : null
+
+  if (!isOpen) {
+    if (!summaryRow) return null
+    return <div className="ob-panel ob-panel--summary-only">{summaryRow}</div>
+  }
+
+  if (isLoading && !ob) {
+    return (
+      <div className="ob-panel">
+        <div className="ob-loading">{t('scanner.loadingOrderbook')}</div>
+      </div>
+    )
+  }
+
+  if (isError || !ob) {
+    return (
+      <div className="ob-panel">
+        <div className="ob-error">{t('scanner.orderbookError')}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="ob-panel">
+      {summaryRow}
+
+      {!hasTiers && (
+        <div className="ob-no-liquidity-hint">{t('scanner.noTiersHint')}</div>
+      )}
+
+      {/* Tiers table */}
+      {hasTiers && (
+        <div className="ob-tiers-table-wrapper">
+          <table className="ob-tiers-table">
+            <thead>
+              <tr>
+                <th>{t('scanner.tiersTableQty')}</th>
+                {tiersSummary.tiers[0].legPrices.map((lp, i) => (
+                  <th key={i}>{lp.platformName} ({lp.outcomeName})</th>
+                ))}
+                <th>{t('scanner.tiersTableCost')}</th>
+                <th>{t('scanner.tiersTableProfit')}</th>
+                <th>{t('scanner.tiersTableInvestment')}</th>
+                <th>{t('scanner.tiersTableGross')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tiersSummary.tiers.map((tier: ArbitrageTier, i: number) => (
+                <tr key={i} className={i === 0 ? 'ob-tier-row--best' : ''}>
+                  <td>{tier.quantity}</td>
+                  {tier.legPrices.map((lp, j) => (
+                    <td key={j}>
+                      ${lp.price.toFixed(2)}
+                      {lp.url && (
+                        <a href={lp.url} target="_blank" rel="noopener noreferrer" className="ob-tier-link" title={lp.platformName}>
+                          &#8599;
+                        </a>
+                      )}
+                    </td>
+                  ))}
+                  <td>${tier.totalCostPerContract.toFixed(2)}</td>
+                  <td className="ob-tier-profit">+{tier.profitPercentage.toFixed(2)}%</td>
+                  <td>${tier.investmentAmount.toFixed(2)}</td>
+                  <td className="ob-tier-gross">${tier.grossProfit.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+
+
+      {/* Analyzed at */}
+      <div className="ob-analyzed-at">
+        {t('scanner.analyzedAt', { time: formatRelativeTime(ob.analyzedAt, locale) })}
+      </div>
+    </div>
+  )
+}
+
+// --- Opportunity Card ---
+
+function OpportunityCard({
+  opp,
+  index,
+  locale,
+}: {
+  opp: Opportunity
+  index: number
+  locale: string
+}) {
+  const { t } = useTranslation()
+  const [obOpen, setObOpen] = useState(false)
+  const { data: obData, isLoading: obLoading, isError: obError } = useOrderBook(opp.id, true)
+  const ob = obData as OrderBookAnalysisResponse | undefined
+
+  return (
+    <div
+      className={`opportunity-card opportunity-card--clickable ${obOpen ? 'opportunity-card--expanded' : ''}`}
+      style={{ animationDelay: `${index * 0.05}s`, cursor: 'pointer' }}
+      onClick={() => setObOpen((prev) => !prev)}
+    >
+      {/* Card Header */}
+      <div className="opp-header">
+        <div className="opp-header-left">
+          <span className={`opp-type-badge opp-type-badge--${opp.type}`}>
+            {opp.type.toUpperCase()}
+          </span>
+          <h3 className="opp-match-title">
+            {opp.legs.map((leg, i) => (
+              <span key={i}>
+                {i > 0 && <span className="opp-match-title__sep"> / </span>}
+                <span className="opp-match-title__platform">({leg.platformName})</span>
+                {' '}
+                {leg.eventTitle}
+              </span>
+            ))}
+          </h3>
+        </div>
+        <div className="opp-header-right">
+          {(() => {
+            const displayProfit = opp.weightedAvgProfit ?? opp.profitPercentage
+            return (
+              <span className={`opp-profit ${displayProfit < 0.5 ? 'opp-profit--dim' : ''}`}>
+                {t('scanner.profit', { value: displayProfit.toFixed(2) })}
+              </span>
+            )
+          })()}
+        </div>
+      </div>
+
+      {/* Legs */}
+      <div className="opp-legs">
+        {opp.legs.map((leg, legIndex) => {
+          const obLeg = ob?.legs?.[legIndex]
+          return (
+          <div key={legIndex} className="arb-leg">
+            <div className="leg-platform">{leg.platformName}</div>
+            <div className="leg-outcome">
+              <span className="leg-outcome-label">{t('scanner.buy')}</span>
+              <span className="leg-outcome-name">{leg.outcomeName}</span>
+            </div>
+            <div className="leg-price">
+              ${(obLeg ? obLeg.effectivePrice : leg.price).toFixed(2)}
+            </div>
+            {leg.url && (
+              <a
+                href={leg.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="leg-open-link"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {t('scanner.openPlatform')}
+              </a>
+            )}
+          </div>
+          )
+        })}
+      </div>
+
+      {/* OrderBook Panel */}
+      <OrderBookPanel data={ob} isLoading={obLoading} isError={obError} isOpen={obOpen} locale={locale} />
+
+      {/* Card Footer */}
+      <div className="opp-footer">
+        <div className="opp-cost-payout">
+          <span className="opp-cost">
+            {t('scanner.totalCost', { value: opp.totalCost.toFixed(4) })}
+          </span>
+          <span className="opp-arrow">&rarr;</span>
+          <span className="opp-payout">
+            {t('scanner.payout', { value: opp.guaranteedPayout.toFixed(2) })}
+          </span>
+        </div>
+        <div className="opp-footer-right">
+          <div className="opp-timestamps">
+            <span className="opp-timestamp">
+              {t('scanner.foundAt', { time: formatRelativeTime(opp.foundAt, locale) })}
+            </span>
+            <span className="opp-timestamp">
+              {t('scanner.validatedAt', { time: formatRelativeTime(opp.lastValidatedAt, locale) })}
+            </span>
+          </div>
+          <button
+            className={`ob-toggle-button ${obOpen ? 'ob-toggle-button--active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (obOpen) setObOpen(false)
+              else setObOpen(true)
+            }}
+          >
+            {obOpen ? t('scanner.hideDepth') : t('scanner.viewDepth')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// --- Scanner Page ---
+
+export function Scanner() {
+  const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('')
+  const [minProfit, setMinProfit] = useState(0)
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({})
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [sortMode, setSortMode] = useState<SortMode>('profit')
+
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  // Subscription gate: check before loading arbitrage data
+  const { data: subStatus, isLoading: isSubLoading } = useSubscriptionStatus()
+  const hasSubscription = subStatus?.active === true
+  const noApiKey = !localStorage.getItem('apiKey')
+
+  // Data — only fetch when subscription is confirmed active
+  const { data: opportunitiesData, isLoading, isError, error } = useOpportunities()
+  const { data: stats } = useArbitrageStats()
+  const { data: platforms } = usePlatforms()
+
+  // Access control: subscription check first, then fallback to API 401/403
+  const blockedReason = useMemo(() => {
+    if (noApiKey) return 'auth_required' as const
+    if (!isSubLoading && subStatus && !hasSubscription) return 'subscription_required' as const
+    if (error instanceof ApiError) {
+      if (error.status === 401) return 'auth_required' as const
+      if (error.status === 403) return 'subscription_required' as const
+    }
+    return null
+  }, [noApiKey, isSubLoading, subStatus, hasSubscription, error])
+
+  // WebSocket
+  const handleNewOpportunity = useCallback((data: NewOpportunityEvent) => {
+    setToast({
+      message: t('scanner.newOpportunity', {
+        profit: data.profitPercentage.toFixed(2),
+        title: data.matchTitle,
+      }),
+      type: 'success',
+    })
+  }, [t])
+
+  const { isConnected, authError: wsAuthError } = useArbitrageSocket({
+    onNewOpportunity: handleNewOpportunity,
+  })
+
+  const effectiveBlockedReason = blockedReason ?? wsAuthError
+
+  // Initialize platform toggles from API data
+  const platformSlugs = useMemo(() => {
+    if (!platforms) return []
+    return platforms.filter((p) => p.isActive).map((p) => p.slug)
+  }, [platforms])
+
+  // Effective selected platforms — default to all enabled
+  const effectivePlatforms = useMemo(() => {
+    if (Object.keys(selectedPlatforms).length === 0 && platformSlugs.length > 0) {
+      const defaults: Record<string, boolean> = {}
+      platformSlugs.forEach((slug) => {
+        defaults[slug] = true
+      })
+      return defaults
+    }
+    return selectedPlatforms
+  }, [selectedPlatforms, platformSlugs])
+
+  const togglePlatform = (slug: string) => {
+    setSelectedPlatforms((prev) => {
+      const current = Object.keys(prev).length === 0
+        ? platformSlugs.reduce((acc, s) => ({ ...acc, [s]: true }), {} as Record<string, boolean>)
+        : prev
+      return { ...current, [slug]: !current[slug] }
+    })
+  }
+
+  // Filter & sort opportunities
+  const filteredOpportunities = useMemo(() => {
+    if (!opportunitiesData?.items) return []
+
+    let result = opportunitiesData.items.filter((opp: Opportunity) => {
+      // Search filter
+      if (searchQuery && !opp.matchTitle.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false
+      }
+
+      // Min profit filter
+      if (opp.profitPercentage < minProfit) {
+        return false
+      }
+
+      // Type filter
+      if (typeFilter !== 'all' && opp.type !== typeFilter) {
+        return false
+      }
+
+      // Platform filter — show only if ALL legs belong to enabled platforms
+      const allLegsSelected = opp.legs.every(
+        (leg) => effectivePlatforms[leg.platformSlug] === true
+      )
+      if (!allLegsSelected) {
+        return false
+      }
+
+      return true
+    })
+
+    // Sort
+    result = [...result].sort((a, b) => {
+      if (sortMode === 'profit') {
+        const pa = a.weightedAvgProfit ?? a.profitPercentage
+        const pb = b.weightedAvgProfit ?? b.profitPercentage
+        return pb - pa
+      }
+      if (sortMode === 'profitUsd') {
+        const pa = a.totalGrossProfit ?? 0
+        const pb = b.totalGrossProfit ?? 0
+        return pb - pa
+      }
+      // newest
+      return new Date(b.foundAt).getTime() - new Date(a.foundAt).getTime()
+    })
+
+    return result
+  }, [opportunitiesData, searchQuery, minProfit, typeFilter, effectivePlatforms, sortMode])
+
+  const filteredAvgProfit = useMemo(() => {
+    if (filteredOpportunities.length === 0) return null
+    const sum = filteredOpportunities.reduce((acc, o) => acc + (o.weightedAvgProfit ?? o.profitPercentage), 0)
+    return sum / filteredOpportunities.length
+  }, [filteredOpportunities])
+
+  const filteredMaxProfit = useMemo(() => {
+    if (filteredOpportunities.length === 0) return null
+    return Math.max(...filteredOpportunities.map((o) => o.weightedAvgProfit ?? o.profitPercentage))
+  }, [filteredOpportunities])
+
+  const locale = i18n.language === 'ru' ? 'ru' : 'en'
+
+  return (
+    <div className="scanner-page">
+      {/* Toast */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+          duration={4000}
+        />
+      )}
+
+      {/* Header */}
+      <div className="scanner-header">
+        <div className="scanner-header-left">
+          <h1 className="scanner-title">{t('scanner.title')}</h1>
+          <div className="scanner-status">
+            <span className="status-label">{t('scanner.systemLabel')}</span>
+            <span className="status-value">
+              {isConnected ? t('scanner.scanning') : t('scanner.wsReconnecting')}
+            </span>
+            <span className={`status-pulse ${isConnected ? '' : 'status-pulse--offline'}`}></span>
+          </div>
+        </div>
+        <div className="scanner-header-right">
+          <LanguageSwitcher />
+          <button className="scanner-back-button" onClick={() => navigate('/dashboard')}>
+            {t('scanner.backToDashboard')}
+          </button>
+        </div>
+      </div>
+
+      {/* Access Wall */}
+      {effectiveBlockedReason && (
+        <div className="access-wall">
+          <div className="access-wall-content">
+            <span className="access-wall-icon">🔒</span>
+            <h2>{effectiveBlockedReason === 'subscription_required'
+              ? t('scanner.subscriptionRequired')
+              : t('scanner.loginRequired')
+            }</h2>
+            <p>{effectiveBlockedReason === 'subscription_required'
+              ? t('scanner.subscriptionRequiredDesc')
+              : t('scanner.loginRequiredDesc')
+            }</p>
+            <button
+              className="primary-button"
+              onClick={() => navigate(effectiveBlockedReason === 'subscription_required' ? '/dashboard' : '/')}
+            >
+              {effectiveBlockedReason === 'subscription_required'
+                ? t('scanner.goToPayment')
+                : t('scanner.goToLogin')
+              }
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!effectiveBlockedReason && <>
+      {/* Stats Bar */}
+      <div className="stats-bar">
+        <div className="stats-item">
+          <span className="stats-label">{t('scanner.statsActive')}</span>
+          <span className="stats-value">{stats?.activeCount ?? '—'}</span>
+        </div>
+        <div className="stats-item">
+          <span className="stats-label">{t('scanner.statsAvgProfit')}</span>
+          <span className="stats-value stats-value--green">
+            {filteredAvgProfit !== null ? `+${filteredAvgProfit.toFixed(2)}%` : '—'}
+          </span>
+        </div>
+        <div className="stats-item">
+          <span className="stats-label">{t('scanner.statsMaxProfit')}</span>
+          <span className="stats-value stats-value--green">
+            {filteredMaxProfit !== null ? `+${filteredMaxProfit.toFixed(2)}%` : '—'}
+          </span>
+        </div>
+        <div className="stats-item">
+          <span className="stats-label">WS:</span>
+          <span className={`stats-ws-badge ${isConnected ? 'stats-ws-badge--online' : 'stats-ws-badge--offline'}`}>
+            {isConnected ? t('scanner.wsConnected') : t('scanner.wsDisconnected')}
+          </span>
+        </div>
+      </div>
+
+      {/* Filter Panel */}
+      <div className="filter-panel">
+        <div className="filter-group filter-search">
+          <input
+            type="text"
+            placeholder={t('scanner.filterPlaceholder')}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="filter-input"
+          />
+        </div>
+
+        <div className="filter-group">
+          <label className="filter-label">{t('scanner.minProfit')}</label>
+          <div className="roi-buttons">
+            {[0, 1, 2, 5, 10].map((value) => (
+              <button
+                key={value}
+                className={`roi-button ${minProfit === value ? 'active' : ''}`}
+                onClick={() => setMinProfit(value)}
+              >
+                {value === 0 ? 'ALL' : `${value}%`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="filter-group">
+          <label className="filter-label">{t('scanner.type')}</label>
+          <div className="roi-buttons">
+            {(['all', 'binary', 'multi'] as TypeFilter[]).map((value) => (
+              <button
+                key={value}
+                className={`roi-button ${typeFilter === value ? 'active' : ''}`}
+                onClick={() => setTypeFilter(value)}
+              >
+                {t(`scanner.type${value.charAt(0).toUpperCase() + value.slice(1)}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="filter-group">
+          <label className="filter-label">{t('scanner.sortBy')}</label>
+          <div className="roi-buttons">
+            {(['profit', 'profitUsd', 'newest'] as SortMode[]).map((value) => (
+              <button
+                key={value}
+                className={`roi-button ${sortMode === value ? 'active' : ''}`}
+                onClick={() => setSortMode(value)}
+              >
+                {t(`scanner.sort${value.charAt(0).toUpperCase() + value.slice(1)}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {platformSlugs.length > 0 && (
+          <div className="filter-group">
+            <label className="filter-label">{t('scanner.platforms')}</label>
+            <div className="market-toggles">
+              {platforms?.filter((p) => p.isActive).map((platform) => (
+                <button
+                  key={platform.slug}
+                  className={`market-toggle ${effectivePlatforms[platform.slug] !== false ? 'active' : ''}`}
+                  onClick={() => togglePlatform(platform.slug)}
+                >
+                  [{effectivePlatforms[platform.slug] !== false ? 'x' : ' '}] {platform.name.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Opportunities List */}
+      <div className="opportunities-list">
+        {isLoading ? (
+          <div className="empty-state">
+            <p>{t('scanner.loading')}</p>
+          </div>
+        ) : isError ? (
+          <div className="empty-state">
+            <p>{t('scanner.errorLoading')}</p>
+          </div>
+        ) : filteredOpportunities.length === 0 ? (
+          <div className="empty-state">
+            <p>{t('scanner.noOpportunities')}</p>
+            <p className="empty-hint">{t('scanner.emptyHint')}</p>
+          </div>
+        ) : (
+          filteredOpportunities.map((opp, index) => (
+            <CardErrorBoundary key={opp.id}>
+              <OpportunityCard opp={opp} index={index} locale={locale} />
+            </CardErrorBoundary>
+          ))
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="scanner-footer">
+        <p>{t('scanner.opportunitiesFound', { count: filteredOpportunities.length })}</p>
+        <p className="scanner-disclaimer">{t('scanner.disclaimerText')}</p>
+      </div>
+      </>}
+    </div>
+  )
+}

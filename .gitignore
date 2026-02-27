@@ -1,0 +1,19 @@
+# Environment
+.env
+andex-arb-be/.env
+andex-arb-fe/.env
+
+# Dependencies
+node_modules/
+andex-arb-be/node_modules/
+andex-arb-fe/node_modules/
+
+# Build output
+andex-arb-be/dist/
+andex-arb-fe/dist/
+
+# IDE
+.vscode/
+
+# Claude
+CLAUDE.md
