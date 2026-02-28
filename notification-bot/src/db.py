@@ -20,6 +20,7 @@ async def init_db() -> None:
                 id                 INTEGER PRIMARY KEY AUTOINCREMENT,
                 telegram_id        INTEGER NOT NULL,
                 name               TEXT NOT NULL,
+                is_active          INTEGER NOT NULL DEFAULT 0,
                 min_profit_usd     REAL,
                 max_profit_usd     REAL,
                 min_profit_pct     REAL,
@@ -67,25 +68,29 @@ async def get_subscribed_chat_ids() -> list[int]:
 # ---------------------------------------------------------------------------
 
 def _row_to_preset(row: tuple) -> dict:
-    disabled = [e for e in row[7].split(",") if e] if row[7] else []
+    disabled = [e for e in row[8].split(",") if e] if row[8] else []
     return {
         "id": row[0],
         "telegram_id": row[1],
         "name": row[2],
-        "min_usd": row[3],
-        "max_usd": row[4],
-        "min_pct": row[5],
-        "max_pct": row[6],
+        "is_active": bool(row[3]),
+        "min_usd": row[4],
+        "max_usd": row[5],
+        "min_pct": row[6],
+        "max_pct": row[7],
         "disabled_exchanges": disabled,
     }
+
+_SELECT_PRESET = (
+    "SELECT id, telegram_id, name, is_active, min_profit_usd, max_profit_usd, "
+    "min_profit_pct, max_profit_pct, disabled_exchanges FROM presets"
+)
 
 
 async def get_presets(telegram_id: int) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            "SELECT id, telegram_id, name, min_profit_usd, max_profit_usd, "
-            "min_profit_pct, max_profit_pct, disabled_exchanges "
-            "FROM presets WHERE telegram_id = ? ORDER BY created_at",
+            f"{_SELECT_PRESET} WHERE telegram_id = ? ORDER BY created_at",
             (telegram_id,),
         )
         rows = await cursor.fetchall()
@@ -94,14 +99,22 @@ async def get_presets(telegram_id: int) -> list[dict]:
 
 async def get_preset_by_id(preset_id: int) -> dict | None:
     async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "SELECT id, telegram_id, name, min_profit_usd, max_profit_usd, "
-            "min_profit_pct, max_profit_pct, disabled_exchanges "
-            "FROM presets WHERE id = ?",
-            (preset_id,),
-        )
+        cursor = await db.execute(f"{_SELECT_PRESET} WHERE id = ?", (preset_id,))
         row = await cursor.fetchone()
     return _row_to_preset(row) if row else None
+
+
+async def toggle_preset_active(preset_id: int) -> bool:
+    """Переключает is_active. Возвращает новое состояние."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT is_active FROM presets WHERE id = ?", (preset_id,))
+        row = await cursor.fetchone()
+        if not row:
+            return False
+        new_state = 0 if row[0] else 1
+        await db.execute("UPDATE presets SET is_active = ? WHERE id = ?", (new_state, preset_id))
+        await db.commit()
+    return bool(new_state)
 
 
 async def create_preset(

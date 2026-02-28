@@ -20,6 +20,7 @@ from src.db import (
     get_subscribed_chat_ids,
     init_db,
     register_user,
+    toggle_preset_active,
     update_preset_by_id,
 )
 from src.ws_client import ArbitrageWSClient
@@ -70,6 +71,7 @@ def _empty_draft() -> dict:
 def _preset_to_draft(preset: dict) -> dict:
     return {
         "name": preset["name"],
+        "is_active": preset["is_active"],
         "min_usd": preset["min_usd"],
         "max_usd": preset["max_usd"],
         "min_pct": preset["min_pct"],
@@ -88,7 +90,10 @@ def _start_keyboard() -> InlineKeyboardMarkup:
 
 def _presets_list_keyboard(presets: list[dict]) -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(p["name"], callback_data=f"presets:open:{p['id']}")]
+        [InlineKeyboardButton(
+            f"{'🟢' if p['is_active'] else '🔴'} {p['name']}",
+            callback_data=f"presets:open:{p['id']}",
+        )]
         for p in presets
     ]
     rows.append([InlineKeyboardButton("➕ Создать пресет", callback_data="presets:create")])
@@ -100,7 +105,14 @@ def _draft_keyboard(draft: dict, mode: str) -> InlineKeyboardMarkup:
     name = draft.get("name") or "не задано"
     save_label = "✅ Создать пресет" if mode == "create" else "✅ Применить изменения"
     cancel_label = "❌ Отменить создание" if mode == "create" else "❌ Отменить изменения"
-    return InlineKeyboardMarkup([
+
+    rows = []
+    if mode == "edit":
+        is_active = draft.get("is_active", False)
+        toggle_label = "🔴 Деактивировать пресет" if is_active else "🟢 Активировать пресет"
+        rows.append([InlineKeyboardButton(toggle_label, callback_data="draft:toggle_active")])
+
+    rows += [
         [InlineKeyboardButton(f"Название: {name}", callback_data="draft:name")],
         [
             InlineKeyboardButton(
@@ -125,7 +137,8 @@ def _draft_keyboard(draft: dict, mode: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("Биржи", callback_data="draft:exchanges")],
         [InlineKeyboardButton(save_label, callback_data="draft:save")],
         [InlineKeyboardButton(cancel_label, callback_data="draft:cancel")],
-    ])
+    ]
+    return InlineKeyboardMarkup(rows)
 
 
 def _draft_exchanges_keyboard(disabled: list[str]) -> InlineKeyboardMarkup:
@@ -225,7 +238,14 @@ async def cb_draft(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return "Создание нового пресета"
         return f"Редактирование пресета «{draft.get('name', '')}»"
 
-    if action == "name":
+    if action == "toggle_active":
+        preset_id = context.user_data.get("editing_id")
+        new_state = await toggle_preset_active(preset_id)
+        draft["is_active"] = new_state
+        context.user_data["draft"] = draft
+        await query.edit_message_reply_markup(reply_markup=_draft_keyboard(draft, mode))
+
+    elif action == "name":
         context.user_data["awaiting"] = "name"
         await query.edit_message_text(
             "Введите название пресета:", reply_markup=_cancel_input_keyboard()
