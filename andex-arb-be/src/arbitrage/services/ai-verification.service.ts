@@ -26,9 +26,9 @@ const MAX_PER_CYCLE = 500;
 
 /**
  * Text-similarity above this threshold → auto-confirm without AI.
- * 0.8 is very high — both titles are nearly identical.
+ * 0.95 — titles must be virtually identical (differ by at most 1-2 words).
  */
-const AUTO_CONFIRM_THRESHOLD = 0.8;
+const AUTO_CONFIRM_THRESHOLD = 0.95;
 
 /**
  * System prompt — tuned for balanced confirmation of prediction market matches.
