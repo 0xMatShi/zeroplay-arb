@@ -527,6 +527,14 @@ export class MatchingService {
     if (words1.length === 0 || words2.length === 0) return 0;
 
     const jaccard = this.jaccardSimilarity(words1, words2);
+
+    // Anagram detection: same word set but different original titles.
+    // These are likely opposite outcomes of the same event (e.g. "R Senate, D House" vs "D Senate, R House").
+    // Force AI verification by returning a score below the auto-confirm threshold.
+    if (jaccard === 1.0 && title1.toLowerCase().trim() !== title2.toLowerCase().trim()) {
+      return 0.89;
+    }
+
     const orderSim = this.wordOrderSimilarity(words1, words2);
 
     return jaccard * 0.8 + orderSim * 0.2;
