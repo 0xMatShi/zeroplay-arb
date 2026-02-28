@@ -22,7 +22,7 @@ export interface AiVerdict {
 const BATCH_SIZE = 10;
 
 /** Max matches to process per verifyPendingMatches() call */
-const MAX_PER_CYCLE = 500;
+const MAX_PER_CYCLE = 10000;
 
 /**
  * Text-similarity above this threshold → auto-confirm without AI.
