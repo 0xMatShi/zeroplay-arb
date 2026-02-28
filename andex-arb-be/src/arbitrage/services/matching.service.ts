@@ -412,18 +412,15 @@ export class MatchingService {
 
   /**
    * Create EventMatch records from pair candidates.
-   * Greedy: sort by similarity desc, each event can only appear in one new match per cycle.
+   * All pairs are created immediately — an event can appear in multiple new matches per cycle.
    */
   private async createMatches(candidates: MatchCandidate[]): Promise<number> {
     candidates.sort((a, b) => b.similarity - a.similarity);
 
-    const matched = new Set<string>();
     let created = 0;
 
     for (const candidate of candidates) {
       const { event1, event2, similarity } = candidate;
-
-      if (matched.has(event1.id) || matched.has(event2.id)) continue;
 
       try {
         const outcomeMapping = this.buildOutcomeMapping([event1, event2]);
@@ -438,8 +435,6 @@ export class MatchingService {
         });
 
         await this.matchRepo.save(match);
-        matched.add(event1.id);
-        matched.add(event2.id);
         created++;
 
         this.logger.log(
