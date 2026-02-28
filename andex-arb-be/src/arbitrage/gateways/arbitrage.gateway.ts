@@ -5,6 +5,7 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { ArbitrageOpportunity } from '../entities/arbitrage-opportunity.entity';
 import { UsersService } from '../../users/users.service';
@@ -36,6 +37,7 @@ export class ArbitrageGateway implements OnGatewayConnection, OnGatewayDisconnec
   constructor(
     private readonly usersService: UsersService,
     private readonly paymentsService: PaymentsService,
+    private readonly configService: ConfigService,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -46,6 +48,12 @@ export class ArbitrageGateway implements OnGatewayConnection, OnGatewayDisconnec
     if (!apiKey) {
       client.emit('error', { message: 'API key is required' });
       client.disconnect();
+      return;
+    }
+
+    const adminKey = this.configService.get<string>('ADMIN_API_KEY');
+    if (adminKey && apiKey === adminKey) {
+      this.logger.log(`Admin client connected: ${client.id}`);
       return;
     }
 
