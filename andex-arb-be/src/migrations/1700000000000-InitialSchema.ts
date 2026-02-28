@@ -186,6 +186,8 @@ export class InitialSchema1700000000000 implements MigrationInterface {
         "legs"              JSONB                            NOT NULL,
         "weightedAvgProfit" DECIMAL(10,4),
         "totalGrossProfit"  DECIMAL(12,4),
+        "totalInvestment"   DECIMAL(12,4),
+        "totalShares"       DECIMAL(12,4),
         "status"            "public"."opportunity_status_enum" NOT NULL DEFAULT 'active',
         "foundAt"           TIMESTAMPTZ                     NOT NULL,
         "lastValidatedAt"   TIMESTAMPTZ                     NOT NULL,
