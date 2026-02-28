@@ -6,6 +6,7 @@ import { PlatformEvent } from '../entities/platform-event.entity';
 import { Outcome } from '../entities/outcome.entity';
 import { EventMatch } from '../entities/event-match.entity';
 import { AdapterRegistry } from '../adapters/adapter.registry';
+import { ISourceAdapter } from '../interfaces/source-adapter.interface';
 import { NormalizedEvent, ArbitrageLeg } from '../interfaces/types';
 
 /**
@@ -236,43 +237,34 @@ export class EventFetcherService {
   // ───────────────────────── Live Price Refresh ─────────────────────────
 
   /**
-   * Refresh prices for all events in verified matches via fetchOrderBook.
+   * Refresh prices for all verified match pairs via fetchOrderBook.
    *
-   * Called every 30s for ALL verified matches (not just those with active opportunities).
-   * Extracts bestAsk = asks[0].price from each orderbook and updates Outcome.price in DB.
+   * Processes each matched pair sequentially to respect per-platform rate limits.
+   * Within a pair, all outcome fetches run in parallel (they hit different platform APIs).
+   * A configurable delay is inserted between pairs (ARB_PAIR_REFRESH_DELAY_MS, default 260ms).
    *
    * Adapters without fetchOrderBook are skipped silently.
    */
   async refreshPricesViaOrderBooks(matches: EventMatch[]): Promise<number> {
-    // Collect unique events across all matches
-    const allEvents = new Map<string, PlatformEvent>();
-    for (const match of matches) {
-      for (const event of match.events || []) {
-        if (!allEvents.has(event.id)) {
-          allEvents.set(event.id, event);
-        }
-      }
-    }
+    if (matches.length === 0) return 0;
 
-    if (allEvents.size === 0) return 0;
-
-    // Group by platform
-    const byPlatform = new Map<string, PlatformEvent[]>();
-    for (const event of allEvents.values()) {
-      const slug = event.platform?.slug;
-      if (!slug) continue;
-      if (!byPlatform.has(slug)) byPlatform.set(slug, []);
-      byPlatform.get(slug)!.push(event);
-    }
-
+    const delayMs = parseInt(process.env.ARB_PAIR_REFRESH_DELAY_MS ?? '260', 10);
     let updatedCount = 0;
     const now = new Date();
 
-    for (const [slug, platformEvents] of byPlatform) {
-      const adapter = this.adapterRegistry.getAdapter(slug);
-      if (!adapter?.fetchOrderBook) continue;
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i];
 
-      for (const event of platformEvents) {
+      // Build fetch tasks for every outcome in every event of this pair
+      const tasks: Array<{ adapter: ISourceAdapter; outcome: Outcome; leg: ArbitrageLeg }> = [];
+
+      for (const event of match.events || []) {
+        const slug = event.platform?.slug;
+        if (!slug) continue;
+
+        const adapter = this.adapterRegistry.getAdapter(slug);
+        if (!adapter?.fetchOrderBook) continue;
+
         for (const outcome of event.outcomes || []) {
           const leg: ArbitrageLeg = {
             platformSlug: slug,
@@ -285,25 +277,42 @@ export class EventFetcherService {
             url: event.url,
             metadata: outcome.metadata,
           };
+          tasks.push({ adapter, outcome, leg });
+        }
+      }
 
-          try {
-            const orderBook = await adapter.fetchOrderBook(leg);
-            if (!orderBook?.asks?.length) continue;
+      if (tasks.length > 0) {
+        // Fetch all outcomes of this pair in parallel
+        const results = await Promise.allSettled(
+          tasks.map(async ({ adapter, outcome, leg }) => {
+            const orderBook = await adapter.fetchOrderBook!(leg);
+            if (!orderBook?.asks?.length) return 0;
 
             const bestAsk = orderBook.asks[0].price;
-            if (Number(outcome.price) !== bestAsk) {
-              outcome.previousPrice = outcome.price;
-              outcome.price = bestAsk;
-              outcome.lastUpdatedAt = now;
-              await this.outcomeRepo.save(outcome);
-              updatedCount++;
-            }
-          } catch (error) {
+            if (Number(outcome.price) === bestAsk) return 0;
+
+            outcome.previousPrice = outcome.price;
+            outcome.price = bestAsk;
+            outcome.lastUpdatedAt = now;
+            await this.outcomeRepo.save(outcome);
+            return 1;
+          }),
+        );
+
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            updatedCount += result.value;
+          } else {
             this.logger.warn(
-              `Failed to fetch orderbook for ${slug}/${outcome.name} (${event.externalId}): ${error.message}`,
+              `Orderbook fetch failed for a leg in match "${match.title}": ${result.reason?.message}`,
             );
           }
         }
+      }
+
+      // Rate-limit delay between pairs (skip after the last one)
+      if (i < matches.length - 1 && delayMs > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
       }
     }
 
