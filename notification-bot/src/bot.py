@@ -379,7 +379,7 @@ async def on_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 # Форматирование уведомлений
 # ---------------------------------------------------------------------------
 
-def _format_opportunity(data: dict) -> str:
+def _format_opportunity(data: dict, preset_name: str | None = None) -> str:
     profit_pct = float(data.get("profitPercentage", 0))
     total_cost = float(data.get("totalCost", 0))
     gross_profit = data.get("totalGrossProfit")
@@ -387,12 +387,11 @@ def _format_opportunity(data: dict) -> str:
     total_shares = data.get("totalShares")
     legs: list[dict] = data.get("legs", [])
 
-    # Строки вида: "Название события (Биржа)"
     event_lines = "\n".join(
         f"{leg.get('eventTitle') or '—'} ({leg.get('platformName', '')})"
         for leg in legs
     )
-
+    preset_line = f"Пресет: «{preset_name}»\n" if preset_name else ""
     profit_usd_line = (
         f"Прибыль($): <b>${float(gross_profit):.2f}</b>\n" if gross_profit is not None else ""
     )
@@ -418,7 +417,8 @@ def _format_opportunity(data: dict) -> str:
     legs_text = "\n".join(legs_lines) if legs_lines else "  —"
 
     return (
-        f"🔔 <b>Новая арбитражная возможность</b>\n\n"
+        f"🔔 <b>Новая арбитражная возможность</b>\n"
+        f"{preset_line}\n"
         f"📊 <b>Событие:</b>\n{event_lines}\n\n"
         f"Total Avg: <code>{total_cost:.4f}</code>\n"
         f"Прибыль(%): <b>{profit_pct:.2f}%</b>\n"
@@ -460,20 +460,22 @@ def _matches_preset(data: dict, preset: dict) -> bool:
 # ---------------------------------------------------------------------------
 
 async def broadcast_opportunity(app: Application, data: dict) -> None:
-    """Рассылает новую возможность с учётом активных пресетов пользователя.
-
-    Если у пользователя нет активных пресетов — уведомление отправляется всегда.
-    Если пресеты есть — хотя бы один должен совпасть.
-    """
+    """Рассылает новую возможность только пользователям с активным пресетом, который совпал."""
     users = await get_subscribed_users_with_active_presets()
     if not users:
         return
 
-    text = _format_opportunity(data)
     for telegram_id, active_presets in users:
-        if active_presets and not any(_matches_preset(data, p) for p in active_presets):
+        if not active_presets:
+            logger.debug("Пропуск %s: нет активных пресетов", telegram_id)
+            continue
+
+        matched = next((p for p in active_presets if _matches_preset(data, p)), None)
+        if matched is None:
             logger.debug("Пропуск %s: ни один пресет не совпал", telegram_id)
             continue
+
+        text = _format_opportunity(data, preset_name=matched["name"])
         try:
             await app.bot.send_message(
                 chat_id=telegram_id,
