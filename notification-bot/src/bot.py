@@ -3,10 +3,10 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
-from src.db import get_subscribed_chat_ids, init_db, register_user
+from src.db import get_preset, get_subscribed_chat_ids, init_db, register_user, toggle_exchange, update_preset
 from src.ws_client import ArbitrageWSClient
 
 load_dotenv()
@@ -20,6 +20,51 @@ logger = logging.getLogger(__name__)
 TELEGRAM_BOT_TOKEN: str = os.environ["TELEGRAM_BOT_TOKEN"]
 BACKEND_WS_URL: str = os.getenv("BACKEND_WS_URL", "http://localhost:3000")
 ADMIN_API_KEY: str = os.environ["ADMIN_API_KEY"]
+
+
+# ---------------------------------------------------------------------------
+# Клавиатуры
+# ---------------------------------------------------------------------------
+
+EXCHANGES = ["Polymarket", "Probable", "Kalshi", "Predict.Fun"]
+
+PROFIT_LABELS = {
+    "min_usd": "Min Profit($)",
+    "max_usd": "Max Profit($)",
+    "min_pct": "Min Profit(%)",
+    "max_pct": "Max Profit(%)",
+}
+
+
+def _start_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton("Пресеты", callback_data="menu:presets")]])
+
+
+def _presets_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("Min Profit($)", callback_data="preset:min_usd"),
+            InlineKeyboardButton("Max Profit($)", callback_data="preset:max_usd"),
+        ],
+        [
+            InlineKeyboardButton("Min Profit(%)", callback_data="preset:min_pct"),
+            InlineKeyboardButton("Max Profit(%)", callback_data="preset:max_pct"),
+        ],
+        [InlineKeyboardButton("Биржи", callback_data="preset:exchanges")],
+        [InlineKeyboardButton("← Назад", callback_data="menu:back")],
+    ])
+
+
+def _exchanges_keyboard(disabled: list[str]) -> InlineKeyboardMarkup:
+    rows = []
+    for i in range(0, len(EXCHANGES), 2):
+        row = []
+        for ex in EXCHANGES[i : i + 2]:
+            circle = "🔴" if ex in disabled else "🟢"
+            row.append(InlineKeyboardButton(f"{circle} {ex}", callback_data=f"exchange:{ex}"))
+        rows.append(row)
+    rows.append([InlineKeyboardButton("← Назад", callback_data="exchange:back")])
+    return InlineKeyboardMarkup(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +85,108 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         text = f"Вы уже зарегистрированы, {user.first_name}."
 
-    await update.message.reply_text(text)
+    await update.message.reply_text(text, reply_markup=_start_keyboard())
+
+
+# ---------------------------------------------------------------------------
+# Callback-обработчики inline-кнопок
+# ---------------------------------------------------------------------------
+
+_START_TEXT = "Главное меню"
+
+
+async def cb_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    action = query.data.split(":")[1]
+
+    if action == "presets":
+        await query.edit_message_text(
+            "Создайте и настройте пресеты для уведомлений",
+            reply_markup=_presets_keyboard(),
+        )
+    elif action == "back":
+        await query.edit_message_text(_START_TEXT, reply_markup=_start_keyboard())
+
+
+async def cb_preset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    parts = query.data.split(":")
+    action = parts[1]
+
+    if action in PROFIT_LABELS:
+        label = PROFIT_LABELS[action]
+        context.user_data["awaiting"] = action
+        context.user_data["preset_msg_id"] = query.message.message_id
+        await query.edit_message_text(
+            f"Введите значение для <b>{label}</b>:\n\nОтправьте число (или 0 для отключения фильтра)",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Отмена", callback_data="preset:cancel")]]
+            ),
+        )
+    elif action == "exchanges":
+        preset = await get_preset(query.from_user.id)
+        await query.edit_message_text(
+            "Выберите биржи для отслеживания:",
+            reply_markup=_exchanges_keyboard(preset["disabled_exchanges"]),
+        )
+    elif action == "cancel":
+        context.user_data.pop("awaiting", None)
+        context.user_data.pop("preset_msg_id", None)
+        await query.edit_message_text(
+            "Создайте и настройте пресеты для уведомлений",
+            reply_markup=_presets_keyboard(),
+        )
+
+
+async def cb_exchange(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    exchange = query.data.split(":", 1)[1]
+
+    if exchange == "back":
+        await query.edit_message_text(
+            "Создайте и настройте пресеты для уведомлений",
+            reply_markup=_presets_keyboard(),
+        )
+    else:
+        await toggle_exchange(query.from_user.id, exchange)
+        preset = await get_preset(query.from_user.id)
+        await query.edit_message_reply_markup(
+            reply_markup=_exchanges_keyboard(preset["disabled_exchanges"])
+        )
+
+
+async def on_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    awaiting = context.user_data.get("awaiting")
+    if not awaiting:
+        return
+
+    try:
+        value = float(update.message.text.replace(",", "."))
+    except ValueError:
+        await update.message.reply_text("Пожалуйста, введите число.")
+        return
+
+    await update_preset(update.effective_user.id, awaiting, value)
+
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    msg_id = context.user_data.pop("preset_msg_id", None)
+    context.user_data.pop("awaiting", None)
+
+    if msg_id:
+        await context.bot.edit_message_text(
+            chat_id=update.effective_chat.id,
+            message_id=msg_id,
+            text="Создайте и настройте пресеты для уведомлений",
+            reply_markup=_presets_keyboard(),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +249,14 @@ async def main() -> None:
 
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CallbackQueryHandler(cb_menu, pattern="^menu:"))
+    app.add_handler(CallbackQueryHandler(cb_preset, pattern="^preset:"))
+    app.add_handler(CallbackQueryHandler(cb_exchange, pattern="^exchange:"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text_input))
+
+    await app.bot.set_my_commands([
+        BotCommand("start", "Зарегистрироваться и получать уведомления"),
+    ])
 
     async def on_new(data: dict) -> None:
         await broadcast(app, _format_opportunity(data))

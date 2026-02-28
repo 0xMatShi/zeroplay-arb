@@ -7,7 +7,7 @@ import { VerifiedMatch } from '../entities/verified-match.entity';
 import { EventStatus, MatchStatus, MatchMethod, VerificationSource } from '../interfaces/types';
 
 /** Minimum similarity score to auto-create a match */
-const DEFAULT_MATCH_THRESHOLD = 0.30;
+const DEFAULT_MATCH_THRESHOLD = 0.60;
 
 /** Pre-filter: max days difference in end dates */
 const MAX_END_DATE_DIFF_DAYS = 30;
