@@ -108,7 +108,7 @@ function OrderBookPanel({ data, isLoading, isError, isOpen, locale }: {
       )}
 
       {/* Tiers table */}
-      {hasTiers && (
+      {hasTiers && tiersSummary && (
         <div className="ob-tiers-table-wrapper">
           <table className="ob-tiers-table">
             <thead>

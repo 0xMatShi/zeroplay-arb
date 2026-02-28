@@ -19,7 +19,11 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "dev:db": "docker compose up -d",
-    "arb:listen": "npx ts-node scripts/listen-arb.ts"
+    "arb:listen": "npx ts-node scripts/listen-arb.ts",
+    "migration:generate": "npx typeorm-ts-node-commonjs migration:generate -d src/config/typeorm-datasource.ts",
+    "migration:run": "npx typeorm-ts-node-commonjs migration:run -d src/config/typeorm-datasource.ts",
+    "migration:revert": "npx typeorm-ts-node-commonjs migration:revert -d src/config/typeorm-datasource.ts",
+    "migration:run:prod": "node -e \"require('ts-node').register({project:'tsconfig.json'}); require('./src/config/typeorm-datasource').default.initialize().then(ds => ds.runMigrations()).then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); })\""
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
@@ -39,6 +43,7 @@
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
     "siwe": "^2.1.0",
+    "socket.io": "^4.8.3",
     "typeorm": "^0.3.17",
     "viem": "^1.21.0"
   },

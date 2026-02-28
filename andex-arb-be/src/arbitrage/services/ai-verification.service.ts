@@ -14,6 +14,8 @@ export interface AiVerdict {
   reasoning: string;
   /** Confidence from AI (0.0 - 1.0) */
   confidence: number;
+  /** How this verdict was produced */
+  source: (typeof VerificationSource)[keyof typeof VerificationSource];
 }
 
 /** Max matches to verify in a single API call */
@@ -276,6 +278,7 @@ export class AiVerificationService {
         decision: 'confirmed',
         reasoning: `Auto-confirmed: text similarity ${(Number(match.confidence) * 100).toFixed(0)}% >= ${AUTO_CONFIRM_THRESHOLD * 100}% threshold`,
         confidence: Number(match.confidence),
+        source: VerificationSource.AUTO,
       };
     }
 
@@ -444,12 +447,14 @@ Rules:
           // This prevents ambiguous responses from slipping through as false positives
           const decision = r.decision === 'confirmed' ? 'confirmed' : 'rejected';
 
-          return {
+          const verdict: AiVerdict = {
             matchId: matchDesc.matchId,
             decision,
             reasoning: r.reasoning || 'No reasoning provided',
             confidence: typeof r.confidence === 'number' ? r.confidence : 0.5,
-          } satisfies AiVerdict;
+            source: VerificationSource.AI,
+          };
+          return verdict;
         })
         .filter((v): v is AiVerdict => v !== null);
     } catch (error) {
@@ -495,7 +500,7 @@ Rules:
 
     if (verdict.decision === 'confirmed') {
       match.status = MatchStatus.CONFIRMED;
-      match.matchMethod = MatchMethod.AI;
+      match.matchMethod = verdict.source === VerificationSource.AI ? MatchMethod.AI : MatchMethod.AUTO;
       match.confidence = verdict.confidence;
 
       await this.matchRepo.save(match);
@@ -504,7 +509,7 @@ Rules:
       await this.verifiedMatchRepo.upsert(
         {
           eventMatchId: verdict.matchId,
-          verificationSource: VerificationSource.AI,
+          verificationSource: verdict.source,
           confidence: verdict.confidence,
         },
         ['eventMatchId'],

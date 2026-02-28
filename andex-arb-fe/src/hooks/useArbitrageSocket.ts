@@ -86,6 +86,8 @@ export function useArbitrageSocket(options?: UseArbitrageSocketOptions) {
             lastValidatedAt: data.foundAt,
             expiredAt: null,
             guaranteedPayout: 1.0,
+            weightedAvgProfit: null,
+            totalGrossProfit: null,
           }
 
           return {
