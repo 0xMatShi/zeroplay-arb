@@ -3,37 +3,37 @@ import aiosqlite
 
 DB_PATH = os.getenv("DB_PATH", "bot.db")
 
-PRESET_COLUMNS = {
-    "min_usd": "min_profit_usd",
-    "max_usd": "max_profit_usd",
-    "min_pct": "min_profit_pct",
-    "max_pct": "max_profit_pct",
-}
-
 
 async def init_db() -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS telegram_users (
-                telegram_id   INTEGER PRIMARY KEY,
-                username      TEXT,
-                first_name    TEXT,
+                telegram_id      INTEGER PRIMARY KEY,
+                username         TEXT,
+                first_name       TEXT,
                 has_subscription INTEGER NOT NULL DEFAULT 0,
-                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         await db.execute("""
-            CREATE TABLE IF NOT EXISTS user_presets (
-                telegram_id        INTEGER PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS presets (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id        INTEGER NOT NULL,
+                name               TEXT NOT NULL,
                 min_profit_usd     REAL,
                 max_profit_usd     REAL,
                 min_profit_pct     REAL,
                 max_profit_pct     REAL,
-                disabled_exchanges TEXT NOT NULL DEFAULT ''
+                disabled_exchanges TEXT NOT NULL DEFAULT '',
+                created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         await db.commit()
 
+
+# ---------------------------------------------------------------------------
+# Пользователи
+# ---------------------------------------------------------------------------
 
 async def register_user(telegram_id: int, username: str | None, first_name: str | None) -> bool:
     """Регистрирует пользователя. Возвращает True если пользователь новый."""
@@ -53,53 +53,6 @@ async def register_user(telegram_id: int, username: str | None, first_name: str 
         return False
 
 
-async def get_preset(telegram_id: int) -> dict:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "SELECT min_profit_usd, max_profit_usd, min_profit_pct, max_profit_pct, disabled_exchanges "
-            "FROM user_presets WHERE telegram_id = ?",
-            (telegram_id,),
-        )
-        row = await cursor.fetchone()
-    if row:
-        disabled = [e for e in row[4].split(",") if e] if row[4] else []
-        return {
-            "min_usd": row[0],
-            "max_usd": row[1],
-            "min_pct": row[2],
-            "max_pct": row[3],
-            "disabled_exchanges": disabled,
-        }
-    return {"min_usd": None, "max_usd": None, "min_pct": None, "max_pct": None, "disabled_exchanges": []}
-
-
-async def update_preset(telegram_id: int, field: str, value: float) -> None:
-    col = PRESET_COLUMNS[field]
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            f"INSERT INTO user_presets (telegram_id, {col}) VALUES (?, ?) "
-            f"ON CONFLICT(telegram_id) DO UPDATE SET {col} = excluded.{col}",
-            (telegram_id, value),
-        )
-        await db.commit()
-
-
-async def toggle_exchange(telegram_id: int, exchange: str) -> None:
-    preset = await get_preset(telegram_id)
-    disabled = preset["disabled_exchanges"]
-    if exchange in disabled:
-        disabled.remove(exchange)
-    else:
-        disabled.append(exchange)
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO user_presets (telegram_id, disabled_exchanges) VALUES (?, ?) "
-            "ON CONFLICT(telegram_id) DO UPDATE SET disabled_exchanges = excluded.disabled_exchanges",
-            (telegram_id, ",".join(disabled)),
-        )
-        await db.commit()
-
-
 async def get_subscribed_chat_ids() -> list[int]:
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
@@ -107,3 +60,83 @@ async def get_subscribed_chat_ids() -> list[int]:
         )
         rows = await cursor.fetchall()
         return [row[0] for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# Пресеты
+# ---------------------------------------------------------------------------
+
+def _row_to_preset(row: tuple) -> dict:
+    disabled = [e for e in row[7].split(",") if e] if row[7] else []
+    return {
+        "id": row[0],
+        "telegram_id": row[1],
+        "name": row[2],
+        "min_usd": row[3],
+        "max_usd": row[4],
+        "min_pct": row[5],
+        "max_pct": row[6],
+        "disabled_exchanges": disabled,
+    }
+
+
+async def get_presets(telegram_id: int) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT id, telegram_id, name, min_profit_usd, max_profit_usd, "
+            "min_profit_pct, max_profit_pct, disabled_exchanges "
+            "FROM presets WHERE telegram_id = ? ORDER BY created_at",
+            (telegram_id,),
+        )
+        rows = await cursor.fetchall()
+    return [_row_to_preset(r) for r in rows]
+
+
+async def get_preset_by_id(preset_id: int) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT id, telegram_id, name, min_profit_usd, max_profit_usd, "
+            "min_profit_pct, max_profit_pct, disabled_exchanges "
+            "FROM presets WHERE id = ?",
+            (preset_id,),
+        )
+        row = await cursor.fetchone()
+    return _row_to_preset(row) if row else None
+
+
+async def create_preset(
+    telegram_id: int,
+    name: str,
+    min_usd: float | None,
+    max_usd: float | None,
+    min_pct: float | None,
+    max_pct: float | None,
+    disabled_exchanges: list[str],
+) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "INSERT INTO presets "
+            "(telegram_id, name, min_profit_usd, max_profit_usd, min_profit_pct, max_profit_pct, disabled_exchanges) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (telegram_id, name, min_usd, max_usd, min_pct, max_pct, ",".join(disabled_exchanges)),
+        )
+        await db.commit()
+        return cursor.lastrowid
+
+
+async def update_preset_by_id(
+    preset_id: int,
+    name: str,
+    min_usd: float | None,
+    max_usd: float | None,
+    min_pct: float | None,
+    max_pct: float | None,
+    disabled_exchanges: list[str],
+) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE presets SET name=?, min_profit_usd=?, max_profit_usd=?, "
+            "min_profit_pct=?, max_profit_pct=?, disabled_exchanges=? WHERE id=?",
+            (name, min_usd, max_usd, min_pct, max_pct, ",".join(disabled_exchanges), preset_id),
+        )
+        await db.commit()
