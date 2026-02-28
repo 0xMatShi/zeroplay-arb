@@ -1,4 +1,4 @@
-import { NormalizedEvent, NormalizedOutcome, PlatformInfo, ArbitrageLeg, OrderBook } from './types';
+import { NormalizedEvent, PlatformInfo, ArbitrageLeg, OrderBook } from './types';
 
 /**
  * Interface that every source adapter must implement.
@@ -26,13 +26,6 @@ export interface ISourceAdapter {
    * Should handle its own pagination and rate limiting.
    */
   fetchEvents(): Promise<NormalizedEvent[]>;
-
-  /**
-   * Fetch updated prices only for specific events (by external IDs).
-   * Faster than fetchEvents() — used for revalidation of known arbs.
-   * Returns a map: externalEventId -> updated outcomes
-   */
-  fetchPrices(externalEventIds: string[]): Promise<Map<string, NormalizedOutcome[]>>;
 
   /**
    * Fetch the order book (bids/asks) for a specific arbitrage leg.

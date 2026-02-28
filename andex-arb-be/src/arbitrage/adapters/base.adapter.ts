@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { ISourceAdapter } from '../interfaces/source-adapter.interface';
-import { NormalizedEvent, NormalizedOutcome, PlatformInfo } from '../interfaces/types';
+import { NormalizedEvent, PlatformInfo } from '../interfaces/types';
 
 /**
  * Abstract base adapter with shared HTTP client and error handling.
@@ -46,7 +46,6 @@ export abstract class BaseAdapter implements ISourceAdapter {
 
   abstract getPlatformInfo(): PlatformInfo;
   abstract fetchEvents(): Promise<NormalizedEvent[]>;
-  abstract fetchPrices(externalEventIds: string[]): Promise<Map<string, NormalizedOutcome[]>>;
 
   /**
    * Default health check — tries to reach the base URL.

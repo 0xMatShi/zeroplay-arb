@@ -89,44 +89,6 @@ export class PolymarketAdapter extends BaseAdapter implements OnModuleInit {
       .filter((event): event is NormalizedEvent => event !== null);
   }
 
-  /**
-   * Fetch prices for specific markets by their condition IDs.
-   */
-  async fetchPrices(externalEventIds: string[]): Promise<Map<string, NormalizedOutcome[]>> {
-    const result = new Map<string, NormalizedOutcome[]>();
-
-    // Batch fetch in chunks to avoid URL length limits
-    const chunkSize = 20;
-    for (let i = 0; i < externalEventIds.length; i += chunkSize) {
-      const chunk = externalEventIds.slice(i, i + chunkSize);
-
-      try {
-        const promises = chunk.map(async (conditionId) => {
-          try {
-            const { data } = await this.http.get<PolymarketMarket[]>('/markets', {
-              params: { condition_id: conditionId },
-            });
-
-            if (data && data.length > 0) {
-              const market = data[0];
-              const outcomes = this.parseOutcomes(market);
-              result.set(conditionId, outcomes);
-            }
-          } catch (error) {
-            this.logger.warn(`Failed to fetch price for market ${conditionId}: ${error.message}`);
-          }
-        });
-
-        await Promise.all(promises);
-        await this.sleep(100);
-      } catch (error) {
-        this.logger.error(`Failed to fetch prices batch: ${error.message}`);
-      }
-    }
-
-    return result;
-  }
-
   // ───────────────────────── Order Book ─────────────────────────
 
   /**

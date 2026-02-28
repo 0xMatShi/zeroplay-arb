@@ -110,43 +110,6 @@ export class KalshiAdapter extends BaseAdapter implements OnModuleInit {
   }
 
   /**
-   * Fetch prices for specific markets by their tickers.
-   * Uses GET /markets?tickers=TICKER1,TICKER2,...
-   */
-  async fetchPrices(externalEventIds: string[]): Promise<Map<string, NormalizedOutcome[]>> {
-    const result = new Map<string, NormalizedOutcome[]>();
-
-    // Kalshi supports comma-separated tickers (batch!)
-    const chunkSize = 50;
-    for (let i = 0; i < externalEventIds.length; i += chunkSize) {
-      const chunk = externalEventIds.slice(i, i + chunkSize);
-
-      try {
-        const { data } = await this.http.get<KalshiMarketsResponse>('/markets', {
-          params: {
-            tickers: chunk.join(','),
-          },
-        });
-
-        if (data?.markets) {
-          for (const market of data.markets) {
-            const outcomes = this.parseOutcomes(market);
-            if (outcomes.length > 0) {
-              result.set(market.ticker, outcomes);
-            }
-          }
-        }
-
-        await this.sleep(100);
-      } catch (error) {
-        this.logger.warn(`Failed to fetch Kalshi prices for batch: ${error.message}`);
-      }
-    }
-
-    return result;
-  }
-
-  /**
    * Convert a Kalshi market to our normalized format.
    */
   private normalizeMarket(

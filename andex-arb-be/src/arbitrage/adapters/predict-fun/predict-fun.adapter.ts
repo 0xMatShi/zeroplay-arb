@@ -80,24 +80,18 @@ export class PredictFunAdapter extends BaseAdapter implements OnModuleInit {
   // ───────────────────────── fetchEvents ─────────────────────────
 
   /**
-   * Fetch all active markets from Predict.fun, then batch-fetch
-   * orderbooks to get current prices.
+   * Fetch all active markets from Predict.fun.
    *
-   * Flow:
-   * 1. Paginate through /markets?status=OPEN
-   * 2. For each market, fetch /markets/{id}/orderbook (rate-limited)
-   * 3. Extract Yes/No prices from orderbook
+   * Prices are NOT fetched here — they are populated during the
+   * 30-second revalidation cycle via fetchOrderBook() for verified matches only.
    */
   async fetchEvents(): Promise<NormalizedEvent[]> {
     const markets = await this.fetchAllMarkets();
 
     this.logger.log(`Fetched ${markets.length} active markets from Predict.fun`);
 
-    // Batch-fetch orderbooks to get prices
-    const priceMap = await this.batchFetchPrices(markets);
-
     return markets
-      .map((market) => this.normalizeMarket(market, priceMap.get(market.id)))
+      .map((market) => this.normalizeMarket(market))
       .filter((e): e is NormalizedEvent => e !== null);
   }
 
@@ -140,33 +134,6 @@ export class PredictFunAdapter extends BaseAdapter implements OnModuleInit {
   }
 
   /**
-   * Fetch orderbooks for a list of markets one by one.
-   * Rate-limited to stay within 240 req/min (4 req/sec).
-   * sleep(260) ≈ 230 req/min — safe margin.
-   *
-   * Returns Map<marketId, { yesPrice, noPrice }>
-   */
-  private async batchFetchPrices(
-    markets: PredictMarket[],
-  ): Promise<Map<number, { yesPrice: number; noPrice: number }>> {
-    const result = new Map<number, { yesPrice: number; noPrice: number }>();
-
-    for (const market of markets) {
-      try {
-        const prices = await this.fetchMarketPrices(market.id);
-        if (prices) {
-          result.set(market.id, prices);
-        }
-      } catch {
-        // Skip markets where we can't get prices
-      }
-      await this.sleep(260);
-    }
-
-    return result;
-  }
-
-  /**
    * Fetch orderbook for a single market and extract Yes/No prices.
    *
    * The orderbook is for the "Yes" outcome:
@@ -200,47 +167,6 @@ export class PredictFunAdapter extends BaseAdapter implements OnModuleInit {
     } catch {
       return null;
     }
-  }
-
-  // ───────────────────────── fetchPrices ─────────────────────────
-
-  /**
-   * Refresh prices for specific markets by their external IDs.
-   * ExternalId format: "pf-{marketId}"
-   */
-  async fetchPrices(externalEventIds: string[]): Promise<Map<string, NormalizedOutcome[]>> {
-    const result = new Map<string, NormalizedOutcome[]>();
-
-    for (const externalId of externalEventIds) {
-      const marketId = parseInt(externalId.replace('pf-', ''), 10);
-      if (isNaN(marketId)) continue;
-
-      try {
-        const prices = await this.fetchMarketPrices(marketId);
-        if (!prices) continue;
-
-        result.set(externalId, [
-          {
-            externalId: `${marketId}-yes`,
-            name: 'Yes',
-            price: this.clampPrice(prices.yesPrice),
-          },
-          {
-            externalId: `${marketId}-no`,
-            name: 'No',
-            price: this.clampPrice(prices.noPrice),
-          },
-        ]);
-
-        await this.sleep(300);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to refresh price for Predict.fun market ${marketId}: ${error.message}`,
-        );
-      }
-    }
-
-    return result;
   }
 
   // ───────────────────────── fetchOrderBook ─────────────────────────
@@ -309,15 +235,11 @@ export class PredictFunAdapter extends BaseAdapter implements OnModuleInit {
 
   /**
    * Normalize a Predict.fun market to our format.
+   * Prices default to 0 and are populated during revalidation.
    */
-  private normalizeMarket(
-    market: PredictMarket,
-    prices?: { yesPrice: number; noPrice: number },
-  ): NormalizedEvent | null {
+  private normalizeMarket(market: PredictMarket): NormalizedEvent | null {
     try {
-      if (!prices) return null; // Can't use without prices
-
-      const outcomes = this.normalizeOutcomes(market, prices);
+      const outcomes = this.normalizeOutcomes(market);
       if (outcomes.length === 0) return null;
 
       const outcomeType = outcomes.length === 2 ? OutcomeType.BINARY : OutcomeType.MULTI;
@@ -351,24 +273,17 @@ export class PredictFunAdapter extends BaseAdapter implements OnModuleInit {
   }
 
   /**
-   * Create normalized outcomes from market data + prices.
+   * Create normalized outcomes from market data.
+   * Prices default to 0 and will be populated during revalidation.
    */
-  private normalizeOutcomes(
-    market: PredictMarket,
-    prices: { yesPrice: number; noPrice: number },
-  ): NormalizedOutcome[] {
+  private normalizeOutcomes(market: PredictMarket): NormalizedOutcome[] {
     const outcomes: NormalizedOutcome[] = [];
 
     for (const outcome of market.outcomes) {
       const isYes = outcome.name.toLowerCase() === 'yes' || outcome.name.toLowerCase() === 'up';
       const isNo = outcome.name.toLowerCase() === 'no' || outcome.name.toLowerCase() === 'down';
 
-      let price: number;
-      if (isYes) {
-        price = prices.yesPrice;
-      } else if (isNo) {
-        price = prices.noPrice;
-      } else {
+      if (!isYes && !isNo) {
         // For multi-outcome markets, we'd need individual prices
         // For now, skip non-binary outcomes
         continue;
@@ -377,7 +292,7 @@ export class PredictFunAdapter extends BaseAdapter implements OnModuleInit {
       outcomes.push({
         externalId: `${market.id}-${outcome.name.toLowerCase()}`,
         name: outcome.name,
-        price: this.clampPrice(price),
+        price: 0,
         metadata: {
           marketId: market.id,
           onChainId: outcome.onChainId,

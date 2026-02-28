@@ -119,56 +119,19 @@ export class ProbableAdapter extends BaseAdapter implements OnModuleInit {
 
     this.logger.log(`Fetched ${allEvents.length} active events from Probable Markets`);
 
-    // Collect all token IDs to batch-fetch prices
-    const tokenIds = this.collectTokenIds(allEvents);
-    const priceMap = await this.batchFetchPricesByTokenId(tokenIds);
-
+    // Prices are NOT fetched here — they are populated during the
+    // 30-second revalidation cycle via fetchOrderBook() for verified matches only.
+    const emptyPriceMap = new Map<string, number>();
     const normalized: NormalizedEvent[] = [];
 
     for (const event of allEvents) {
       for (const market of event.markets || []) {
-        const norm = this.normalizeMarket(event, market, priceMap);
+        const norm = this.normalizeMarket(event, market, emptyPriceMap);
         if (norm) normalized.push(norm);
       }
     }
 
     return normalized;
-  }
-
-  // ───────────────────────── fetchPrices ─────────────────────────
-
-  /**
-   * Refresh prices for specific markets by their external IDs.
-   *
-   * External ID format: condition_id (0x...)
-   * We look up the token IDs from outcome metadata and call the CLOB bulk prices endpoint.
-   */
-  async fetchPrices(externalEventIds: string[]): Promise<Map<string, NormalizedOutcome[]>> {
-    const result = new Map<string, NormalizedOutcome[]>();
-
-    for (const conditionId of externalEventIds) {
-      try {
-        const { data } = await this.http.get<ProbableMarket>(`/markets/${conditionId}`);
-
-        if (!data || !data.tokens?.length) continue;
-
-        const tokenIds = data.tokens.map((t) => t.token_id);
-        const priceMap = await this.batchFetchPricesByTokenId(tokenIds);
-
-        const outcomes = this.parseOutcomes(data, priceMap);
-        if (outcomes.length > 0) {
-          result.set(conditionId, outcomes);
-        }
-
-        await this.sleep(200);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to refresh price for Probable market ${conditionId}: ${error.message}`,
-        );
-      }
-    }
-
-    return result;
   }
 
   // ───────────────────────── fetchOrderBook ─────────────────────────
@@ -310,23 +273,6 @@ export class ProbableAdapter extends BaseAdapter implements OnModuleInit {
   }
 
   // ───────────────────────── Price Fetching ─────────────────────────
-
-  /**
-   * Collect all unique token IDs from events for batch price fetching.
-   */
-  private collectTokenIds(events: ProbableEvent[]): string[] {
-    const ids = new Set<string>();
-
-    for (const event of events) {
-      for (const market of event.markets || []) {
-        for (const token of market.tokens || []) {
-          if (token.token_id) ids.add(token.token_id);
-        }
-      }
-    }
-
-    return Array.from(ids);
-  }
 
   /**
    * Batch-fetch mid prices for multiple token IDs via the CLOB API.
