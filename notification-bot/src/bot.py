@@ -396,8 +396,7 @@ def _format_opportunity(data: dict, preset_name: str | None = None) -> str:
         f"Прибыль($): <b>${float(gross_profit):.2f}</b>\n" if gross_profit is not None else ""
     )
     investment_line = (
-        f"Затраты: <b>${float(total_investment):.2f}</b>\n" if total_investment is not None
-        else f"Затраты: <code>{total_cost:.4f}</code>\n"
+        f"Затраты: <b>${float(total_investment):.2f}</b>\n" if total_investment is not None else ""
     )
     shares_line = (
         f"Купить акций: <b>{float(total_shares):.2f}</b>\n" if total_shares is not None else ""

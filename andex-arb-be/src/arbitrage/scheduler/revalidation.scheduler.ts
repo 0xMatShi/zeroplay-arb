@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { OpportunityService } from '../services/opportunity.service';
 import { MatchingService } from '../services/matching.service';
 import { EventFetcherService } from '../services/event-fetcher.service';
+import { OrderBookService } from '../services/orderbook.service';
 import { ArbitrageGateway } from '../gateways/arbitrage.gateway';
 
 /**
@@ -24,6 +25,7 @@ export class RevalidationScheduler {
     private readonly opportunityService: OpportunityService,
     private readonly matchingService: MatchingService,
     private readonly eventFetcher: EventFetcherService,
+    private readonly orderBookService: OrderBookService,
     private readonly gateway: ArbitrageGateway,
   ) {}
 
@@ -45,6 +47,9 @@ export class RevalidationScheduler {
       const newIds = await this.opportunityService.runScanCycle();
 
       for (const id of newIds) {
+        // Сначала анализируем order book — метрики сохраняются в БД
+        await this.orderBookService.getOrderBookAnalysis(id);
+        // Загружаем свежий объект с уже заполненными метриками
         const opp = await this.opportunityService.getById(id);
         if (opp) {
           this.gateway.emitNewOpportunity(opp);
