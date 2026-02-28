@@ -31,6 +31,16 @@ async def init_db() -> None:
         """)
         await db.commit()
 
+    # Миграции: добавляем колонки, которых могло не быть в старой схеме
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("PRAGMA table_info(presets)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "is_active" not in columns:
+            await db.execute(
+                "ALTER TABLE presets ADD COLUMN is_active INTEGER NOT NULL DEFAULT 0"
+            )
+            await db.commit()
+
 
 # ---------------------------------------------------------------------------
 # Пользователи
