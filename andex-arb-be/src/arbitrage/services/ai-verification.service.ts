@@ -179,7 +179,7 @@ export class AiVerificationService {
     const pendingMatches = await this.matchRepo.find({
       where: { status: MatchStatus.PENDING, matchMethod: MatchMethod.AUTO },
       relations: ['events', 'events.platform', 'events.outcomes'],
-      order: { createdAt: 'ASC' },
+      order: { confidence: 'DESC' },
       take: MAX_PER_CYCLE,
     });
 
