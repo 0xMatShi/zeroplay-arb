@@ -276,8 +276,14 @@ export class OpportunityService {
    * Cache orderbook-derived metrics on the opportunity.
    * Called by OrderBookService after computing tiers.
    */
-  async updateOrderBookMetrics(id: string, weightedAvgProfit: number, totalGrossProfit: number): Promise<void> {
-    await this.opportunityRepo.update(id, { weightedAvgProfit, totalGrossProfit });
+  async updateOrderBookMetrics(
+    id: string,
+    weightedAvgProfit: number,
+    totalGrossProfit: number,
+    totalInvestment: number,
+    totalShares: number,
+  ): Promise<void> {
+    await this.opportunityRepo.update(id, { weightedAvgProfit, totalGrossProfit, totalInvestment, totalShares });
   }
 
   // ==================== Internal ====================

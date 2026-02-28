@@ -66,6 +66,20 @@ export class ArbitrageOpportunity {
   @Column({ type: 'decimal', precision: 12, scale: 4, nullable: true, default: null })
   totalGrossProfit: number | null;
 
+  /**
+   * Total investment in $ required to execute all tiers.
+   * Null until the order book has been analyzed at least once.
+   */
+  @Column({ type: 'decimal', precision: 12, scale: 4, nullable: true, default: null })
+  totalInvestment: number | null;
+
+  /**
+   * Total shares (contracts) executable across all tiers.
+   * Null until the order book has been analyzed at least once.
+   */
+  @Column({ type: 'decimal', precision: 12, scale: 4, nullable: true, default: null })
+  totalShares: number | null;
+
   @Column({
     type: 'enum',
     enum: OpportunityStatus,

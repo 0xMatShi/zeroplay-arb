@@ -18,6 +18,7 @@ from src.db import (
     get_preset_by_id,
     get_presets,
     get_subscribed_chat_ids,
+    get_subscribed_users_with_active_presets,
     init_db,
     register_user,
     toggle_preset_active,
@@ -374,10 +375,29 @@ async def on_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 # ---------------------------------------------------------------------------
 
 def _format_opportunity(data: dict) -> str:
-    profit = float(data.get("profitPercentage", 0))
+    profit_pct = float(data.get("profitPercentage", 0))
     total_cost = float(data.get("totalCost", 0))
-    match_title = data.get("matchTitle") or "—"
+    gross_profit = data.get("totalGrossProfit")
+    total_investment = data.get("totalInvestment")
+    total_shares = data.get("totalShares")
     legs: list[dict] = data.get("legs", [])
+
+    # Строки вида: "Название события (Биржа)"
+    event_lines = "\n".join(
+        f"{leg.get('eventTitle') or '—'} ({leg.get('platformName', '')})"
+        for leg in legs
+    )
+
+    profit_usd_line = (
+        f"Прибыль($): <b>${float(gross_profit):.2f}</b>\n" if gross_profit is not None else ""
+    )
+    investment_line = (
+        f"Затраты: <b>${float(total_investment):.2f}</b>\n" if total_investment is not None
+        else f"Затраты: <code>{total_cost:.4f}</code>\n"
+    )
+    shares_line = (
+        f"Купить акций: <b>{float(total_shares):.2f}</b>\n" if total_shares is not None else ""
+    )
 
     legs_lines = []
     for leg in legs:
@@ -387,17 +407,20 @@ def _format_opportunity(data: dict) -> str:
         url = leg.get("url", "")
         line = f"  • <b>{outcome}</b> @ {platform}: <code>{price:.4f}</code>"
         if url:
-            line += f'\n    <a href="{url}">открыть рынок</a>'
+            line += f'\n    <a href="{url}">Открыть событие</a>'
         legs_lines.append(line)
 
     legs_text = "\n".join(legs_lines) if legs_lines else "  —"
 
     return (
         f"🔔 <b>Новая арбитражная возможность</b>\n\n"
-        f"📊 <b>Событие:</b> {match_title}\n"
-        f"💰 <b>Прибыль:</b> {profit:.2f}%\n"
-        f"💵 <b>Затраты:</b> {total_cost:.4f}\n\n"
-        f"<b>Ноги:</b>\n{legs_text}"
+        f"📊 <b>Событие:</b>\n{event_lines}\n\n"
+        f"Total Avg: <code>{total_cost:.4f}</code>\n"
+        f"Прибыль(%): <b>{profit_pct:.2f}%</b>\n"
+        f"{profit_usd_line}"
+        f"{investment_line}"
+        f"{shares_line}"
+        f"\n<b>Ноги:</b>\n{legs_text}"
     )
 
 
@@ -406,16 +429,69 @@ def _format_expired(data: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Фильтрация по пресетам
+# ---------------------------------------------------------------------------
+
+def _matches_preset(data: dict, preset: dict) -> bool:
+    profit_pct = float(data.get("profitPercentage", 0))
+    total_cost = float(data.get("totalCost", 0))
+    platforms = {leg.get("platformName", "") for leg in data.get("legs", [])}
+
+    if preset["min_pct"] is not None and profit_pct < preset["min_pct"]:
+        return False
+    if preset["max_pct"] is not None and profit_pct > preset["max_pct"]:
+        return False
+    if preset["min_usd"] is not None and total_cost < preset["min_usd"]:
+        return False
+    if preset["max_usd"] is not None and total_cost > preset["max_usd"]:
+        return False
+    if platforms & set(preset["disabled_exchanges"]):
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Рассылка
 # ---------------------------------------------------------------------------
 
-async def broadcast(app: Application, text: str) -> None:
-    chat_ids = await get_subscribed_chat_ids()
-    if not chat_ids:
+async def broadcast_opportunity(app: Application, data: dict) -> None:
+    """Рассылает новую возможность с учётом активных пресетов пользователя.
+
+    Если у пользователя нет активных пресетов — уведомление отправляется всегда.
+    Если пресеты есть — хотя бы один должен совпасть.
+    """
+    users = await get_subscribed_users_with_active_presets()
+    if not users:
         return
+
+    text = _format_opportunity(data)
+    for telegram_id, active_presets in users:
+        if active_presets and not any(_matches_preset(data, p) for p in active_presets):
+            logger.debug("Пропуск %s: ни один пресет не совпал", telegram_id)
+            continue
+        try:
+            await app.bot.send_message(
+                chat_id=telegram_id,
+                text=text,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        except Exception as exc:
+            logger.warning("Не удалось отправить сообщение %s: %s", telegram_id, exc)
+
+
+async def broadcast_expired(app: Application, data: dict) -> None:
+    """Рассылает истечение возможности всем подписчикам без фильтрации."""
+    chat_ids = await get_subscribed_chat_ids()
+    text = _format_expired(data)
     for chat_id in chat_ids:
         try:
-            await app.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+            await app.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
         except Exception as exc:
             logger.warning("Не удалось отправить сообщение %s: %s", chat_id, exc)
 
@@ -439,10 +515,10 @@ async def main() -> None:
     ])
 
     async def on_new(data: dict) -> None:
-        await broadcast(app, _format_opportunity(data))
+        await broadcast_opportunity(app, data)
 
     async def on_expired(data: dict) -> None:
-        await broadcast(app, _format_expired(data))
+        await broadcast_expired(app, data)
 
     ws_client = ArbitrageWSClient(
         url=BACKEND_WS_URL,

@@ -73,6 +73,25 @@ async def get_subscribed_chat_ids() -> list[int]:
         return [row[0] for row in rows]
 
 
+async def get_subscribed_users_with_active_presets() -> list[tuple[int, list[dict]]]:
+    """Возвращает [(telegram_id, [активные пресеты]), ...] для всех подписчиков."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT telegram_id FROM telegram_users WHERE has_subscription = 1"
+        )
+        user_ids = [row[0] for row in await cursor.fetchall()]
+
+        result = []
+        for uid in user_ids:
+            cursor = await db.execute(
+                f"{_SELECT_PRESET} WHERE telegram_id = ? AND is_active = 1",
+                (uid,),
+            )
+            rows = await cursor.fetchall()
+            result.append((uid, [_row_to_preset(r) for r in rows]))
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Пресеты
 # ---------------------------------------------------------------------------

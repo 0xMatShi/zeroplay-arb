@@ -59,6 +59,8 @@ export class OrderBookService {
       opportunityId,
       tiers.weightedAvgProfit,
       tiers.totalGrossProfit,
+      tiers.totalInvestment,
+      tiers.totalQuantity,
     );
 
     return {
