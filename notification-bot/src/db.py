@@ -64,6 +64,16 @@ async def register_user(telegram_id: int, username: str | None, first_name: str 
         return False
 
 
+async def has_subscription(telegram_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT has_subscription FROM telegram_users WHERE telegram_id = ?",
+            (telegram_id,),
+        )
+        row = await cursor.fetchone()
+    return bool(row and row[0])
+
+
 async def get_subscribed_chat_ids() -> list[int]:
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(

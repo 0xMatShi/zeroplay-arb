@@ -19,6 +19,7 @@ from src.db import (
     get_presets,
     get_subscribed_chat_ids,
     get_subscribed_users_with_active_presets,
+    has_subscription,
     init_db,
     register_user,
     toggle_preset_active,
@@ -85,8 +86,10 @@ def _preset_to_draft(preset: dict) -> dict:
 # Клавиатуры
 # ---------------------------------------------------------------------------
 
-def _start_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[InlineKeyboardButton("Пресеты", callback_data="menu:presets")]])
+def _start_keyboard(show_presets: bool = True) -> InlineKeyboardMarkup:
+    if show_presets:
+        return InlineKeyboardMarkup([[InlineKeyboardButton("Пресеты", callback_data="menu:presets")]])
+    return InlineKeyboardMarkup([])
 
 
 def _presets_list_keyboard(presets: list[dict]) -> InlineKeyboardMarkup:
@@ -176,7 +179,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         text = f"Вы уже зарегистрированы, {user.first_name}."
 
-    await update.message.reply_text(text, reply_markup=_start_keyboard())
+    subscribed = await has_subscription(user.id)
+    await update.message.reply_text(text, reply_markup=_start_keyboard(show_presets=subscribed))
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +197,8 @@ async def cb_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text = "Ваши пресеты:" if presets else "У вас пока нет пресетов."
         await query.edit_message_text(text, reply_markup=_presets_list_keyboard(presets))
     elif action == "back":
-        await query.edit_message_text(_START_TEXT, reply_markup=_start_keyboard())
+        subscribed = await has_subscription(query.from_user.id)
+        await query.edit_message_text(_START_TEXT, reply_markup=_start_keyboard(show_presets=subscribed))
 
 
 async def cb_presets(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
