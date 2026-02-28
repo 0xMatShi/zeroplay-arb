@@ -17,3 +17,8 @@ andex-arb-fe/dist/
 
 # Claude
 CLAUDE.md
+
+# TG BOT
+notification-bot/.env
+notification-bot/bot.db 
+notification-bot/.venv/

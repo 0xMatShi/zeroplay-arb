@@ -33,25 +33,16 @@ interface IndexedEvent {
 /**
  * Matches events from different platforms that represent the same real-world event.
  *
- * N-WAY MATCHING: A single EventMatch can group the same event across
- * 2, 3, 4, or more platforms. When a new event matches an event that's
- * already in an existing match, we EXPAND that match instead of skipping.
- *
- * This ensures:
- * - Polymarket ↔ Predict.fun match is found in cycle 1
- * - Opinion version of the same event is ADDED to the same match in cycle 2
- * - Kalshi version is ADDED in cycle 3
- * - The scanner then picks best prices across ALL platforms in the group
+ * PAIR-ONLY MATCHING: Every EventMatch contains exactly 2 events.
+ * An event can appear in multiple matches (e.g. A↔B and A↔C simultaneously).
+ * No N-way expansion — this prevents false positives from transitive matches.
  *
  * Strategy (inverted index):
  * 1. Normalize titles, extract keywords for ALL active events
  * 2. Build inverted index: keyword -> events from each platform
  * 3. Only compare cross-platform pairs that share >= MIN_SHARED_KEYWORDS
- * 4. For each candidate pair:
- *    - Both unmatched → create new match
- *    - One in existing match, other unmatched → expand existing match
- *    - Both in same match → skip
- *    - Both in different matches → skip (conservative, avoid merging)
+ * 4. Skip pairs that already exist in a non-rejected match
+ * 5. Create new pair matches for candidates above threshold
  */
 @Injectable()
 export class MatchingService {
@@ -140,10 +131,10 @@ export class MatchingService {
   }
 
   /**
-   * Find matches for all active events — both new and expanding existing.
+   * Find new event pairs across platforms and create EventMatch records.
    *
-   * This method supports N-way matching: an unmatched event from platform C
-   * can be added to an existing match between platforms A and B.
+   * Pair-only matching: every EventMatch contains exactly 2 events.
+   * An event can appear in multiple matches simultaneously (A↔B and A↔C).
    */
   async matchNewEvents(): Promise<number> {
     const startTime = Date.now();
@@ -159,34 +150,21 @@ export class MatchingService {
 
     this.logger.log(`Loaded ${allEvents.length} active events for matching`);
 
-    // 2. Build eventId → matchId map from existing non-rejected matches
-    const { eventToMatch, matchPlatforms } = await this.loadExistingMatchMappings();
+    // 2. Load all existing non-rejected pairs to avoid duplicates
+    const existingPairs = await this.loadExistingPairs();
 
-    // 3. Separate events into unmatched and matched
-    const unmatchedEvents: IndexedEvent[] = [];
+    // 3. Index all events
     const allIndexedEvents: IndexedEvent[] = [];
 
     for (const event of allEvents) {
-      const indexed: IndexedEvent = {
+      allIndexedEvents.push({
         id: event.id,
         platformSlug: event.platform?.slug || event.platformId,
         title: event.title,
         endDate: event.endDate,
         words: this.normalizeText(event.title),
-      };
-
-      allIndexedEvents.push(indexed);
-
-      if (!eventToMatch.has(event.id)) {
-        unmatchedEvents.push(indexed);
-      }
+      });
     }
-
-    this.logger.log(
-      `${unmatchedEvents.length} unmatched events, ${allIndexedEvents.length - unmatchedEvents.length} already in matches`,
-    );
-
-    if (unmatchedEvents.length === 0) return 0;
 
     // Check we have events from 2+ platforms total
     const platforms = new Set(allIndexedEvents.map((e) => e.platformSlug));
@@ -195,8 +173,7 @@ export class MatchingService {
       return 0;
     }
 
-    // 4. Build inverted index over ALL events (both matched and unmatched).
-    //    We need matched events in the index so unmatched events can match AGAINST them.
+    // 4. Build inverted index over ALL events
     const invertedIndex = new Map<string, IndexedEvent[]>();
     for (const event of allIndexedEvents) {
       for (const word of event.words) {
@@ -207,10 +184,7 @@ export class MatchingService {
       }
     }
 
-    // 5. Generate cross-platform candidate pairs.
-    //    But only consider pairs where AT LEAST ONE event is unmatched.
-    const unmatchedIds = new Set(unmatchedEvents.map((e) => e.id));
-
+    // 5. Generate cross-platform candidate pairs, skipping already-existing ones
     const pairScores = new Map<
       string,
       { e1: IndexedEvent; e2: IndexedEvent; sharedCount: number }
@@ -235,10 +209,10 @@ export class MatchingService {
 
           for (const e1 of list1) {
             for (const e2 of list2) {
-              // Skip if BOTH are already matched (nothing new to do)
-              if (!unmatchedIds.has(e1.id) && !unmatchedIds.has(e2.id)) continue;
-
               const pairKey = e1.id < e2.id ? `${e1.id}:${e2.id}` : `${e2.id}:${e1.id}`;
+
+              // Skip pairs that already have a non-rejected match
+              if (existingPairs.has(pairKey)) continue;
 
               const existing = pairScores.get(pairKey);
               if (existing) {
@@ -254,12 +228,6 @@ export class MatchingService {
 
     // 6. Filter candidates, compute full similarity
     const newPairCandidates: MatchCandidate[] = [];
-    const expandCandidates: {
-      unmatchedEvent: IndexedEvent;
-      matchedEvent: IndexedEvent;
-      matchId: string;
-      similarity: number;
-    }[] = [];
     const nearMisses: { title1: string; title2: string; sim: number }[] = [];
     let pairsChecked = 0;
 
@@ -279,37 +247,13 @@ export class MatchingService {
         continue;
       }
 
-      const e1Matched = eventToMatch.has(e1.id);
-      const e2Matched = eventToMatch.has(e2.id);
-
-      if (!e1Matched && !e2Matched) {
-        // Case A: Both unmatched → new match
-        newPairCandidates.push({
-          event1: { id: e1.id, title: e1.title } as PlatformEvent,
-          event2: { id: e2.id, title: e2.title } as PlatformEvent,
-          similarity,
-        });
-        candidateEventIds.add(e1.id);
-        candidateEventIds.add(e2.id);
-      } else if (e1Matched && !e2Matched) {
-        // Case B: e1 is in a match, e2 is new → expand match with e2
-        const matchId = eventToMatch.get(e1.id)!;
-        // Don't add if that match already has an event from the same platform
-        const existingPlatforms = matchPlatforms.get(matchId);
-        if (!existingPlatforms?.has(e2.platformSlug)) {
-          expandCandidates.push({ unmatchedEvent: e2, matchedEvent: e1, matchId, similarity });
-          candidateEventIds.add(e2.id);
-        }
-      } else if (!e1Matched && e2Matched) {
-        // Case B (reversed): e2 is in a match, e1 is new → expand match with e1
-        const matchId = eventToMatch.get(e2.id)!;
-        const existingPlatforms = matchPlatforms.get(matchId);
-        if (!existingPlatforms?.has(e1.platformSlug)) {
-          expandCandidates.push({ unmatchedEvent: e1, matchedEvent: e2, matchId, similarity });
-          candidateEventIds.add(e1.id);
-        }
-      }
-      // Case C: Both in same/different matches → skip
+      newPairCandidates.push({
+        event1: { id: e1.id, title: e1.title } as PlatformEvent,
+        event2: { id: e2.id, title: e2.title } as PlatformEvent,
+        similarity,
+      });
+      candidateEventIds.add(e1.id);
+      candidateEventIds.add(e2.id);
     }
 
     nearMisses.sort((a, b) => b.sim - a.sim);
@@ -317,8 +261,7 @@ export class MatchingService {
     const indexTime = Date.now() - startTime;
     this.logger.log(
       `Inverted index: ${pairScores.size} candidate pairs, ${pairsChecked} checked, ` +
-        `${newPairCandidates.length} new pairs, ${expandCandidates.length} expansions, ` +
-        `${nearMisses.length} near-misses (${indexTime}ms)`,
+        `${newPairCandidates.length} new pairs, ${nearMisses.length} near-misses (${indexTime}ms)`,
     );
 
     if (nearMisses.length > 0) {
@@ -330,7 +273,7 @@ export class MatchingService {
       }
     }
 
-    if (newPairCandidates.length === 0 && expandCandidates.length === 0) return 0;
+    if (newPairCandidates.length === 0) return 0;
 
     // 7. Load full events with outcomes for all candidates
     const fullEvents = await this.eventRepo.find({
@@ -339,77 +282,57 @@ export class MatchingService {
     });
     const fullEventMap = new Map(fullEvents.map((e) => [e.id, e]));
 
-    // Replace lightweight refs with full events in new pair candidates
+    // Replace lightweight refs with full events
     for (const candidate of newPairCandidates) {
       candidate.event1 = fullEventMap.get(candidate.event1.id) || candidate.event1;
       candidate.event2 = fullEventMap.get(candidate.event2.id) || candidate.event2;
     }
 
-    // 8a. Create new matches from unmatched pairs
-    let totalChanges = await this.createMatches(newPairCandidates);
-
-    // 8b. Expand existing matches with new events
-    totalChanges += await this.expandMatches(expandCandidates, fullEventMap);
+    // 8. Create new pair matches
+    const totalChanges = await this.createMatches(newPairCandidates);
 
     const totalTime = Date.now() - startTime;
-    this.logger.log(
-      `Matching complete: ${totalChanges} changes (new + expanded) in ${totalTime}ms`,
-    );
+    this.logger.log(`Matching complete: ${totalChanges} new pairs in ${totalTime}ms`);
 
     return totalChanges;
   }
 
   /**
-   * Load mappings: eventId → matchId and matchId → Set<platformSlug>.
-   * Only non-rejected matches are considered.
+   * Load all existing non-rejected pairs as canonical "id1:id2" keys (id1 < id2).
+   * Used to skip re-creating matches that already exist.
    */
-  private async loadExistingMatchMappings(): Promise<{
-    eventToMatch: Map<string, string>;
-    matchPlatforms: Map<string, Set<string>>;
-  }> {
-    // Get all non-rejected matches with their event IDs and platform slugs
-    const rows: { matchId: string; eventId: string; platformSlug: string }[] =
-      await this.matchRepo.query(
-        `SELECT em.id as "matchId", eme."platformEventId" as "eventId", p.slug as "platformSlug"
-         FROM event_matches em
-         INNER JOIN event_match_events eme ON eme."eventMatchId" = em.id
-         INNER JOIN platform_events pe ON pe.id = eme."platformEventId"
-         INNER JOIN platforms p ON p.id = pe."platformId"
-         WHERE em.status != $1`,
-        [MatchStatus.REJECTED],
-      );
+  private async loadExistingPairs(): Promise<Set<string>> {
+    const rows: { eventId1: string; eventId2: string }[] = await this.matchRepo.query(
+      `SELECT
+         LEAST(eme1."platformEventId", eme2."platformEventId") as "eventId1",
+         GREATEST(eme1."platformEventId", eme2."platformEventId") as "eventId2"
+       FROM event_matches em
+       INNER JOIN event_match_events eme1 ON eme1."eventMatchId" = em.id
+       INNER JOIN event_match_events eme2 ON eme2."eventMatchId" = em.id
+         AND eme2."platformEventId" > eme1."platformEventId"
+       WHERE em.status != $1`,
+      [MatchStatus.REJECTED],
+    );
 
-    const eventToMatch = new Map<string, string>();
-    const matchPlatforms = new Map<string, Set<string>>();
-
+    const pairs = new Set<string>();
     for (const row of rows) {
-      eventToMatch.set(row.eventId, row.matchId);
-
-      if (!matchPlatforms.has(row.matchId)) {
-        matchPlatforms.set(row.matchId, new Set());
-      }
-      matchPlatforms.get(row.matchId)!.add(row.platformSlug);
+      pairs.add(`${row.eventId1}:${row.eventId2}`);
     }
-
-    return { eventToMatch, matchPlatforms };
+    return pairs;
   }
 
   /**
-   * Create EventMatch records from NEW pair candidates.
-   * Greedy approach: sort by similarity desc, each event can only be in one match.
+   * Create EventMatch records from pair candidates.
+   * Each candidate becomes its own 2-event match.
+   * An event may appear in multiple matches (A↔B and A↔C are separate records).
    */
   private async createMatches(candidates: MatchCandidate[]): Promise<number> {
     candidates.sort((a, b) => b.similarity - a.similarity);
 
-    const matched = new Set<string>();
     let created = 0;
 
     for (const candidate of candidates) {
       const { event1, event2, similarity } = candidate;
-
-      if (matched.has(event1.id) || matched.has(event2.id)) {
-        continue;
-      }
 
       try {
         const outcomeMapping = this.buildOutcomeMapping([event1, event2]);
@@ -424,8 +347,6 @@ export class MatchingService {
         });
 
         await this.matchRepo.save(match);
-        matched.add(event1.id);
-        matched.add(event2.id);
         created++;
 
         this.logger.log(
@@ -439,80 +360,6 @@ export class MatchingService {
     }
 
     return created;
-  }
-
-  /**
-   * Expand existing matches by adding new events from additional platforms.
-   *
-   * For each expansion candidate:
-   * 1. Load the existing match with its current events
-   * 2. Add the new event to the match's events array
-   * 3. Update the outcome mapping to include the new platform
-   */
-  private async expandMatches(
-    candidates: {
-      unmatchedEvent: IndexedEvent;
-      matchedEvent: IndexedEvent;
-      matchId: string;
-      similarity: number;
-    }[],
-    fullEventMap: Map<string, PlatformEvent>,
-  ): Promise<number> {
-    // Sort by similarity DESC — best matches first
-    candidates.sort((a, b) => b.similarity - a.similarity);
-
-    // Group by matchId — for each match, pick the best candidate per platform
-    const bestPerMatchPlatform = new Map<string, (typeof candidates)[0]>();
-
-    for (const candidate of candidates) {
-      const key = `${candidate.matchId}:${candidate.unmatchedEvent.platformSlug}`;
-      if (!bestPerMatchPlatform.has(key)) {
-        bestPerMatchPlatform.set(key, candidate);
-      }
-    }
-
-    let expanded = 0;
-    const expandedEvents = new Set<string>();
-
-    for (const [, candidate] of bestPerMatchPlatform) {
-      if (expandedEvents.has(candidate.unmatchedEvent.id)) continue;
-
-      const newEvent = fullEventMap.get(candidate.unmatchedEvent.id);
-      if (!newEvent) continue;
-
-      try {
-        // Load existing match with events
-        const match = await this.matchRepo.findOne({
-          where: { id: candidate.matchId },
-          relations: ['events', 'events.platform', 'events.outcomes'],
-        });
-
-        if (!match) continue;
-
-        // Safety: check we don't already have this platform in the match
-        const existingSlugs = new Set(match.events.map((e) => e.platform?.slug));
-        if (existingSlugs.has(newEvent.platform?.slug)) continue;
-
-        // Add the new event
-        match.events.push(newEvent);
-
-        // Rebuild outcome mapping with all events
-        match.outcomeMapping = this.buildOutcomeMapping(match.events);
-
-        await this.matchRepo.save(match);
-        expandedEvents.add(candidate.unmatchedEvent.id);
-        expanded++;
-
-        this.logger.log(
-          `EXPANDED Match "${match.title}" +${newEvent.platform?.name || 'unknown'} ` +
-            `(${(candidate.similarity * 100).toFixed(1)}%, now ${match.events.length} platforms)`,
-        );
-      } catch (error) {
-        this.logger.warn(`Failed to expand match ${candidate.matchId}: ${error.message}`);
-      }
-    }
-
-    return expanded;
   }
 
   // ==================== Text Similarity ====================
