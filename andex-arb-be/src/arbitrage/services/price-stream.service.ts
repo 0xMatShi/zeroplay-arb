@@ -16,6 +16,8 @@ const RECONNECT_DELAY_MS = 5_000;
 const INIT_DELAY_MS = 3_000;
 const SCAN_DEBOUNCE_MS = 1_000;
 const PROB_CHUNK_SIZE = 50;
+const PF_CHUNK_SIZE = 20;
+const PF_CHUNK_DELAY_MS = 300;
 
 /**
  * Real-time price stream service.
@@ -369,13 +371,7 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
 
     ws.on('open', () => {
       this.logger.log(`Predict.fun WS connected (${this.pfMarketIds.size} markets)`);
-      for (const marketId of this.pfMarketIds) {
-        ws.send(JSON.stringify({
-          method: 'subscribe',
-          requestId: ++this.pfRequestId,
-          params: [`predictOrderbook/${marketId}`],
-        }));
-      }
+      this.sendPredictFunSubscribe(ws, Array.from(this.pfMarketIds));
     });
 
     ws.on('message', (raw: Ws.RawData) => {
@@ -390,6 +386,26 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
     });
 
     ws.on('error', (err) => this.logger.error(`Predict.fun WS error: ${err.message}`));
+  }
+
+  private sendPredictFunSubscribe(ws: Ws.WebSocket, marketIds: string[]): void {
+    let chunkIndex = 0;
+    const sendNextChunk = () => {
+      if (chunkIndex >= marketIds.length || ws.readyState !== Ws.WebSocket.OPEN) return;
+      const chunk = marketIds.slice(chunkIndex, chunkIndex + PF_CHUNK_SIZE);
+      for (const marketId of chunk) {
+        ws.send(JSON.stringify({
+          method: 'subscribe',
+          requestId: ++this.pfRequestId,
+          params: [`predictOrderbook/${marketId}`],
+        }));
+      }
+      chunkIndex += PF_CHUNK_SIZE;
+      if (chunkIndex < marketIds.length) {
+        setTimeout(sendNextChunk, PF_CHUNK_DELAY_MS);
+      }
+    };
+    sendNextChunk();
   }
 
   private handlePredictFunMessage(msg: Record<string, unknown>): void {
