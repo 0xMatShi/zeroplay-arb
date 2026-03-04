@@ -17,7 +17,7 @@ export class DatabaseConfig implements TypeOrmOptionsFactory {
       entities: [__dirname + '/../**/*.entity{.ts,.js}'],
       autoLoadEntities: true,
       synchronize: this.configService.get<string>('NODE_ENV') === 'development',
-      logging: this.configService.get<string>('NODE_ENV') === 'development',
+      logging: false,
       migrations: [__dirname + '/../migrations/**/*{.ts,.js}'],
       migrationsRun: false,
       retryAttempts: 5,

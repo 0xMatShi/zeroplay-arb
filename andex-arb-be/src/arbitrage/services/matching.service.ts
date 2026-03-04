@@ -228,7 +228,7 @@ export class MatchingService {
           const list1 = byPlatform.get(slugs[i])!;
           const list2 = byPlatform.get(slugs[j])!;
 
-          if (list1.length > 2000 || list2.length > 2000) continue;
+          if (list1.length > 500 || list2.length > 500) continue;
 
           for (const e1 of list1) {
             for (const e2 of list2) {

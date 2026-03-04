@@ -25,6 +25,7 @@ import { ScannerService } from './services/scanner.service';
 import { OpportunityService } from './services/opportunity.service';
 import { OrderBookService } from './services/orderbook.service';
 import { AiVerificationService } from './services/ai-verification.service';
+import { PriceStreamService } from './services/price-stream.service';
 
 // Schedulers
 import { PollScheduler } from './scheduler/poll.scheduler';
@@ -72,6 +73,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     OpportunityService,
     OrderBookService,
     AiVerificationService,
+    PriceStreamService,
 
     // Schedulers
     PollScheduler,

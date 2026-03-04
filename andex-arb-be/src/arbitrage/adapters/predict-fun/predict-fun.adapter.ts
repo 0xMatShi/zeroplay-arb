@@ -133,42 +133,6 @@ export class PredictFunAdapter extends BaseAdapter implements OnModuleInit {
     return allMarkets;
   }
 
-  /**
-   * Fetch orderbook for a single market and extract Yes/No prices.
-   *
-   * The orderbook is for the "Yes" outcome:
-   * - Best ask = cheapest price to BUY Yes
-   * - Best bid = highest price someone will PAY for Yes
-   * - No price = 1 - best bid (buying No = selling Yes)
-   */
-  private async fetchMarketPrices(
-    marketId: number,
-  ): Promise<{ yesPrice: number; noPrice: number } | null> {
-    try {
-      const { data } = await this.http.get<PredictApiResponse<PredictOrderBook>>(
-        `/markets/${marketId}/orderbook`,
-        { timeout: 10_000 },
-      );
-
-      if (!data?.success || !data?.data) return null;
-
-      const ob = data.data;
-      const bestAsk = ob.asks?.[0]?.[0]; // cheapest ask price
-      const bestBid = ob.bids?.[0]?.[0]; // highest bid price
-
-      if (bestAsk == null && bestBid == null) return null;
-
-      // Yes price = best ask (what you'd pay to buy Yes)
-      // No price = 1 - best bid (what you'd pay to buy No)
-      const yesPrice = bestAsk ?? (bestBid ? bestBid + 0.01 : 0.5);
-      const noPrice = bestBid != null ? 1 - bestBid : bestAsk ? 1 - bestAsk + 0.01 : 0.5;
-
-      return { yesPrice, noPrice };
-    } catch {
-      return null;
-    }
-  }
-
   // ───────────────────────── fetchOrderBook ─────────────────────────
 
   /**
@@ -249,7 +213,7 @@ export class PredictFunAdapter extends BaseAdapter implements OnModuleInit {
         title: market.question || market.title,
         description: market.description || undefined,
         category: market.categorySlug || undefined,
-        endDate: undefined, // predict.fun doesn't expose end date directly in market
+        endDate: undefined,
         status: EventStatus.ACTIVE,
         outcomeType,
         outcomes,
@@ -283,11 +247,7 @@ export class PredictFunAdapter extends BaseAdapter implements OnModuleInit {
       const isYes = outcome.name.toLowerCase() === 'yes' || outcome.name.toLowerCase() === 'up';
       const isNo = outcome.name.toLowerCase() === 'no' || outcome.name.toLowerCase() === 'down';
 
-      if (!isYes && !isNo) {
-        // For multi-outcome markets, we'd need individual prices
-        // For now, skip non-binary outcomes
-        continue;
-      }
+      if (!isYes && !isNo) continue;
 
       outcomes.push({
         externalId: `${market.id}-${outcome.name.toLowerCase()}`,

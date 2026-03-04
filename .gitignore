@@ -22,3 +22,5 @@ CLAUDE.md
 notification-bot/.env
 notification-bot/bot.db 
 notification-bot/.venv/
+notification-bot/__pycache__/
+notification-bot/src/__pycache__/

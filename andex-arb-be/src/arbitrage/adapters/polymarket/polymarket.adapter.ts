@@ -17,7 +17,7 @@ import { PolymarketMarket, PolymarketOrderBookResponse } from './polymarket.type
 const POLYMARKET_GAMMA_API = 'https://gamma-api.polymarket.com';
 const POLYMARKET_CLOB_API = 'https://clob.polymarket.com';
 const POLYMARKET_BASE_URL = 'https://polymarket.com';
-const MAX_PAGES = 20;
+const MAX_PAGES = 100;
 const PAGE_LIMIT = 500;
 
 @Injectable()

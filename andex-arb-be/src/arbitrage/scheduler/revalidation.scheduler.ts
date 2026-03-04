@@ -1,62 +1,65 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { OpportunityService } from '../services/opportunity.service';
-import { MatchingService } from '../services/matching.service';
-import { EventFetcherService } from '../services/event-fetcher.service';
 import { OrderBookService } from '../services/orderbook.service';
 import { ArbitrageGateway } from '../gateways/arbitrage.gateway';
+import { PriceStreamService } from '../services/price-stream.service';
 
 /**
- * Arbitrage scan scheduler — runs every 30 seconds.
+ * Arbitrage scan scheduler.
  *
- * Each tick:
- * 1. Get ALL verified matches
- * 2. Refresh prices for every event/outcome via fetchOrderBook
- *    (not just events with active opportunities)
- * 3. Scan all verified matches for arbitrage with fresh prices
- * 4. Notify clients via WebSocket
+ * Prices are now updated in real-time by PriceStreamService (WebSocket).
+ * This scheduler only runs the scan cycle — no HTTP order-book polling.
+ *
+ * Two triggers for a scan cycle:
+ * 1. WebSocket price update → PriceStreamService calls the registered callback
+ *    (debounced at 1s to avoid excessive DB load)
+ * 2. 30-second fallback cron — ensures stale opportunities are expired even
+ *    when price stream is quiet
  */
 @Injectable()
-export class RevalidationScheduler {
+export class RevalidationScheduler implements OnModuleInit {
   private readonly logger = new Logger(RevalidationScheduler.name);
   private isRunning = false;
 
   constructor(
     private readonly opportunityService: OpportunityService,
-    private readonly matchingService: MatchingService,
-    private readonly eventFetcher: EventFetcherService,
     private readonly orderBookService: OrderBookService,
     private readonly gateway: ArbitrageGateway,
+    private readonly priceStream: PriceStreamService,
   ) {}
 
+  onModuleInit(): void {
+    // Register ourselves as the scan target for WebSocket price updates
+    this.priceStream.setScanCallback(() => this.handleScanCycle());
+  }
+
   @Cron(CronExpression.EVERY_30_SECONDS)
-  async handleScanCycle() {
+  async handleScanCycle(): Promise<void> {
     if (this.isRunning) return;
     this.isRunning = true;
 
     try {
-      // Step 1: Get all verified matches with events + outcomes
-      const matches = await this.matchingService.getScannableMatches();
+      // Check for new verified matches and subscribe their tokens
+      await this.priceStream.refreshSubscriptions();
 
-      if (matches.length === 0) return;
+      // Refresh Kalshi prices via HTTP (WS requires auth, so we poll every 30s)
+      await this.priceStream.refreshKalshiPrices();
 
-      // Step 2: Refresh prices for ALL verified match events via orderbook
-      await this.eventFetcher.refreshPricesViaOrderBooks(matches);
-
-      // Step 3: Scan all verified matches for new/updated/expired opportunities
+      // Scan all verified matches for new/updated/expired opportunities
       const newIds = await this.opportunityService.runScanCycle();
 
       for (const id of newIds) {
-        // Сначала анализируем order book — метрики сохраняются в БД
+        // Analyse order book depth — metrics saved to DB
         await this.orderBookService.getOrderBookAnalysis(id);
-        // Загружаем свежий объект с уже заполненными метриками
+        // Load fresh object with metrics
         const opp = await this.opportunityService.getById(id);
         if (opp) {
           this.gateway.emitNewOpportunity(opp);
         }
       }
 
-      // Step 4: Revalidate existing active opportunities (expire stale ones)
+      // Expire opportunities whose prices are no longer profitable
       const expiredIds = await this.opportunityService.revalidateActive();
 
       for (const id of expiredIds) {
@@ -64,9 +67,7 @@ export class RevalidationScheduler {
       }
 
       if (newIds.length > 0 || expiredIds.length > 0) {
-        this.logger.log(
-          `Scan cycle: ${newIds.length} new opportunities, ${expiredIds.length} expired`,
-        );
+        this.logger.log(`Scan cycle: ${newIds.length} new, ${expiredIds.length} expired`);
       }
     } catch (error) {
       this.logger.error(`Scan cycle failed: ${error.message}`);
