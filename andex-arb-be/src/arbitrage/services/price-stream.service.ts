@@ -393,13 +393,11 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
     const sendNextChunk = () => {
       if (chunkIndex >= marketIds.length || ws.readyState !== Ws.WebSocket.OPEN) return;
       const chunk = marketIds.slice(chunkIndex, chunkIndex + PF_CHUNK_SIZE);
-      for (const marketId of chunk) {
-        ws.send(JSON.stringify({
-          method: 'subscribe',
-          requestId: ++this.pfRequestId,
-          params: [`predictOrderbook/${marketId}`],
-        }));
-      }
+      ws.send(JSON.stringify({
+        method: 'subscribe',
+        requestId: ++this.pfRequestId,
+        params: chunk.map((id) => `predictOrderbook/${id}`),
+      }));
       chunkIndex += PF_CHUNK_SIZE;
       if (chunkIndex < marketIds.length) {
         setTimeout(sendNextChunk, PF_CHUNK_DELAY_MS);

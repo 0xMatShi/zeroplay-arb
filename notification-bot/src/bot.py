@@ -39,7 +39,7 @@ TELEGRAM_BOT_TOKEN: str = os.environ["TELEGRAM_BOT_TOKEN"]
 BACKEND_WS_URL: str = os.getenv("BACKEND_WS_URL", "http://localhost:3000")
 ADMIN_API_KEY: str = os.environ["ADMIN_API_KEY"]
 
-EXCHANGES = ["Polymarket", "Probable", "Kalshi", "Predict.Fun"]
+EXCHANGES = ["Polymarket", "Probable", "Kalshi", "Predict.fun"]
 
 PROFIT_LABELS = {
     "min_usd": "Min Profit($)",
@@ -438,17 +438,19 @@ def _format_expired(data: dict) -> str:
 
 def _matches_preset(data: dict, preset: dict) -> bool:
     profit_pct = float(data.get("profitPercentage", 0))
-    total_cost = float(data.get("totalCost", 0))
+    gross_profit = data.get("totalGrossProfit")
     platforms = {leg.get("platformName", "") for leg in data.get("legs", [])}
 
     if preset["min_pct"] is not None and profit_pct < preset["min_pct"]:
         return False
     if preset["max_pct"] is not None and profit_pct > preset["max_pct"]:
         return False
-    if preset["min_usd"] is not None and total_cost < preset["min_usd"]:
-        return False
-    if preset["max_usd"] is not None and total_cost > preset["max_usd"]:
-        return False
+    if preset["min_usd"] is not None:
+        if gross_profit is None or float(gross_profit) < preset["min_usd"]:
+            return False
+    if preset["max_usd"] is not None:
+        if gross_profit is None or float(gross_profit) > preset["max_usd"]:
+            return False
     if platforms & set(preset["disabled_exchanges"]):
         return False
     return True
