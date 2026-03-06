@@ -17,7 +17,6 @@ from src.db import (
     create_preset,
     get_preset_by_id,
     get_presets,
-    get_subscribed_chat_ids,
     get_subscribed_users_with_active_presets,
     has_subscription,
     init_db,
@@ -428,10 +427,6 @@ def _format_opportunity(data: dict, preset_name: str | None = None) -> str:
     )
 
 
-def _format_expired(data: dict) -> str:
-    return f"⚠️ Арбитражная возможность <code>{data.get('id', '')[:8]}…</code> истекла."
-
-
 # ---------------------------------------------------------------------------
 # Фильтрация по пресетам
 # ---------------------------------------------------------------------------
@@ -488,22 +483,6 @@ async def broadcast_opportunity(app: Application, data: dict) -> None:
             logger.warning("Не удалось отправить сообщение %s: %s", telegram_id, exc)
 
 
-async def broadcast_expired(app: Application, data: dict) -> None:
-    """Рассылает истечение возможности всем подписчикам без фильтрации."""
-    chat_ids = await get_subscribed_chat_ids()
-    text = _format_expired(data)
-    for chat_id in chat_ids:
-        try:
-            await app.bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
-        except Exception as exc:
-            logger.warning("Не удалось отправить сообщение %s: %s", chat_id, exc)
-
-
 # ---------------------------------------------------------------------------
 # Точка входа
 # ---------------------------------------------------------------------------
@@ -525,14 +504,10 @@ async def main() -> None:
     async def on_new(data: dict) -> None:
         await broadcast_opportunity(app, data)
 
-    async def on_expired(data: dict) -> None:
-        await broadcast_expired(app, data)
-
     ws_client = ArbitrageWSClient(
         url=BACKEND_WS_URL,
         api_key=ADMIN_API_KEY,
         on_new=on_new,
-        on_expired=on_expired,
     )
 
     async with app:
