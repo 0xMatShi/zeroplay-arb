@@ -22,8 +22,8 @@ import {
   StatsResponseDto,
 } from '../dto/opportunity.dto';
 import { MatchStatus } from '../interfaces/types';
-import { SubscriptionGuard } from '../../auth/guards/subscription.guard';
-import { AdminGuard } from '../../auth/guards/admin.guard';
+import { SubscriptionGuard } from '../../../auth/guards/subscription.guard';
+import { AdminGuard } from '../../../auth/guards/admin.guard';
 
 @ApiTags('arbitrage')
 @Controller('arbitrage')

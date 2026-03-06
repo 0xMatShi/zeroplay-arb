@@ -9,7 +9,7 @@ import {
   NormalizedOutcome,
   OutcomeType,
   PlatformInfo,
-} from '../../../interfaces/types';
+} from '../../../pm-pm-arb/interfaces/types';
 import {
   CachedEvent,
   DexsportDiscipline,

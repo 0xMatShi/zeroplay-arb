@@ -8,8 +8,8 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { ArbitrageOpportunity } from '../entities/arbitrage-opportunity.entity';
-import { UsersService } from '../../users/users.service';
-import { PaymentsService } from '../../subscriptions/payments.service';
+import { UsersService } from '../../../users/users.service';
+import { PaymentsService } from '../../../subscriptions/payments.service';
 
 /**
  * WebSocket gateway for real-time arbitrage opportunity notifications.

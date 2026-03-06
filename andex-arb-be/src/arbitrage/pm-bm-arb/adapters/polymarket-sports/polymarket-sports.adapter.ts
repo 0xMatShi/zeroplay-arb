@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 import * as Ws from 'ws';
-import { PolymarketSportsEvent } from '../../../../sports-arb/interfaces/sports-arb.types';
+import { PolymarketSportsEvent } from '../../interfaces/sports-arb.types';
 import { PolymarketSportsMarketRaw } from './polymarket-sports.types';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';

@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 
 // Adapters
-import { PolymarketSportsAdapter } from '../arbitrage/adapters/predictions_bm/polymarket-sports/polymarket-sports.adapter';
-import { DexsportAdapter } from '../arbitrage/adapters/predictions_bm/dexsport/dexsport.adapter';
+import { PolymarketSportsAdapter } from './adapters/polymarket-sports/polymarket-sports.adapter';
+import { DexsportAdapter } from './adapters/dexsport/dexsport.adapter';
 
 // Services
 import { SportsMatcher } from './services/sports-matcher.service';

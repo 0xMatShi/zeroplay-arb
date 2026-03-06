@@ -36,8 +36,8 @@ import { ArbitrageController } from './controllers/arbitrage.controller';
 import { ArbitrageGateway } from './gateways/arbitrage.gateway';
 
 // Auth & Subscriptions
-import { UsersModule } from '../users/users.module';
-import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { UsersModule } from '../../users/users.module';
+import { SubscriptionsModule } from '../../subscriptions/subscriptions.module';
 
 /**
  * Core arbitrage engine module.
