@@ -14,7 +14,7 @@ import { VerifiedMatch } from './entities/verified-match.entity';
 import { AdapterRegistry } from './adapters/adapter.registry';
 import { PolymarketAdapter } from './adapters/polymarket/polymarket.adapter';
 import { KalshiAdapter } from './adapters/kalshi/kalshi.adapter';
-// import { OpinionAdapter } from './adapters/opinion/opinion.adapter';
+import { OpinionAdapter } from './adapters/opinion/opinion.adapter';
 import { PredictFunAdapter } from './adapters/predict-fun/predict-fun.adapter';
 import { ProbableAdapter } from './adapters/probable/probable.adapter';
 
@@ -61,7 +61,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     // Source adapters — add new adapters here
     PolymarketAdapter,
     KalshiAdapter,
-    // OpinionAdapter,
+    OpinionAdapter,
     PredictFunAdapter,
     ProbableAdapter,
     // ManifoldAdapter,

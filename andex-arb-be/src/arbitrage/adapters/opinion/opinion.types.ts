@@ -1,7 +1,7 @@
 /**
- * Opinion API response types.
- * Based on real API: https://proxy.opinion.trade:8443/api/bsc/api/v2/topic
- * No API key required.
+ * Opinion OpenAPI types.
+ * Base URL: https://openapi.opinion.trade/openapi
+ * Auth: apikey header
  */
 
 // ==================== Generic Response Wrapper ====================
@@ -12,134 +12,97 @@ export interface OpinionApiResponse<T> {
   result: T;
 }
 
-// ==================== Topic List ====================
+// ==================== Market List ====================
 
-export interface OpinionTopicListResult {
-  list: OpinionTopic[];
+export interface OpinionMarketListResult {
+  list: OpinionMarket[];
   total: number;
 }
 
-// ==================== Topic (Parent Market) ====================
+// ==================== Market ====================
 
-export interface OpinionTopic {
-  // API returns both naming conventions depending on endpoint version
-  marketId?: number;
-  topicId?: number;         // actual field name in API response
-  marketTitle?: string;
-  title?: string;           // actual field name in API response
-
-  /** 1 = created, 2 = activated, etc. */
-  status: number;
-  statusEnum?: string;
-
-  /** 0 = binary, other = categorical */
-  marketType?: number;
-  topicType?: number;       // actual field name in API response
-
-  // Child markets (present for categorical)
+export interface OpinionMarket {
+  marketId: number;
+  marketTitle: string;
+  status: number; // 1=Created, 2=Activated, 3=Resolving, 4=Resolved, 5=Failed, 6=Deleted
+  statusEnum: string;
+  marketType: number; // 0=binary, 1=categorical
   childMarkets?: OpinionChildMarket[];
-  childList?: OpinionChildMarket[]; // actual field name in API response
-
-  // Labels
   yesLabel?: string;
   noLabel?: string;
-
-  // Resolution rules — used as description
   rules?: string;
-
-  // Token IDs — API returns yesPos/noPos
   yesTokenId?: string;
   noTokenId?: string;
-  yesPos?: string;          // actual field name in API response
-  noPos?: string;           // actual field name in API response
   conditionId?: string;
   resultTokenId?: string;
-
-  // Volume (string numbers)
   volume?: string;
   volume24h?: string;
   volume7d?: string;
-
-  // Chain
   quoteToken?: string;
   chainId?: string;
-
-  // Identifiers
   questionId?: string;
-
-  // Timestamps (Unix seconds)
   createdAt?: number;
-  createTime?: number;      // actual field name in API response
   cutoffAt?: number;
-  cutoffTime?: number;      // actual field name in API response
   resolvedAt?: number;
-  resolvedTime?: number;    // actual field name in API response
-
-  // Prices
-  yesBuyPrice?: string;
-  yesMarketPrice?: string;
-  noBuyPrice?: string;
-
-  // Misc
-  incentiveFactor?: unknown;
-  collection?: unknown;
-  labelName?: string[];
-  isShow?: number;
   slug?: string;
 }
 
-// ==================== Child Market (Outcome within Categorical) ====================
+// ==================== Child Market (Categorical outcome) ====================
 
 export interface OpinionChildMarket {
   marketId: number;
   marketTitle: string;
-
   status: number;
   statusEnum?: string;
-
   yesLabel?: string;
   noLabel?: string;
-
   rules?: string;
-
-  // Token IDs
   yesTokenId: string;
   noTokenId: string;
   conditionId?: string;
   resultTokenId?: string;
-
-  // Volume
   volume?: string;
   volume24h?: string;
   volume7d?: string;
-
-  // Chain
   quoteToken?: string;
   chainId?: string;
-
-  // Identifiers
   questionId?: string;
-
-  // Timestamps
   createdAt?: number;
   cutoffAt?: number;
   resolvedAt?: number;
-
-  // Prices (optional)
-  yesBuyPrice?: string;
-  yesMarketPrice?: string;
-  noBuyPrice?: string;
-  yesSellPrice?: string;
-  noSellPrice?: string;
 }
 
-// ==================== Order Book ====================
+// ==================== WebSocket Messages ====================
 
-export interface OpinionOrderBookResult {
-  asks: [string, string][]; // [price, quantity][]
-  bids: [string, string][]; // [price, quantity][]
-  last_price: string;
-  question_id: string;
-  symbol: string;
-  ts: number; // Unix ms timestamp
+export interface OpinionDepthDiffMessage {
+  marketId: number;
+  rootMarketId?: number;
+  tokenId: string;
+  outcomeSide: number; // 1=yes, 2=no
+  side: 'bids' | 'asks';
+  price: string;
+  size: string; // "0" means remove the level
+  msgType: 'market.depth.diff';
+}
+
+// ==================== HTTP Orderbook Response ====================
+
+export interface OpinionHttpOrderbookLevel {
+  price: string;
+  size: string;
+}
+
+export interface OpinionHttpOrderbookResult {
+  market: string;   // conditionId
+  tokenId: string;
+  timestamp: number;
+  bids: OpinionHttpOrderbookLevel[];
+  asks: OpinionHttpOrderbookLevel[];
+}
+
+// ==================== Orderbook Cache Entry ====================
+
+export interface OpinionOrderbookEntry {
+  bids: Map<string, number>; // price -> size
+  asks: Map<string, number>; // price -> size
 }

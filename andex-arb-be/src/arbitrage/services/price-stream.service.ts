@@ -7,6 +7,8 @@ import { Outcome } from '../entities/outcome.entity';
 import { MatchingService } from './matching.service';
 import { EventFetcherService } from './event-fetcher.service';
 import { EventMatch } from '../entities/event-match.entity';
+import { AdapterRegistry } from '../adapters/adapter.registry';
+import { OpinionAdapter } from '../adapters/opinion/opinion.adapter';
 
 const POLY_WS_URL = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
 const PROB_WS_URL = 'wss://ws.probable.markets/public/api/v1/ws?chainId=56';
@@ -73,6 +75,9 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
   private pfReconnTimer: NodeJS.Timeout | null = null;
   private pfRequestId = 0;
 
+  // ── Opinion: marketId set (WS managed by OpinionAdapter) ──
+  private readonly opinionMarketIds = new Set<number>();
+
   // ── Kalshi: HTTP polling cache ──
   /** All scannable matches that include at least one Kalshi event */
   private kalshiMatches: EventMatch[] = [];
@@ -91,6 +96,7 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
     private readonly matchingService: MatchingService,
     private readonly eventFetcherService: EventFetcherService,
     private readonly configService: ConfigService,
+    private readonly adapterRegistry: AdapterRegistry,
   ) {
     this.pfApiKey = configService.get<string>('PREDICT_FUN_API_KEY');
   }
@@ -119,12 +125,17 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
     const newPolyTokens: string[] = [];
     const newProbTokens: string[] = [];
     const newPfMarketIds: string[] = [];
+    const newOpinionMarketIds: number[] = [];
 
     for (const match of matches) {
-      this.extractTokens(match, newPolyTokens, newProbTokens, newPfMarketIds);
+      this.extractTokens(match, newPolyTokens, newProbTokens, newPfMarketIds, newOpinionMarketIds);
     }
 
-    const hasNew = newPolyTokens.length > 0 || newProbTokens.length > 0 || newPfMarketIds.length > 0;
+    const hasNew =
+      newPolyTokens.length > 0 ||
+      newProbTokens.length > 0 ||
+      newPfMarketIds.length > 0 ||
+      newOpinionMarketIds.length > 0;
 
     if (hasNew) {
       // Initialize prices for new matches via HTTP before WS subscription
@@ -133,7 +144,13 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
           (e.outcomes || []).some((o) => {
             const tid: string = o.metadata?.tokenId || o.externalId;
             const mid = String(o.metadata?.marketId ?? '');
-            return newPolyTokens.includes(tid) || newProbTokens.includes(tid) || newPfMarketIds.includes(mid);
+            const opinionMid: number = o.metadata?.topicId;
+            return (
+              newPolyTokens.includes(tid) ||
+              newProbTokens.includes(tid) ||
+              newPfMarketIds.includes(mid) ||
+              newOpinionMarketIds.includes(opinionMid)
+            );
           }),
         ),
       );
@@ -155,6 +172,11 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`New Predict.fun markets: ${newPfMarketIds.length}`);
       this.connectPredictFun();
     }
+    if (newOpinionMarketIds.length > 0) {
+      this.logger.log(`New Opinion markets: ${newOpinionMarketIds.length}`);
+      const adapter = this.adapterRegistry.getAdapter('opinion') as OpinionAdapter | undefined;
+      adapter?.addSubscriptions(newOpinionMarketIds);
+    }
   }
 
   // ─────────────────────── Init ───────────────────────
@@ -173,7 +195,8 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(
         `Price stream: ${this.polyTokens.size} Polymarket tokens, ` +
         `${this.probTokens.size} Probable tokens, ` +
-        `${this.pfMarketIds.size} Predict.fun markets`,
+        `${this.pfMarketIds.size} Predict.fun markets, ` +
+        `${this.opinionMarketIds.size} Opinion markets`,
       );
 
       // Initialize prices via HTTP before WS.
@@ -188,6 +211,7 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
       this.connectPolymarket();
       this.connectProbable();
       this.connectPredictFun();
+      this.connectOpinion();
     } catch (error) {
       this.logger.error(`PriceStreamService init failed: ${error.message}`);
     }
@@ -198,10 +222,11 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
     newPolyTokens: string[] | null,
     newProbTokens: string[] | null,
     newPfMarketIds: string[] | null,
+    newOpinionMarketIds: number[] | null = null,
   ): void {
     for (const event of match.events || []) {
       const slug = event.platform?.slug;
-      if (!slug || !['polymarket', 'probable', 'predict-fun'].includes(slug)) continue;
+      if (!slug || !['polymarket', 'probable', 'predict-fun', 'opinion'].includes(slug)) continue;
 
       for (const outcome of event.outcomes || []) {
         if (slug === 'predict-fun') {
@@ -230,6 +255,12 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
           if (!this.polyTokens.has(tokenId)) {
             this.polyTokens.add(tokenId);
             newPolyTokens?.push(tokenId);
+          }
+        } else if (slug === 'opinion') {
+          const marketId: number = outcome.metadata?.topicId;
+          if (marketId && !this.opinionMarketIds.has(marketId)) {
+            this.opinionMarketIds.add(marketId);
+            newOpinionMarketIds?.push(marketId);
           }
         } else {
           if (!this.probTokens.has(tokenId)) {
@@ -449,6 +480,25 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
         const bestBid = ob.bids?.[0]?.[0];
         if (bestBid != null) this.applyPriceUpdateToOutcome(outcomes.no, 1 - bestBid);
       }
+    }
+  }
+
+  // ─────────────────────── Opinion ───────────────────────
+
+  /**
+   * Registers a price-update callback on OpinionAdapter so that every WS depth.diff
+   * that changes the best ask flows into the shared applyPriceUpdate path —
+   * same as Polymarket/Probable/Predict.fun.
+   */
+  private connectOpinion(): void {
+    const adapter = this.adapterRegistry.getAdapter('opinion') as OpinionAdapter | undefined;
+    if (!adapter) return;
+
+    adapter.setPriceUpdateCallback((tokenId, bestAsk) => this.applyPriceUpdate(tokenId, bestAsk));
+
+    if (this.opinionMarketIds.size > 0) {
+      this.logger.log(`Connecting Opinion WS (${this.opinionMarketIds.size} markets)`);
+      adapter.startWebSocket(Array.from(this.opinionMarketIds));
     }
   }
 
