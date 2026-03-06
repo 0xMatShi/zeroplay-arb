@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import WebSocket from 'ws';
+import * as Ws from 'ws';
 import { BaseAdapter } from '../base.adapter';
 import { AdapterRegistry } from '../adapter.registry';
 import {
@@ -45,7 +45,7 @@ export class OpinionAdapter extends BaseAdapter implements OnModuleInit, OnModul
   // marketIds subscribed via WebSocket (used for resubscription on reconnect)
   private readonly subscribedMarkets = new Set<number>();
 
-  private ws: WebSocket | null = null;
+  private ws: Ws.WebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
@@ -103,7 +103,7 @@ export class OpinionAdapter extends BaseAdapter implements OnModuleInit, OnModul
     const url = `${OPINION_WS_URL}?apikey=${this.apiKey}`;
     this.logger.log('Connecting to Opinion WebSocket...');
 
-    const ws = new WebSocket(url);
+    const ws = new Ws.WebSocket(url);
     this.ws = ws;
 
     ws.on('open', () => {
@@ -115,7 +115,7 @@ export class OpinionAdapter extends BaseAdapter implements OnModuleInit, OnModul
       }
     });
 
-    ws.on('message', (raw: WebSocket.RawData) => {
+    ws.on('message', (raw: Ws.RawData) => {
       try {
         const msg = JSON.parse(raw.toString());
         if (msg.msgType === 'market.depth.diff') {
@@ -126,11 +126,11 @@ export class OpinionAdapter extends BaseAdapter implements OnModuleInit, OnModul
       }
     });
 
-    ws.on('error', (err) => {
+    ws.on('error', (err: Error) => {
       this.logger.warn(`Opinion WebSocket error: ${err.message}`);
     });
 
-    ws.on('close', (code) => {
+    ws.on('close', (code: number) => {
       this.logger.warn(`Opinion WebSocket closed (code=${code}), reconnecting in ${WS_RECONNECT_DELAY_MS}ms`);
       this.clearTimers();
       if (!this.destroyed) {
@@ -141,7 +141,7 @@ export class OpinionAdapter extends BaseAdapter implements OnModuleInit, OnModul
 
   private startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
+      if (this.ws?.readyState === Ws.WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ action: 'HEARTBEAT' }));
       }
     }, HEARTBEAT_INTERVAL_MS);
@@ -159,7 +159,7 @@ export class OpinionAdapter extends BaseAdapter implements OnModuleInit, OnModul
   }
 
   private sendSubscribe(marketId: number): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (this.ws?.readyState === Ws.WebSocket.OPEN) {
       this.ws.send(
         JSON.stringify({ action: 'SUBSCRIBE', channel: 'market.depth.diff', marketId }),
       );
