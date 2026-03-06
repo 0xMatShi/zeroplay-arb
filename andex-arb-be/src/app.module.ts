@@ -5,7 +5,8 @@ import { VersionModule } from './version/version.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
-import { ArbitrageModule } from './arbitrage/arbitrage.module';
+// import { ArbitrageModule } from './arbitrage/arbitrage.module';
+import { SportsArbModule } from './sports-arb/sports-arb.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { DatabaseConfig } from './config/database.config';
 
@@ -31,8 +32,9 @@ import { DatabaseConfig } from './config/database.config';
     BlockchainModule,
     SubscriptionsModule,
 
-    // Core arbitrage engine
-    ArbitrageModule,
+    // Core arbitrage engine (PM vs PM) — temporarily disabled for sports arb testing
+    // ArbitrageModule,
+    SportsArbModule,
   ],
 })
 export class AppModule {}

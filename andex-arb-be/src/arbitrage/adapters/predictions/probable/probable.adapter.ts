@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
-import { BaseAdapter } from '../base.adapter';
-import { AdapterRegistry } from '../adapter.registry';
+import { BaseAdapter } from '../../base.adapter';
+import { AdapterRegistry } from '../../adapter.registry';
 import {
   NormalizedEvent,
   NormalizedOutcome,
@@ -11,7 +11,7 @@ import {
   ArbitrageLeg,
   OrderBook,
   OrderBookEntry,
-} from '../../interfaces/types';
+} from '../../../interfaces/types';
 import {
   ProbableEvent,
   ProbableMarket,

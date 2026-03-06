@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { BaseAdapter } from '../base.adapter';
-import { AdapterRegistry } from '../adapter.registry';
+import { BaseAdapter } from '../../base.adapter';
+import { AdapterRegistry } from '../../adapter.registry';
 import {
   NormalizedEvent,
   NormalizedOutcome,
@@ -11,7 +11,7 @@ import {
   ArbitrageLeg,
   OrderBook,
   OrderBookEntry,
-} from '../../interfaces/types';
+} from '../../../interfaces/types';
 import { PolymarketMarket, PolymarketOrderBookResponse } from './polymarket.types';
 
 const POLYMARKET_GAMMA_API = 'https://gamma-api.polymarket.com';

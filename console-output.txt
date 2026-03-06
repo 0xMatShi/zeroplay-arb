@@ -1,0 +1,250 @@
+(notification-bot) C:\Users\brova\Documents\Code\polymarket\andex-arb-main\andex-arb-be>npx ts-node scripts/test-dexsport-all.ts
+[auth] Токен получен (guest=true, currency=eur)
+
+[ws] Подключаемся...
+[ws] Подключено
+
+[config] 66 дисциплин → подписываемся на 132 (live+prematch)
+[discipline] 2.football → 10 турниров
+[discipline] 1.football → 10 турниров
+[discipline] 1.dota2 → 2 турниров
+[discipline] 2.csgo → 2 турниров
+[discipline] 1.csgo → 2 турниров
+[discipline] 2.efootball → 2 турниров
+[discipline] 1.efootball → 10 турниров
+[discipline] 2.lol → 2 турниров
+[discipline] 1.lol → 2 турниров
+[discipline] 2.tennis → 2 турниров
+[discipline] 1.tennis → 10 турниров
+[discipline] 2.basketball → 9 турниров
+[discipline] 1.basketball → 10 турниров
+[discipline] 2.ebasketball → 1 турниров
+[discipline] 1.ebasketball → 1 турниров
+[discipline] 2.hockey → 10 турниров
+[discipline] 1.hockey → 10 турниров
+[discipline] 2.ehockey → 1 турниров
+[discipline] 2.baseball → 2 турниров
+[discipline] 1.baseball → 1 турниров
+[discipline] 2.cricket → 5 турниров
+[discipline] 1.cricket → 10 турниров
+[discipline] 1.mma → 4 турниров
+[discipline] 1.boxing → 2 турниров
+[discipline] 1.horse-racing → 10 турниров
+[discipline] 1.greyhound-racing → 3 турниров
+[discipline] 1.harness-racing → 1 турниров
+[discipline] 1.snooker → 1 турниров
+[discipline] 2.valorant → 1 турниров
+[discipline] 1.valorant → 1 турниров
+[discipline] 1.king-of-glory → 2 турниров
+[discipline] 1.call-of-duty → 1 турниров
+[discipline] 2.rainbow6 → 1 турниров
+[discipline] 1.rainbow6 → 2 турниров
+[discipline] 2.rugby-union → 2 турниров
+[discipline] 1.rugby-union → 7 турниров
+[discipline] 1.rugby-league → 3 турниров
+[discipline] 2.volleyball → 6 турниров
+[discipline] 1.volleyball → 8 турниров
+[discipline] 2.handball → 4 турниров
+[discipline] 1.handball → 7 турниров
+[discipline] 1.futsal → 3 турниров
+[discipline] 2.tabletennis → 3 турниров
+[discipline] 1.aussie-rules → 1 турниров
+[discipline] 1.darts → 1 турниров
+[discipline] 2.beach-volleyball → 1 турниров
+[discipline] 1.formula1 → 1 турниров
+[discipline] 1.crossfire → 2 турниров
+[discipline] 2.fortnite → 1 турниров
+[discipline] 1.fortnite → 1 турниров
+[discipline] 1.golf → 7 турниров
+[tournament] 2.football.131 [football] → 1 events (total=1)
+[tournament] 2.football.890 [football] → 1 events (total=2)
+[tournament] 2.football.969 [football] → 1 events (total=3)
+[tournament] 2.football.1071 [football] → 1 events (total=4)
+[tournament] 2.football.1146 [football] → 3 events (total=7)
+[tournament] 2.football.1247 [football] → 3 events (total=10)
+[tournament] 2.football.1309 [football] → 1 events (total=11)
+[tournament] 2.football.2577 [football] → 2 events (total=13)
+[tournament] 2.football.18531 [football] → 1 events (total=14)
+[tournament] 2.football.73 [football] → 1 events (total=15)
+[tournament] 1.football.9124 [football] → 1 events (total=16)
+[tournament] 1.football.19302 [football] → 5 events (total=21)
+[tournament] 1.football.68d29bbb10f43fc6a5e9aa75 [football] → 1 events (total=22)
+[tournament] 1.football.68d2a05810f43fc6a5e9acd0 [football] → 1 events (total=23)
+[tournament] 1.football.68ee243fda016f65148f5b17 [football] → 1 events (total=24)
+[tournament] 1.football.68ee2415da016f65148f5461 [football] → 1 events (total=25)
+[tournament] 1.football.68ee2413da016f65148f53ce [football] → 1 events (total=26)
+[tournament] 1.football.29 [football] → 2 events (total=28)
+[tournament] 1.football.85 [football] → 5 events (total=33)
+[tournament] 1.football.91 [football] → 4 events (total=37)
+[tournament] 1.dota2.699e4a3084c131d47fc9be8b [dota2] → 1 events (total=38)
+[tournament] 1.dota2.25705 [dota2] → 5 events (total=43)
+[tournament] 2.csgo.25839 [csgo] → 2 events (total=45)
+[tournament] 2.csgo.15430 [csgo] → 2 events (total=47)
+[tournament] 1.csgo.27617 [csgo] → 5 events (total=52)
+[tournament] 1.csgo.15430 [csgo] → 1 events (total=53)
+[tournament] 2.efootball.15718 [efootball] → 2 events (total=55)
+[tournament] 2.efootball.22923 [efootball] → 2 events (total=57)
+[tournament] 1.efootball.19051 [efootball] → 5 events (total=62)
+[tournament] 1.efootball.19054 [efootball] → 5 events (total=67)
+[tournament] 1.efootball.19191 [efootball] → 5 events (total=72)
+[tournament] 1.efootball.22230 [efootball] → 5 events (total=77)
+[tournament] 1.efootball.22262 [efootball] → 5 events (total=82)
+[tournament] 1.efootball.25767 [efootball] → 5 events (total=87)
+[tournament] 1.efootball.15718 [efootball] → 4 events (total=91)
+[tournament] 1.efootball.21886 [efootball] → 5 events (total=96)
+[tournament] 1.efootball.22286 [efootball] → 4 events (total=100)
+[LIVE] [football] FC Csikszereda Miercurea Ciuc vs Fa FC Csikszereda Miercurea Ciuc 4.60  |  Draw 1.70  |  Farul Constanta 3.40
+[LIVE] [football] Viktoria Koln vs 1860 Munchen       Viktoria Koln 4.40  |  Draw 3.20  |  1860 Munchen 1.81
+[LIVE] [football] Al-Dahra vs Gulf United FC          Al-Dahra 1.68  |  Draw 3.50  |  Gulf United FC 4.80
+[LIVE] [football] Al-Smail vs Sur Club                Al-Smail 3.65  |  Draw 2.06  |  Sur Club 2.94
+[LIVE] [football] Sohar vs Al Seeb                    Sohar 15.50  |  Draw 6.80  |  Al Seeb 1.13
+[LIVE] [football] Al-Khaboora SC vs Ibri              Al-Khaboora SC 19.50  |  Draw 10.00  |  Ibri 1.05
+[LIVE] [football] HB Koge vs Esbjerg                  HB Koge 4.80  |  Draw 1.70  |  Esbjerg 3.30
+[LIVE] [football] Kolding IF vs Hobro                 Kolding IF 2.96  |  Draw 2.36  |  Hobro 3.05
+[LIVE] [football] Aalborg BK vs Aarhus Fremad         Aalborg BK 3.30  |  Draw 2.44  |  Aarhus Fremad 2.66
+[LIVE] [football] Kisvarda FC Senior vs Puskas FC     Kisvarda FC Senior 2.90  |  Draw 2.94  |  Puskas FC 2.52
+[LIVE] [football] Al Najaf vs Al Minaa Basra          Al Najaf 11.50  |  Draw 5.10  |  Al Minaa Basra 1.23
+[LIVE] [football] Naft Maysan vs Baghdad              Naft Maysan 2.72  |  Draw 2.36  |  Baghdad 3.20
+[LIVE] [football] Germany U23 (w) vs Belgium U23 (w)  Germany U23 (w) 1.03  |  Draw 10.00  |  Belgium U23 (w) 27.00
+[LIVE] [football] Chaves vs Academico Viseu           Chaves 3.10  |  Draw 2.20  |  Academico Viseu 3.10
+[LIVE] [football] Anguilla (w) vs Dominican Republic  Anguilla (w) 21.00  |  Draw 7.00  |  Dominican Republic (w) 1.11
+[LIVE] [football] Kazakhstan (w) vs Belarus (w)       Kazakhstan (w) 8.00  |  Draw 4.60  |  Belarus (w) 1.25
+[LIVE] [football] Bosnia and Herzegovina (w) vs Liech Bosnia and Herzegovina (w) 1.06  |  Draw 10.00  |  Liechtenstein (w) 51.00
+[LIVE] [football] Cyprus (w) vs Romania (w)           Cyprus (w) 11.00  |  Draw 5.90  |  Romania (w) 1.14
+[LIVE] [football] Finland (w) vs Latvia (w)           Finland (w) 1.18  |  Draw 4.75  |  Latvia (w) 19.00
+[LIVE] [football] England (w) vs Iceland (w)          England (w) 1.09  |  Draw 6.60  |  Iceland (w) 14.50
+[LIVE] [football] Epicenter vs Kolos Kovalivka        Epicenter 3.55  |  Draw 3.05  |  Kolos Kovalivka 1.90
+[LIVE] [football] Obolon vs Fc Kryvbas Kryvyi Rih     Obolon 2.96  |  Draw 3.00  |  Fc Kryvbas Kryvyi Rih 2.14
+[LIVE] [football] Aston Villa U21 vs Manchester City  Aston Villa U21 6.00  |  Draw 5.30  |  Manchester City U21 1.28
+[LIVE] [football] Birmingham City U21 vs Manchester U Birmingham City U21 4.80  |  Draw 4.60  |  Manchester United U21 1.40
+[LIVE] [football] Nottingham Forest U21 vs Southampto Nottingham Forest U21 2.34  |  Draw 3.40  |  Southampton U21 2.40
+[LIVE] [football] Ipswich Town U21 vs West Bromwich A Ipswich Town U21 1.55  |  Draw 4.10  |  West Bromwich Albion U21 3.95
+[LIVE] [football] Derby County U21 vs West Ham U21    Derby County U21 6.20  |  Draw 4.90  |  West Ham U21 1.29
+[LIVE] [football] FC Queens Park vs Airdrieonians     FC Queens Park 2.46  |  Draw 3.10  |  Airdrieonians 2.68
+[LIVE] [football] Arbroath vs Ross County             Arbroath 2.10  |  Draw 3.05  |  Ross County 3.40
+[LIVE] [football] Greenock Morton vs St. Johnstone    Greenock Morton 5.50  |  Draw 3.65  |  St. Johnstone 1.55
+[LIVE] [football] Ayr United vs FC Queens Park        Ayr United 1.63  |  Draw 3.50  |  FC Queens Park 4.50
+[LIVE] [dota2   ] OG vs Vici Gaming                   OG 1.40  |  Vici Gaming 2.75
+[LIVE] [dota2   ] PariVision vs Yellow Submarine      PariVision 1.04  |  Yellow Submarine 8.50
+[LIVE] [dota2   ] Aurora vs MOUZ                      Aurora 1.75  |  MOUZ 1.95
+[LIVE] [dota2   ] Xtreme Gaming vs Spirit             Xtreme Gaming 1.89  |  Spirit 1.83
+[LIVE] [dota2   ] Falcons vs Nemesis                  Falcons 1.24  |  Nemesis 3.76
+[LIVE] [csgo    ] MOUZ NXT vs Ex-RUBY                 MOUZ NXT 2.34  |  Ex-RUBY 1.52
+[LIVE] [csgo    ] ex-Zero Tenacity vs BASEMENT BOYS   ex-Zero Tenacity 1.95  |  BASEMENT BOYS 1.75
+[LIVE] [csgo    ] MOUZ vs Heroic                      MOUZ 1.17  |  Heroic 4.68
+[LIVE] [csgo    ] TheMongolz vs paiN                  TheMongolz 1.68  |  paiN 2.11
+[LIVE] [csgo    ] Falcons vs NRG                      Falcons 1.06  |  NRG 8.05
+[LIVE] [csgo    ] Natus Vincere vs B8                 Natus Vincere 1.30  |  B8 3.33
+[LIVE] [csgo    ] FaZe vs Aurora                      FaZe 1.95  |  Aurora 1.80
+[LIVE] [csgo    ] FURIA vs TyLoo                      FURIA 1.08  |  TyLoo 6.99
+[LIVE] [csgo    ] PariVision vs NiP                   PariVision 1.29  |  NiP 3.38
+[LIVE] [csgo    ] FURIA vs B8                         FURIA 1.20  |  B8 4.18
+[LIVE] [efootball] Chelsea (aveaaaaa) vs Manchester Ci Chelsea (aveaaaaa) 4.20  |  Draw 4.56  |  Manchester City (V1nx7) 1.43
+[LIVE] [efootball] Liverpool (noen) vs Arsenal (Asura) Liverpool (noen) 1.36  |  Draw 3.99  |  Arsenal (Asura) 6.26
+[LIVE] [efootball] Borussia Dortmund (Cevuu) vs Manche Borussia Dortmund (Cevuu) 3.31  |  Draw 1.85  |  Manchester City (Bolec) 3.18
+[LIVE] [efootball] Juventus (malverz) vs Atletico Madr Juventus (malverz) 12.81  |  Draw 5.89  |  Atletico Madrid (Terza) 1.10
+[LIVE] [efootball] Chelsea (Virtual_3) vs Arsenal (Vir Chelsea (Virtual_3) 2.11  |  Draw 3.78  |  Arsenal (Virtual_1) 2.44
+[LIVE] [efootball] Liverpool (Virtual_5) vs Manchester Liverpool (Virtual_5) 2.30  |  Draw 3.51  |  Manchester City (Virtual_4) 2.34
+[LIVE] [efootball] Tottenham Hotspur (Virtual_6) vs Ch Tottenham Hotspur (Virtual_6) 2.43  |  Draw 3.97  |  Chelsea (Virtual_3) 2.06
+[LIVE] [efootball] Manchester City (Virtual_4) vs Manc Manchester City (Virtual_4) 2.11  |  Draw 2.95  |  Manchester United (Virtual_2) 2.99
+[LIVE] [efootball] Liverpool (Virtual_5) vs Tottenham  Liverpool (Virtual_5) 1.88  |  Draw 3.96  |  Tottenham Hotspur (Virtual_6) 2.76
+[LIVE] [efootball] Athletic Bilbao (Virtual_1) vs Real Athletic Bilbao (Virtual_1) 2.43  |  Draw 5.07  |  Real Madrid (Virtual_2) 1.85
+[LIVE] [efootball] Barcelona (Virtual_3) vs Villarreal Barcelona (Virtual_3) 2.34  |  Draw 3.60  |  Villarreal (Virtual_4) 2.21
+[LIVE] [efootball] Atletico Madrid (Virtual_5) vs Athl Atletico Madrid (Virtual_5) 2.21  |  Draw 3.78  |  Athletic Bilbao (Virtual_1) 2.27
+[LIVE] [efootball] Real Madrid (Virtual_2) vs Atletico Real Madrid (Virtual_2) 2.39  |  Draw 4.06  |  Atletico Madrid (Virtual_5) 2.06
+[LIVE] [efootball] Villarreal (Virtual_4) vs Athletic  Villarreal (Virtual_4) 2.27  |  Draw 3.97  |  Athletic Bilbao (Virtual_1) 2.18
+[LIVE] [efootball] Bayern Munich (Virtual_10) vs Bayer Bayern Munich (Virtual_10) 1.50  |  Draw 4.02  |  Bayer 04 Leverkusen (Virtual_11) 4.21
+[LIVE] [efootball] Borussia Dortmund (Virtual_12) vs R Borussia Dortmund (Virtual_12) 3.58  |  Draw 3.77  |  RB Leipzig (Virtual_13) 1.64
+[LIVE] [efootball] RB Leipzig (Virtual_13) vs Bayern M RB Leipzig (Virtual_13) 3.22  |  Draw 3.68  |  Bayern Munich (Virtual_10) 1.75
+[LIVE] [efootball] Bayer 04 Leverkusen (Virtual_11) vs Bayer 04 Leverkusen (Virtual_11) 1.59  |  Draw 4.04  |  Borussia Dortmund (Virtual_12) 3.67      
+[LIVE] [efootball] Bayern Munich (Virtual_10) vs Borus Bayern Munich (Virtual_10) 1.27  |  Draw 5.48  |  Borussia Dortmund (Virtual_12) 5.48
+[LIVE] [efootball] Manchester City (Virtual_1) vs Real Manchester City (Virtual_1) 2.03  |  Draw 3.60  |  Real Madrid (Virtual_2) 2.62
+[LIVE] [efootball] Barcelona (Virtual_3) vs PSG (Virtu Barcelona (Virtual_3) 2.11  |  Draw 3.55  |  PSG (Virtual_4) 2.53
+[LIVE] [efootball] Juventus (Virtual_5) vs Manchester  Juventus (Virtual_5) 3.37  |  Draw 2.76  |  Manchester City (Virtual_1) 2.03
+[LIVE] [efootball] Liverpool (Virtual_6) vs Real Madri Liverpool (Virtual_6) 1.83  |  Draw 4.15  |  Real Madrid (Virtual_2) 2.76
+[LIVE] [efootball] Barcelona (Virtual_3) vs Juventus ( Barcelona (Virtual_3) 1.29  |  Draw 4.69  |  Juventus (Virtual_5) 5.95
+[LIVE] [efootball] Juventus (Virtual_1) vs Como (Virtu Juventus (Virtual_1) 4.97  |  Draw 2.48  |  Como (Virtual_2) 1.83
+[LIVE] [efootball] Fiorentina (Virtual_3) vs Juventus  Fiorentina (Virtual_3) 2.34  |  Draw 3.69  |  Juventus (Virtual_1) 2.21
+[LIVE] [efootball] Como (Virtual_2) vs Fiorentina (Vir Como (Virtual_2) 2.07  |  Draw 3.04  |  Fiorentina (Virtual_3) 2.95
+[LIVE] [efootball] Juventus (Virtual_1) vs Napoli (Vir Juventus (Virtual_1) 3.03  |  Draw 4.05  |  Napoli (Virtual_4) 1.74
+[LIVE] [efootball] Roma (Virtual_5) vs Juventus (Virtu Roma (Virtual_5) 2.08  |  Draw 3.55  |  Juventus (Virtual_1) 2.58
+[LIVE] [efootball] River Plate (Virtual_10) vs Club Es River Plate (Virtual_10) 2.34  |  Draw 3.78  |  Club Estudiantes de La Plata (Virtual_13) 2.18   
+[LIVE] [efootball] Botafogo (Virtual_12) vs Barcelona  Botafogo (Virtual_12) 2.48  |  Draw 3.23  |  Barcelona SC (Virtual_16) 2.27
+[LIVE] [efootball] Club Estudiantes de La Plata (Virtu Club Estudiantes de La Plata (Virtual_13) 2.58  |  Draw 3.32  |  Sao Paulo (Virtual_14) 2.16     
+[LIVE] [efootball] Barcelona SC (Virtual_16) vs Colo-C Barcelona SC (Virtual_16) 2.07  |  Draw 2.81  |  Colo-Colo (Virtual_11) 3.18
+[LIVE] [efootball] Penarol (Virtual_17) vs River Plate Penarol (Virtual_17) 1.53  |  Draw 4.40  |  River Plate (Virtual_10) 3.66
+[LIVE] [efootball] Arsenal (Asura) vs Manchester City  Arsenal (Asura) 2.38  |  Draw 6.07  |  Manchester City (V1nx7) 1.75
+[LIVE] [efootball] Liverpool (noen) vs Chelsea (aveaaa Liverpool (noen) 2.15  |  Draw 4.93  |  Chelsea (aveaaaaa) 2.06
+[LIVE] [efootball] Arsenal (Asura) vs Chelsea (aveaaaa Arsenal (Asura) 3.30  |  Draw 4.14  |  Chelsea (aveaaaaa) 1.66
+[LIVE] [efootball] Manchester City (V1nx7) vs Liverpoo Manchester City (V1nx7) 2.11  |  Draw 4.24  |  Liverpool (noen) 2.27
+[LIVE] [efootball] Real Madrid (Yerema) vs Bayern Muni Real Madrid (Yerema) 2.21  |  Draw 4.34  |  Bayern Munich (Gula14) 2.11
+[LIVE] [efootball] Liverpool (Xoma) vs PSG (Profik)    Liverpool (Xoma) 2.76  |  Draw 4.05  |  PSG (Profik) 1.85
+[LIVE] [efootball] PSG (Profik) vs Real Madrid (Yerema PSG (Profik) 1.95  |  Draw 4.33  |  Real Madrid (Yerema) 2.43
+[LIVE] [efootball] Bayern Munich (Gula14) vs Barcelona Bayern Munich (Gula14) 2.76  |  Draw 3.69  |  Barcelona (bucho55) 1.93
+[LIVE] [efootball] Barcelona (bucho55) vs PSG (Profik) Barcelona (bucho55) 2.00  |  Draw 4.24  |  PSG (Profik) 2.39
+[LIVE] [efootball] England (Nightxx) vs Spain (tikitak England (Nightxx) 5.22  |  Draw 5.49  |  Spain (tikitakamaster) 1.28
+[LIVE] [efootball] Argentina (kavviro) vs England (Nig Argentina (kavviro) 3.57  |  Draw 4.22  |  England (Nightxx) 1.57
+[LIVE] [efootball] England (Nightxx) vs France (deroll England (Nightxx) 4.26  |  Draw 5.53  |  France (deroll) 1.36
+[LIVE] [efootball] Spain (tikitakamaster) vs France (d Spain (tikitakamaster) 1.74  |  Draw 3.86  |  France (deroll) 3.12
+[LIVE] [efootball] Liverpool (noen) vs Arsenal (Asura) Liverpool (noen) 1.36  |  Draw 3.90  |  Arsenal (Asura) 6.44
+[LIVE] [football] HB Koge vs Esbjerg                  HB Koge 4.80  |  Draw 1.69  |  Esbjerg 3.35
+[LIVE] [football] Viktoria Koln vs 1860 Munchen       Viktoria Koln 4.70  |  Draw 3.20  |  1860 Munchen 1.78
+[LIVE] [football] Sohar vs Al Seeb                    Sohar 17.00  |  Draw 6.60  |  Al Seeb 1.12
+[discipline] 2.efootball → 1 турниров
+[LIVE] [efootball] Borussia Dortmund (Cevuu) vs Manche Borussia Dortmund (Cevuu) 3.50  |  Draw 1.75  |  Manchester City (Bolec) 3.36
+[LIVE] [efootball] Chelsea (aveaaaaa) vs Manchester Ci Chelsea (aveaaaaa) 4.29  |  Draw 4.56  |  Manchester City (V1nx7) 1.43
+[discipline] 2.football → 2 турниров
+[LIVE] [csgo    ] MOUZ vs Heroic                      MOUZ 1.13  |  Heroic 5.32
+
+══════════════════════════════════════════════════════════════════════
+СВОДКА: events=100 (live=99 prematch=1)  markets=93
+──────────────────────────────────────────────────────────────────────
+  efootball            47 events
+  football             37 events
+  csgo                 10 events
+  dota2                6 events
+
+Последние маркеты (Match Winner):
+  [LIVE] [efootball] Manchester City (V1nx7) vs Liverpool (noen) Manchester City (V1nx7) 2.11  |  Draw 4.24  |  Liverpool (noen) 2.27
+  [LIVE] [efootball] Real Madrid (Yerema) vs Bayern Munich (Gula14) Real Madrid (Yerema) 2.21  |  Draw 4.34  |  Bayern Munich (Gula14) 2.11
+  [LIVE] [efootball] Liverpool (Xoma) vs PSG (Profik)         Liverpool (Xoma) 2.76  |  Draw 4.05  |  PSG (Profik) 1.85
+  [LIVE] [efootball] PSG (Profik) vs Real Madrid (Yerema)     PSG (Profik) 1.95  |  Draw 4.33  |  Real Madrid (Yerema) 2.43
+  [LIVE] [efootball] Bayern Munich (Gula14) vs Barcelona (bucho55) Bayern Munich (Gula14) 2.76  |  Draw 3.69  |  Barcelona (bucho55) 1.93
+  [LIVE] [efootball] Barcelona (bucho55) vs PSG (Profik)      Barcelona (bucho55) 2.00  |  Draw 4.24  |  PSG (Profik) 2.39
+  [LIVE] [efootball] England (Nightxx) vs Spain (tikitakamaster) England (Nightxx) 5.22  |  Draw 5.49  |  Spain (tikitakamaster) 1.28
+  [LIVE] [efootball] Argentina (kavviro) vs England (Nightxx) Argentina (kavviro) 3.57  |  Draw 4.22  |  England (Nightxx) 1.57
+  [LIVE] [efootball] England (Nightxx) vs France (deroll)     England (Nightxx) 4.26  |  Draw 5.53  |  France (deroll) 1.36
+  [LIVE] [efootball] Spain (tikitakamaster) vs France (deroll) Spain (tikitakamaster) 1.74  |  Draw 3.86  |  France (deroll) 3.12
+══════════════════════════════════════════════════════════════════════
+
+[LIVE] [csgo    ] MOUZ vs Heroic                      MOUZ 1.16  |  Heroic 4.75
+[LIVE] [football] Kolding IF vs Hobro                 Kolding IF 2.98  |  Draw 2.38  |  Hobro 2.98
+[LIVE] [football] Kisvarda FC Senior vs Puskas FC     Kisvarda FC Senior 2.92  |  Draw 2.92  |  Puskas FC 2.52
+[LIVE] [football] FC Csikszereda Miercurea Ciuc vs Fa FC Csikszereda Miercurea Ciuc 4.80  |  Draw 1.69  |  Farul Constanta 3.35
+[LIVE] [efootball] Liverpool (noen) vs Arsenal (Asura) Liverpool (noen) 1.34  |  Draw 3.89  |  Arsenal (Asura) 6.61
+[LIVE] [efootball] Borussia Dortmund (Cevuu) vs Manche Borussia Dortmund (Cevuu) 3.67  |  Draw 1.66  |  Manchester City (Bolec) 3.58
+[discipline] 1.horse-racing → 10 турниров
+
+══════════════════════════════════════════════════════════════════════
+СВОДКА: events=100 (live=99 prematch=1)  markets=93
+──────────────────────────────────────────────────────────────────────
+  efootball            47 events
+  football             37 events
+  csgo                 10 events
+  dota2                6 events
+
+Последние маркеты (Match Winner):
+  [LIVE] [efootball] Manchester City (V1nx7) vs Liverpool (noen) Manchester City (V1nx7) 2.11  |  Draw 4.24  |  Liverpool (noen) 2.27
+  [LIVE] [efootball] Real Madrid (Yerema) vs Bayern Munich (Gula14) Real Madrid (Yerema) 2.21  |  Draw 4.34  |  Bayern Munich (Gula14) 2.11
+  [LIVE] [efootball] Liverpool (Xoma) vs PSG (Profik)         Liverpool (Xoma) 2.76  |  Draw 4.05  |  PSG (Profik) 1.85
+  [LIVE] [efootball] PSG (Profik) vs Real Madrid (Yerema)     PSG (Profik) 1.95  |  Draw 4.33  |  Real Madrid (Yerema) 2.43
+  [LIVE] [efootball] Bayern Munich (Gula14) vs Barcelona (bucho55) Bayern Munich (Gula14) 2.76  |  Draw 3.69  |  Barcelona (bucho55) 1.93
+  [LIVE] [efootball] Barcelona (bucho55) vs PSG (Profik)      Barcelona (bucho55) 2.00  |  Draw 4.24  |  PSG (Profik) 2.39
+  [LIVE] [efootball] England (Nightxx) vs Spain (tikitakamaster) England (Nightxx) 5.22  |  Draw 5.49  |  Spain (tikitakamaster) 1.28
+  [LIVE] [efootball] Argentina (kavviro) vs England (Nightxx) Argentina (kavviro) 3.57  |  Draw 4.22  |  England (Nightxx) 1.57
+  [LIVE] [efootball] England (Nightxx) vs France (deroll)     England (Nightxx) 4.26  |  Draw 5.53  |  France (deroll) 1.36
+  [LIVE] [efootball] Spain (tikitakamaster) vs France (deroll) Spain (tikitakamaster) 1.74  |  Draw 3.86  |  France (deroll) 3.12
+══════════════════════════════════════════════════════════════════════
+
+[LIVE] [csgo    ] MOUZ vs Heroic                      MOUZ 1.22  |  Heroic 3.97
+Завершить выполнение пакетного файла [Y(да)/N(нет)]?

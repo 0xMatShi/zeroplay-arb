@@ -12,11 +12,11 @@ import { VerifiedMatch } from './entities/verified-match.entity';
 
 // Adapters
 import { AdapterRegistry } from './adapters/adapter.registry';
-import { PolymarketAdapter } from './adapters/polymarket/polymarket.adapter';
-import { KalshiAdapter } from './adapters/kalshi/kalshi.adapter';
-import { OpinionAdapter } from './adapters/opinion/opinion.adapter';
-import { PredictFunAdapter } from './adapters/predict-fun/predict-fun.adapter';
-import { ProbableAdapter } from './adapters/probable/probable.adapter';
+import { PolymarketAdapter } from './adapters/predictions/polymarket/polymarket.adapter';
+import { KalshiAdapter } from './adapters/predictions/kalshi/kalshi.adapter';
+import { OpinionAdapter } from './adapters/predictions/opinion/opinion.adapter';
+import { PredictFunAdapter } from './adapters/predictions/predict-fun/predict-fun.adapter';
+import { ProbableAdapter } from './adapters/predictions/probable/probable.adapter';
 
 // Services
 import { EventFetcherService } from './services/event-fetcher.service';

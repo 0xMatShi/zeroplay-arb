@@ -8,7 +8,7 @@ import { MatchingService } from './matching.service';
 import { EventFetcherService } from './event-fetcher.service';
 import { EventMatch } from '../entities/event-match.entity';
 import { AdapterRegistry } from '../adapters/adapter.registry';
-import { OpinionAdapter } from '../adapters/opinion/opinion.adapter';
+import { OpinionAdapter } from '../adapters/predictions/opinion/opinion.adapter';
 
 const POLY_WS_URL = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
 const PROB_WS_URL = 'wss://ws.probable.markets/public/api/v1/ws?chainId=56';

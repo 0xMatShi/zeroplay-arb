@@ -1,8 +1,8 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as Ws from 'ws';
-import { BaseAdapter } from '../base.adapter';
-import { AdapterRegistry } from '../adapter.registry';
+import { BaseAdapter } from '../../base.adapter';
+import { AdapterRegistry } from '../../adapter.registry';
 import {
   NormalizedEvent,
   NormalizedOutcome,
@@ -12,7 +12,7 @@ import {
   ArbitrageLeg,
   OrderBook,
   OrderBookEntry,
-} from '../../interfaces/types';
+} from '../../../interfaces/types';
 import {
   OpinionApiResponse,
   OpinionMarket,
