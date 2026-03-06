@@ -38,7 +38,7 @@ TELEGRAM_BOT_TOKEN: str = os.environ["TELEGRAM_BOT_TOKEN"]
 BACKEND_WS_URL: str = os.getenv("BACKEND_WS_URL", "http://localhost:3000")
 ADMIN_API_KEY: str = os.environ["ADMIN_API_KEY"]
 
-EXCHANGES = ["Polymarket", "Probable", "Kalshi", "Predict.fun"]
+EXCHANGES = ["Polymarket", "Probable", "Kalshi", "Predict.fun", "Opinion"]
 
 PROFIT_LABELS = {
     "min_usd": "Min Profit($)",
