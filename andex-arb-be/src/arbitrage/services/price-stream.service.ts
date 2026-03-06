@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as Ws from 'ws';
+import { ConfigService } from '@nestjs/config';
 import { Outcome } from '../entities/outcome.entity';
 import { MatchingService } from './matching.service';
 import { EventFetcherService } from './event-fetcher.service';
@@ -82,12 +83,17 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
 
   private destroyed = false;
 
+  private readonly pfApiKey: string | undefined;
+
   constructor(
     @InjectRepository(Outcome)
     private readonly outcomeRepo: Repository<Outcome>,
     private readonly matchingService: MatchingService,
     private readonly eventFetcherService: EventFetcherService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.pfApiKey = configService.get<string>('PREDICT_FUN_API_KEY');
+  }
 
   onModuleInit(): void {
     setTimeout(() => this.loadAndConnect(), INIT_DELAY_MS);
@@ -240,8 +246,9 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
   private connectPolymarket(): void {
     if (this.polyTokens.size === 0) return;
 
+    if (this.polyReconnTimer) { clearTimeout(this.polyReconnTimer); this.polyReconnTimer = null; }
     if (this.polyPingTimer) { clearInterval(this.polyPingTimer); this.polyPingTimer = null; }
-    if (this.polyWs) { this.polyWs.terminate(); this.polyWs = null; }
+    if (this.polyWs) { this.polyWs.removeAllListeners(); this.polyWs.terminate(); this.polyWs = null; }
 
     const ws = new Ws.WebSocket(POLY_WS_URL);
     this.polyWs = ws;
@@ -307,7 +314,8 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
   private connectProbable(): void {
     if (this.probTokens.size === 0) return;
 
-    if (this.probWs) { this.probWs.terminate(); this.probWs = null; }
+    if (this.probReconnTimer) { clearTimeout(this.probReconnTimer); this.probReconnTimer = null; }
+    if (this.probWs) { this.probWs.removeAllListeners(); this.probWs.terminate(); this.probWs = null; }
 
     const ws = new Ws.WebSocket(PROB_WS_URL);
     this.probWs = ws;
@@ -364,9 +372,11 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
   private connectPredictFun(): void {
     if (this.pfMarketIds.size === 0) return;
 
-    if (this.pfWs) { this.pfWs.terminate(); this.pfWs = null; }
+    if (this.pfReconnTimer) { clearTimeout(this.pfReconnTimer); this.pfReconnTimer = null; }
+    if (this.pfWs) { this.pfWs.removeAllListeners(); this.pfWs.terminate(); this.pfWs = null; }
 
-    const ws = new Ws.WebSocket(PF_WS_URL);
+    const wsOptions = this.pfApiKey ? { headers: { 'x-api-key': this.pfApiKey } } : undefined;
+    const ws = new Ws.WebSocket(PF_WS_URL, wsOptions);
     this.pfWs = ws;
 
     ws.on('open', () => {
