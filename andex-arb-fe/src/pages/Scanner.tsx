@@ -1,7 +1,8 @@
-import { useState, useMemo, useCallback, Component } from 'react'
+import { useState, useMemo, useCallback, useRef, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { Toast } from '../components/Toast'
 import { useOpportunities, useArbitrageStats, usePlatforms, useOrderBook, useSubscriptionStatus } from '../api/hooks'
@@ -21,7 +22,7 @@ class CardErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
     super(props)
     this.state = { hasError: false }
   }
-  static getDerivedStateFromError(_: Error) {
+  static getDerivedStateFromError() {
     return { hasError: true }
   }
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -292,6 +293,9 @@ export function Scanner() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('profit')
   const [showPolymarketMin50c, setShowPolymarketMin50c] = useState(true)
+  const [soundEnabled, setSoundEnabled] = useState(true)
+  const [isPaused, setIsPaused] = useState(false)
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -318,7 +322,48 @@ export function Scanner() {
   }, [noApiKey, isSubLoading, subStatus, hasSubscription, error])
 
   // WebSocket
+  const playOpportunitySound = useCallback(() => {
+    if (!soundEnabled) return
+
+    try {
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = new AudioContext()
+      }
+      const audioCtx = audioContextRef.current
+      if (audioCtx.state === 'suspended') {
+        void audioCtx.resume()
+      }
+
+      const now = audioCtx.currentTime
+      const notes: Array<{ freq: number; offset: number; duration: number; type: OscillatorType }> = [
+        { freq: 880, offset: 0, duration: 0.08, type: 'triangle' },
+        { freq: 1320, offset: 0.1, duration: 0.11, type: 'sine' },
+      ]
+
+      notes.forEach((note) => {
+        const oscillator = audioCtx.createOscillator()
+        const gainNode = audioCtx.createGain()
+
+        oscillator.type = note.type
+        oscillator.frequency.setValueAtTime(note.freq, now + note.offset)
+
+        gainNode.gain.setValueAtTime(0.0001, now + note.offset)
+        gainNode.gain.exponentialRampToValueAtTime(0.08, now + note.offset + 0.01)
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + note.offset + note.duration)
+
+        oscillator.connect(gainNode)
+        gainNode.connect(audioCtx.destination)
+
+        oscillator.start(now + note.offset)
+        oscillator.stop(now + note.offset + note.duration)
+      })
+    } catch {
+      // Ignore if audio playback is blocked by browser policy.
+    }
+  }, [soundEnabled])
+
   const handleNewOpportunity = useCallback((data: NewOpportunityEvent) => {
+    playOpportunitySound()
     setToast({
       message: t('scanner.newOpportunity', {
         profit: data.profitPercentage.toFixed(2),
@@ -326,10 +371,11 @@ export function Scanner() {
       }),
       type: 'success',
     })
-  }, [t])
+  }, [t, playOpportunitySound])
 
   const { isConnected, authError: wsAuthError } = useArbitrageSocket({
     onNewOpportunity: handleNewOpportunity,
+    paused: isPaused,
   })
 
   const effectiveBlockedReason = blockedReason ?? wsAuthError
@@ -457,9 +503,9 @@ export function Scanner() {
           <div className="scanner-status">
             <span className="status-label">{t('scanner.systemLabel')}</span>
             <span className="status-value">
-              {isConnected ? t('scanner.scanning') : t('scanner.wsReconnecting')}
+              {isPaused ? t('scanner.paused') : isConnected ? t('scanner.scanning') : t('scanner.wsReconnecting')}
             </span>
-            <span className={`status-pulse ${isConnected ? '' : 'status-pulse--offline'}`}></span>
+            <span className={`status-pulse ${isPaused ? 'status-pulse--paused' : isConnected ? '' : 'status-pulse--offline'}`}></span>
           </div>
         </div>
         <div className="scanner-header-right">
@@ -610,6 +656,43 @@ export function Scanner() {
               <span className="switch-toggle-thumb" />
             </span>
           </button>
+        </div>
+
+        <div className="filter-group scanner-settings">
+          <label className="filter-label">{t('scanner.settings')}</label>
+          <div className="settings-toolbar">
+            <button
+              type="button"
+              className={`settings-icon-button ${soundEnabled ? 'active' : ''}`}
+              onClick={() => setSoundEnabled((prev) => !prev)}
+              aria-label={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+              title={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+              style={{ color: '#fff' }}
+            >
+              <span className="settings-icon-content" aria-hidden="true">
+                {soundEnabled
+                  ? <Volume2 size={16} color="#fff" style={{ stroke: '#fff' }} />
+                  : <VolumeX size={16} color="#fff" style={{ stroke: '#fff' }} />
+                }
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className={`settings-icon-button settings-icon-button--pause ${isPaused ? 'active' : ''}`}
+              onClick={() => setIsPaused((prev) => !prev)}
+              aria-label={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
+              title={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
+              style={{ color: '#fff' }}
+            >
+              <span className="settings-icon-content" aria-hidden="true">
+                {isPaused
+                  ? <Play size={16} color="#fff" style={{ stroke: '#fff' }} />
+                  : <Pause size={16} color="#fff" style={{ stroke: '#fff' }} />
+                }
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
