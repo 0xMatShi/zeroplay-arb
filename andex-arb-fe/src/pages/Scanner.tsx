@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, Component } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -288,7 +288,9 @@ export function Scanner() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
-  const [minProfit, setMinProfit] = useState(0)
+  const [minRoi, setMinRoi] = useState(0.5)
+  const [soundRoi, setSoundRoi] = useState(1)
+  const [waitTimeSec, setWaitTimeSec] = useState(0)
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({})
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('profit')
@@ -296,6 +298,7 @@ export function Scanner() {
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [isPaused, setIsPaused] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -363,7 +366,9 @@ export function Scanner() {
   }, [soundEnabled])
 
   const handleNewOpportunity = useCallback((data: NewOpportunityEvent) => {
-    playOpportunitySound()
+    if (data.profitPercentage >= soundRoi) {
+      playOpportunitySound()
+    }
     setToast({
       message: t('scanner.newOpportunity', {
         profit: data.profitPercentage.toFixed(2),
@@ -371,7 +376,14 @@ export function Scanner() {
       }),
       type: 'success',
     })
-  }, [t, playOpportunitySound])
+  }, [t, playOpportunitySound, soundRoi])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const { isConnected, authError: wsAuthError } = useArbitrageSocket({
     onNewOpportunity: handleNewOpportunity,
@@ -417,9 +429,18 @@ export function Scanner() {
         return false
       }
 
-      // Min profit filter
-      if (opp.profitPercentage < minProfit) {
+      // Min ROI filter
+      const effectiveRoi = opp.weightedAvgProfit ?? opp.profitPercentage
+      if (effectiveRoi < minRoi) {
         return false
+      }
+
+      // Wait time filter (age since first seen)
+      if (waitTimeSec > 0) {
+        const ageSeconds = Math.max(0, (nowMs - new Date(opp.foundAt).getTime()) / 1000)
+        if (ageSeconds < waitTimeSec) {
+          return false
+        }
       }
 
       // Type filter
@@ -469,7 +490,7 @@ export function Scanner() {
     })
 
     return result
-  }, [opportunitiesData, searchQuery, minProfit, typeFilter, effectivePlatforms, sortMode, showPolymarketMin50c])
+  }, [opportunitiesData, searchQuery, minRoi, waitTimeSec, nowMs, typeFilter, effectivePlatforms, sortMode, showPolymarketMin50c])
 
   const filteredAvgProfit = useMemo(() => {
     if (filteredOpportunities.length === 0) return null
@@ -582,21 +603,6 @@ export function Scanner() {
         </div>
 
         <div className="filter-group">
-          <label className="filter-label">{t('scanner.minProfit')}</label>
-          <div className="roi-buttons">
-            {[0, 1, 2, 5, 10].map((value) => (
-              <button
-                key={value}
-                className={`roi-button ${minProfit === value ? 'active' : ''}`}
-                onClick={() => setMinProfit(value)}
-              >
-                {value === 0 ? 'ALL' : `${value}%`}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="filter-group">
           <label className="filter-label">{t('scanner.type')}</label>
           <div className="roi-buttons">
             {(['all', 'binary', 'multi'] as TypeFilter[]).map((value) => (
@@ -660,38 +666,90 @@ export function Scanner() {
 
         <div className="filter-group scanner-settings">
           <label className="filter-label">{t('scanner.settings')}</label>
-          <div className="settings-toolbar">
-            <button
-              type="button"
-              className={`settings-icon-button ${soundEnabled ? 'active' : ''}`}
-              onClick={() => setSoundEnabled((prev) => !prev)}
-              aria-label={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
-              title={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
-              style={{ color: '#fff' }}
-            >
-              <span className="settings-icon-content" aria-hidden="true">
-                {soundEnabled
-                  ? <Volume2 size={16} color="#fff" style={{ stroke: '#fff' }} />
-                  : <VolumeX size={16} color="#fff" style={{ stroke: '#fff' }} />
-                }
-              </span>
-            </button>
+          <div className="settings-panel">
+            <div className="settings-toolbar">
+              <button
+                type="button"
+                className={`settings-icon-button ${soundEnabled ? 'active' : ''}`}
+                onClick={() => setSoundEnabled((prev) => !prev)}
+                aria-label={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+                title={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+                style={{ color: '#fff' }}
+              >
+                <span className="settings-icon-content" aria-hidden="true">
+                  {soundEnabled
+                    ? <Volume2 size={16} color="#fff" style={{ stroke: '#fff' }} />
+                    : <VolumeX size={16} color="#fff" style={{ stroke: '#fff' }} />
+                  }
+                </span>
+              </button>
 
-            <button
-              type="button"
-              className={`settings-icon-button settings-icon-button--pause ${isPaused ? 'active' : ''}`}
-              onClick={() => setIsPaused((prev) => !prev)}
-              aria-label={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
-              title={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
-              style={{ color: '#fff' }}
-            >
-              <span className="settings-icon-content" aria-hidden="true">
-                {isPaused
-                  ? <Play size={16} color="#fff" style={{ stroke: '#fff' }} />
-                  : <Pause size={16} color="#fff" style={{ stroke: '#fff' }} />
-                }
-              </span>
-            </button>
+              <button
+                type="button"
+                className={`settings-icon-button settings-icon-button--pause ${isPaused ? 'active' : ''}`}
+                onClick={() => setIsPaused((prev) => !prev)}
+                aria-label={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
+                title={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
+                style={{ color: '#fff' }}
+              >
+                <span className="settings-icon-content" aria-hidden="true">
+                  {isPaused
+                    ? <Play size={16} color="#fff" style={{ stroke: '#fff' }} />
+                    : <Pause size={16} color="#fff" style={{ stroke: '#fff' }} />
+                  }
+                </span>
+              </button>
+            </div>
+
+            <div className="settings-sliders">
+              <div className="settings-slider-row">
+                <div className="settings-slider-head">
+                  <span className="settings-slider-label">{t('scanner.settingsMinRoi')}</span>
+                  <span className="settings-slider-value">{minRoi.toFixed(1)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={20}
+                  step={0.1}
+                  value={minRoi}
+                  onChange={(e) => setMinRoi(Number(e.target.value))}
+                  className="settings-range"
+                />
+              </div>
+
+              <div className="settings-slider-row">
+                <div className="settings-slider-head">
+                  <span className="settings-slider-label">{t('scanner.settingsSoundRoi')}</span>
+                  <span className="settings-slider-value settings-slider-value--accent">{soundRoi.toFixed(1)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={20}
+                  step={0.1}
+                  value={soundRoi}
+                  onChange={(e) => setSoundRoi(Number(e.target.value))}
+                  className="settings-range"
+                />
+              </div>
+
+              <div className="settings-slider-row">
+                <div className="settings-slider-head">
+                  <span className="settings-slider-label">{t('scanner.settingsWaitTime')}</span>
+                  <span className="settings-slider-value">{waitTimeSec}s</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={120}
+                  step={1}
+                  value={waitTimeSec}
+                  onChange={(e) => setWaitTimeSec(Number(e.target.value))}
+                  className="settings-range"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
