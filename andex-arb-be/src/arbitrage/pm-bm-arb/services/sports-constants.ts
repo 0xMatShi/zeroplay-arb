@@ -1,0 +1,116 @@
+import { SportDef } from '../interfaces/sports-arb.types';
+
+// ── Sport mapping ────────────────────────────────────────────
+
+export const SPORTS: Record<string, SportDef> = {
+  basketball: { label: 'Basketball', dexSlugs: ['basketball'], pmTags: ['basketball'] },
+  tennis:     { label: 'Tennis',     dexSlugs: ['tennis'],     pmTags: ['tennis'] },
+  hockey:     { label: 'Hockey',     dexSlugs: ['hockey'],     pmTags: ['hockey'] },
+  csgo:       { label: 'CS2',        dexSlugs: ['csgo'],       pmTags: ['counter-strike-2'] },
+  boxing:     { label: 'Boxing',     dexSlugs: ['boxing'],     pmTags: ['ufc', 'zuffa'] },
+  dota2:      { label: 'Dota 2',     dexSlugs: ['dota2'],      pmTags: ['dota-2'] },
+  cod:        { label: 'Call of Duty', dexSlugs: ['call-of-duty'], pmTags: ['call-of-duty'] },
+  baseball:   { label: 'Baseball',   dexSlugs: ['baseball'],   pmTags: ['mlb', 'wbc', 'baseball'] },
+  lol:        { label: 'League of Legends', dexSlugs: ['lol'], pmTags: ['league-of-legends'] },
+  valorant:   { label: 'Valorant',   dexSlugs: ['valorant'],   pmTags: ['valorant'] },
+};
+
+// Reverse lookups
+export const PM_TAG_TO_SPORT = new Map<string, string>();
+export const DEX_SLUG_TO_SPORT = new Map<string, string>();
+
+for (const [key, def] of Object.entries(SPORTS)) {
+  for (const tag of def.pmTags) PM_TAG_TO_SPORT.set(tag, key);
+  for (const slug of def.dexSlugs) DEX_SLUG_TO_SPORT.set(slug, key);
+}
+
+// ── Market type mapping (PM sportsMarketType → DEX market name) ──
+
+export const MARKET_MAP: Record<string, Record<string, string[]>> = {
+  basketball: {
+    moneyline: ['Winner. With overtime'],
+    totals:    ['Total. With overtime'],
+    spreads:   ['Handicap. With overtime'],
+  },
+  tennis: {
+    moneyline:           ['Match Winner'],
+    tennis_set_handicap: ['Handicap Sets'],
+    tennis_set_totals:   ['Total Sets'],
+    tennis_match_totals: ['Total'],
+  },
+  hockey: {
+    moneyline: ['Winner. With overtime'],
+    spreads:   ['Handicap. With overtime'],
+    totals:    ['Total. With overtime'],
+  },
+  csgo: {
+    moneyline:       ['Match Winner'],
+    child_moneyline: [], // dynamic: "Winner. Map N (With overtime)"
+    map_handicap:    ['Maps Handicap'],
+    totals:          ['Total maps'],
+  },
+  boxing: {
+    moneyline: ['Fight Winner'],
+  },
+  dota2: {
+    moneyline:       ['Match Winner'],
+    child_moneyline: [], // dynamic: "Winner. Map N"
+    map_handicap:    ['Maps Handicap'],
+    totals:          ['Total maps'],
+  },
+  cod: {
+    moneyline:       ['Match Winner'],
+    child_moneyline: [], // dynamic: "Winner. Map N"
+    map_handicap:    ['Handicap'],
+    totals:          ['Total maps'],
+  },
+  baseball: {
+    moneyline: ['Match Winner'],
+  },
+  lol: {
+    moneyline:       ['Match Winner'],
+    child_moneyline: [], // dynamic: "Winner. Map N"
+    map_handicap:    ['Maps Handicap'],
+    totals:          ['Total maps'],
+  },
+  valorant: {
+    moneyline:       ['Match Winner'],
+    child_moneyline: [], // dynamic: "Winner. Map N (With overtime)"
+    totals:          ['Total maps'],
+  },
+};
+
+/** Types that carry a numeric value (totals, spreads, handicaps) and need value comparison. */
+export const VALUE_TYPES = new Set([
+  'totals', 'spreads',
+  'tennis_set_totals', 'tennis_match_totals', 'tennis_set_handicap',
+  'tennis_first_set_totals',
+  'first_half_totals', 'first_half_spreads',
+  'map_handicap',
+]);
+
+/** Types where sign can differ (spread from team A = -X, from team B = +X). Compare by abs value. */
+export const SPREAD_TYPES = new Set([
+  'spreads', 'first_half_spreads',
+  'tennis_set_handicap',
+  'map_handicap',
+]);
+
+// ── Text similarity constants ────────────────────────────────
+
+export const MATCH_THRESHOLD = 0.60;
+export const MIN_SHARED_WORDS = 2;
+
+export const TEAM_ALIASES: Record<string, string> = {
+  'bb': 'betboom',
+};
+
+export const STOP_WORDS = new Set([
+  'will', 'the', 'a', 'an', 'be', 'is', 'are', 'was', 'were', 'to', 'of', 'in', 'for',
+  'on', 'at', 'by', 'with', 'from', 'that', 'this', 'it', 'its', 'as', 'or', 'and',
+  'but', 'if', 'do', 'does', 'did', 'has', 'have', 'had', 'not', 'no', 'yes', 'what',
+  'who', 'when', 'where', 'how', 'which', 'than', 'then', 'before', 'after', 'above',
+  'below', 'between', 'during', 'about', 'into', 'through', 'over', 'under', 'again',
+  'further', 'once', 'market', 'close', 'price', 'end', 'day', 'month', 'year', 'vs',
+  'gaming', 'esports', 'team', 'club',
+]);

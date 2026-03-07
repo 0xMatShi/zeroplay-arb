@@ -18,10 +18,10 @@ import { SportsScheduler } from './scheduler/sports-scheduler';
  * No database — all state kept in memory.
  *
  * Pipeline:
- *   PolymarketSportsAdapter  — fetches sports moneyline markets, updates prices via CLOB WS
- *   DexsportAdapter          — maintains live WS feed from DexSport
- *   SportsMatcher (Cron 3)   — matches equivalent events by sport + team names
- *   SportsArbScanner (Cron 4)— detects arbitrage on matched pairs
+ *   PolymarketSportsAdapter  — fetches all sports events/markets, updates prices via CLOB WS
+ *   DexsportAdapter          — maintains live WS feed from DexSport (all markets per event)
+ *   SportsMatcher (Cron 3)   — matches events by text similarity + markets by type/value
+ *   SportsArbScanner (Cron 4)— detects arbitrage on each matched market pair
  */
 @Module({
   imports: [],

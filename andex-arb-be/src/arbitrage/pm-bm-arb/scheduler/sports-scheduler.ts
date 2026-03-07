@@ -1,38 +1,66 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { PolymarketSportsAdapter } from '../adapters/polymarket-sports/polymarket-sports.adapter';
+import { DexsportAdapter } from '../adapters/dexsport/dexsport.adapter';
 import { SportsMatcher } from '../services/sports-matcher.service';
 import { SportsArbScanner } from '../services/sports-arb-scanner.service';
 import { SportsMatch, SportsArbitrageOpportunity } from '../interfaces/sports-arb.types';
 
+/** Debounce delay for reactive scans (ms). Prevents scanning on every single WS tick. */
+const SCAN_DEBOUNCE_MS = 200;
+
 /**
- * Sports Arbitrage pipeline — two independent crons:
+ * Sports Arbitrage pipeline:
  *
- *  Cron 3 (every 5 min):  Re-match Polymarket sports events with DexSport events.
- *  Cron 4 (every 30s):    Scan current matches for arbitrage opportunities.
+ *  Cron (every 5 min): Re-match Polymarket sports events with DexSport events.
+ *  Reactive:           On any price change from either WS, debounced re-scan
+ *                      of all matched pairs for arbitrage.
+ *
+ * Both adapters maintain persistent WS connections. Prices are updated
+ * in-place on the cached event objects, so the scanner always reads fresh data.
  */
 @Injectable()
-export class SportsScheduler implements OnModuleInit {
+export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SportsScheduler.name);
 
-  /** Current matched pairs — updated by Cron 3, read by Cron 4 */
+  /** Current matched pairs — updated by cron, read by reactive scan */
   private currentMatches: SportsMatch[] = [];
 
   /** Latest detected opportunities */
   private currentOpportunities: SportsArbitrageOpportunity[] = [];
 
+  /** Debounce timer for reactive scans */
+  private scanDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Initial delay timer */
+  private initTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(
+    private readonly polyAdapter: PolymarketSportsAdapter,
+    private readonly dexAdapter: DexsportAdapter,
     private readonly matcher: SportsMatcher,
     private readonly scanner: SportsArbScanner,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    // Wait a bit for WS adapters to receive initial data, then run first cycle
-    setTimeout(() => this.runMatchCycle(), 15_000);
+  onModuleInit(): void {
+    // Register reactive price change handlers on both adapters
+    const handler = () => this.scheduleScan();
+    this.polyAdapter.onPriceUpdate = handler;
+    this.dexAdapter.onPriceUpdate = handler;
+
+    // Wait for WS adapters to receive initial data, then run first match cycle
+    this.initTimer = setTimeout(() => this.runMatchCycle(), 30_000);
   }
 
-  // ── Cron 3: Match ──────────────────────────────────────────────
+  onModuleDestroy(): void {
+    if (this.scanDebounceTimer) { clearTimeout(this.scanDebounceTimer); this.scanDebounceTimer = null; }
+    if (this.initTimer) { clearTimeout(this.initTimer); this.initTimer = null; }
+    this.polyAdapter.onPriceUpdate = null;
+    this.dexAdapter.onPriceUpdate = null;
+  }
 
-  /** Re-run event matching every 5 minutes */
+  // ── Cron: Re-match events every 5 minutes ─────────────────────
+
   @Cron('0 */5 * * * *')
   async handleMatchCron(): Promise<void> {
     await this.runMatchCycle();
@@ -40,25 +68,31 @@ export class SportsScheduler implements OnModuleInit {
 
   async runMatchCycle(): Promise<void> {
     try {
-      this.currentMatches = await this.matcher.findMatches();
+      this.currentMatches = this.matcher.findMatches();
       this.logger.log(`Sports match cycle: ${this.currentMatches.length} matched pairs`);
 
       // Immediately scan after fresh match
-      this.runScanCycle();
+      this.runScanNow();
     } catch (err: any) {
       this.logger.error(`Sports match cycle failed: ${err.message}`);
     }
   }
 
-  // ── Cron 4: Scan ───────────────────────────────────────────────
+  // ── Reactive scan (debounced, triggered by WS price changes) ──
 
-  /** Scan for arbitrage every 30 seconds */
-  @Cron(CronExpression.EVERY_30_SECONDS)
-  handleScanCron(): void {
-    this.runScanCycle();
+  /**
+   * Called by adapter price change callbacks.
+   * Debounces to avoid scanning on every WS tick.
+   */
+  private scheduleScan(): void {
+    if (this.scanDebounceTimer) return; // already scheduled
+    this.scanDebounceTimer = setTimeout(() => {
+      this.scanDebounceTimer = null;
+      this.runScanNow();
+    }, SCAN_DEBOUNCE_MS);
   }
 
-  runScanCycle(): void {
+  private runScanNow(): void {
     if (this.currentMatches.length === 0) return;
 
     try {

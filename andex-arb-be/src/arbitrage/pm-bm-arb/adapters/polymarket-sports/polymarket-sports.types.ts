@@ -1,56 +1,34 @@
 /**
- * Raw types for the Polymarket Gamma API sports markets endpoint.
- * GET https://gamma-api.polymarket.com/markets?sportsMarketType=moneyline
+ * Raw types for the Polymarket Gamma API sports events/markets.
  */
 
 export interface PolymarketSportsMarketRaw {
   conditionId: string;
-  slug: string;
+  slug?: string;
   question: string;
+  sportsMarketType?: string | null;
 
-  /** JSON string: '["MOUZ","Heroic"]' — for moneyline these are team names */
+  /** JSON string: '["Team A","Team B"]' */
   outcomes: string;
   /** JSON string: '["0.85","0.15"]' */
   outcomePrices: string;
-  /** JSON string: '["{tokenId1}","{tokenId2}"]' */
+  /** JSON string: '["tokenId1","tokenId2"]' */
   clobTokenIds: string;
 
   active: boolean;
   closed: boolean;
-
-  /** "moneyline" | "spread" | "total" — we only care about "moneyline" */
-  sportsMarketType?: string;
-
-  /** Sport series identifier, e.g. "CS2", "NFL", "NBA" */
-  series?: string;
-
-  /** Parent event info */
-  events?: PolymarketSportsEventParent[];
-
-  /** Tagging info for sport detection */
-  tags?: PolymarketTag[];
-
-  /** Whether the game is currently live */
   live?: boolean;
-
-  endDate?: string;
-  volume?: string;
-  liquidity?: string;
 }
 
-export interface PolymarketSportsEventParent {
+export interface PolymarketSportsEventRaw {
   id: string;
   slug: string;
-  title?: string;
+  title: string;
+  active?: boolean;
+  closed?: boolean;
   live?: boolean;
-  score?: string;
-  period?: string;
-  /** e.g. "ncaa-cbb", "nba", "nhl", "mlb", "ufc", "epl", "lpl" */
   seriesSlug?: string;
-}
-
-export interface PolymarketTag {
-  id: string;
-  slug: string;
-  label?: string;
+  startTime?: string;
+  tags?: Array<{ slug: string; label?: string }>;
+  markets?: PolymarketSportsMarketRaw[];
 }

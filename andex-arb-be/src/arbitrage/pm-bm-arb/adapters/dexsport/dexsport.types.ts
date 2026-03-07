@@ -2,17 +2,16 @@
 
 export interface DexsportOutcome {
   lid: string;
+  name?: string;
   price: number; // decimal odds (e.g. 1.85)
   status: number; // 3 = active
   isFrozen: boolean;
-  isBetBuilderSupported: boolean;
 }
 
 export interface DexsportMarket {
   lid: string;
+  name?: string;
   sortIndex: number;
-  intervalSortIndex?: number;
-  tabSortIndex?: Record<string, number>;
   outcomes: DexsportOutcome[];
 }
 
@@ -55,10 +54,17 @@ export interface DexsportProfileResponse {
 
 // ── Internal cache types ────────────────────────────────────────
 
+export interface CachedDexMarket {
+  marketId: string;
+  name: string;
+  outcomes: Array<{ name: string; price: number }>;
+}
+
 export interface CachedEvent {
   event: DexsportEvent;
-  /** First non-null main market, if received */
-  mainMarket?: DexsportMarket;
-  sportSlug: string; // e.g. "football", "csgo"
-  disciplineId: string; // e.g. "2.football"
+  sportSlug: string;
+  disciplineId: string;
+  tournamentName?: string;
+  /** All markets for this event (mainMarketIds + marketIds) */
+  markets: Map<string, CachedDexMarket>;
 }

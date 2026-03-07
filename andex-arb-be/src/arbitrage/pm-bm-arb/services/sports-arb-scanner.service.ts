@@ -4,42 +4,43 @@ import {
   SportsMatch,
   SportsArbitrageOpportunity,
   SportsArbLeg,
+  MatchedMarketPair,
 } from '../interfaces/sports-arb.types';
 
 /**
  * Scans matched Polymarket ↔ DexSport event pairs for arbitrage.
  *
- * Strategy (moneyline, 2-way or 3-way):
- *   For each outcome, pick the platform offering the LOWER probability
- *   (= higher decimal odds = better value).
- *   If sum of best probabilities < 1.0 → profitable arbitrage exists.
+ * For each matched market pair (moneyline, totals, spreads, etc.):
+ *   - Maps PM outcomes to DEX outcomes by name
+ *   - For each outcome, picks the platform offering the lower probability
+ *   - If sum of best probabilities < 1.0 → profitable arbitrage
  *
- * Note: DexSport has overround (~106-110%), so it will rarely be cheaper than
- * Polymarket (which sums to ~100%). Arb appears when Polymarket mis-prices one
- * outcome significantly above the DexSport line.
+ * PM prices are probabilities (0..1), DEX prices are decimal odds.
+ * Conversion: dexProbability = 1 / dexOdds
  */
 @Injectable()
 export class SportsArbScanner {
   private readonly logger = new Logger(SportsArbScanner.name);
 
-  /** Minimum profit % to report (avoid noise from rounding) */
   private readonly MIN_PROFIT_PCT = 0.1;
 
   scan(matches: SportsMatch[]): SportsArbitrageOpportunity[] {
     const opportunities: SportsArbitrageOpportunity[] = [];
 
     for (const match of matches) {
-      const opp = this.analyzeMatch(match);
-      if (opp) opportunities.push(opp);
+      for (const mp of match.matchedMarkets) {
+        const opp = this.analyzeMarketPair(match, mp);
+        if (opp) opportunities.push(opp);
+      }
     }
 
     if (opportunities.length > 0) {
       this.logger.log(
-        `SportsArbScanner: ${opportunities.length} opportunities found in ${matches.length} matches`,
+        `SportsArbScanner: ${opportunities.length} opportunities found`,
       );
       for (const opp of opportunities) {
         this.logger.log(
-          `  ARB ${opp.sport.toUpperCase()} "${opp.eventName}": ` +
+          `  ARB ${opp.sportKey.toUpperCase()} [${opp.marketType}] "${opp.eventName}": ` +
           `profit=${opp.profitPercent.toFixed(2)}% totalCost=${(opp.totalCost * 100).toFixed(1)}%`,
         );
       }
@@ -48,55 +49,56 @@ export class SportsArbScanner {
     return opportunities;
   }
 
-  private analyzeMatch(match: SportsMatch): SportsArbitrageOpportunity | null {
-    const { poly, dex } = match;
+  private analyzeMarketPair(
+    match: SportsMatch,
+    mp: MatchedMarketPair,
+  ): SportsArbitrageOpportunity | null {
+    const { pmMarket, dexMarket } = mp;
 
-    // Build unified outcome list: outcome name → { polyProb, dexProb }
-    // Polymarket outcomes are the actual team names (e.g. ["MOUZ", "Heroic"])
-    // DexSport outcomes are mapped to team names in SportsMatcher
+    // PM outcomes: names + probabilities
+    const pmOutcomes = pmMarket.outcomeNames.map((name, i) => ({
+      name,
+      probability: pmMarket.outcomePrices[i] ?? 0,
+    }));
 
+    // DEX outcomes: names + decimal odds → probability
+    const dexOutcomes = dexMarket.outcomes.map((o) => ({
+      name: o.name,
+      probability: o.price > 0 ? 1 / o.price : 0,
+      decimalOdds: o.price,
+    }));
+
+    if (pmOutcomes.length < 2 || dexOutcomes.length < 2) return null;
+
+    // Map PM outcomes to DEX outcomes by name
     const legs: SportsArbLeg[] = [];
     let totalCost = 0;
 
-    for (let i = 0; i < poly.outcomeNames.length; i++) {
-      const polyName = poly.outcomeNames[i];
-      const polyProb = poly.outcomePrices[i] ?? 0;
+    for (const pmOut of pmOutcomes) {
+      const dexOut = this.findMatchingOutcome(pmOut.name, dexOutcomes);
+      if (!dexOut) return null; // can't pair → skip entire market
 
-      // Find matching DexSport outcome by team name
-      const dexOutcome = dex.outcomes.find((o) => this.namesMatch(o.name, polyName));
+      const pmProb = pmOut.probability;
+      const dexProb = dexOut.probability;
 
-      if (!dexOutcome) {
-        // Can't pair this outcome — skip the whole match
-        return null;
-      }
-
-      const dexProb = dexOutcome.probability;
-
-      // Pick the cheaper platform (lower probability = better decimal odds)
-      let bestProb: number;
-      let bestLeg: SportsArbLeg;
-
-      if (polyProb <= dexProb) {
-        bestProb = polyProb;
-        bestLeg = {
+      // Pick the cheaper platform (lower probability = better odds)
+      if (pmProb <= dexProb) {
+        legs.push({
           platform: 'polymarket',
-          outcomeName: polyName,
-          probability: polyProb,
-          decimalOdds: polyProb > 0 ? 1 / polyProb : 0,
-          url: poly.url,
-        };
+          outcomeName: pmOut.name,
+          probability: pmProb,
+          decimalOdds: pmProb > 0 ? 1 / pmProb : 0,
+        });
+        totalCost += pmProb;
       } else {
-        bestProb = dexProb;
-        bestLeg = {
+        legs.push({
           platform: 'dexsport',
-          outcomeName: dexOutcome.name,
+          outcomeName: dexOut.name,
           probability: dexProb,
-          decimalOdds: dexOutcome.decimalOdds,
-        };
+          decimalOdds: dexOut.decimalOdds,
+        });
+        totalCost += dexProb;
       }
-
-      legs.push(bestLeg);
-      totalCost += bestProb;
     }
 
     if (legs.length < 2) return null;
@@ -108,15 +110,18 @@ export class SportsArbScanner {
     if (profitPercent < this.MIN_PROFIT_PCT) return null;
 
     const id = createHash('sha256')
-      .update(`arb:${match.id}:${Date.now()}`)
+      .update(`arb:${match.id}:${mp.pmType}:${Date.now()}`)
       .digest('hex')
       .slice(0, 16);
 
     return {
       id,
       matchId: match.id,
-      sport: match.sport,
-      eventName: dex.name || `${match.teamA} vs ${match.teamB}`,
+      sportKey: match.sportKey,
+      eventName: match.dexEvent.name || match.pmEvent.title,
+      marketType: mp.pmType,
+      pmQuestion: mp.pmMarket.question,
+      dexMarketName: mp.dexMarket.name,
       legs,
       totalCost,
       profitPercent,
@@ -124,10 +129,36 @@ export class SportsArbScanner {
     };
   }
 
-  private namesMatch(a: string, b: string): boolean {
+  /**
+   * Find a DEX outcome that matches a PM outcome by name.
+   * Uses normalized substring matching.
+   */
+  private findMatchingOutcome(
+    pmName: string,
+    dexOutcomes: Array<{ name: string; probability: number; decimalOdds: number }>,
+  ): { name: string; probability: number; decimalOdds: number } | null {
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const na = norm(a);
-    const nb = norm(b);
-    return na === nb || na.includes(nb) || nb.includes(na);
+    const pmNorm = norm(pmName);
+
+    // Exact normalized match
+    const exact = dexOutcomes.find((d) => norm(d.name) === pmNorm);
+    if (exact) return exact;
+
+    // Substring match (handles "MOUZ" in "MOUZ Gaming", "Over" in "Over 132.5")
+    const substr = dexOutcomes.find((d) => {
+      const dn = norm(d.name);
+      return dn.includes(pmNorm) || pmNorm.includes(dn);
+    });
+    if (substr) return substr;
+
+    // Positional fallback for 2-way markets (Yes/No ↔ Over/Under, Home/Away)
+    // PM "Yes" = first outcome, DEX first outcome
+    if (dexOutcomes.length === 2) {
+      const pmLower = pmName.toLowerCase();
+      if (pmLower === 'yes' || pmLower === 'over') return dexOutcomes[0];
+      if (pmLower === 'no' || pmLower === 'under') return dexOutcomes[1];
+    }
+
+    return null;
   }
 }

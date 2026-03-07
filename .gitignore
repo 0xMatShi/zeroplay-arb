@@ -28,3 +28,5 @@ notification-bot/src/__pycache__/
 # Temp / test files
 console-output.txt
 polymarket-sport-market-example.txt
+sports-map-pm-ds.txt
+types_formats.txt

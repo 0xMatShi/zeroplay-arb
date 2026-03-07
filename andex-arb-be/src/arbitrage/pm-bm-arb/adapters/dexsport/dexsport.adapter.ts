@@ -4,49 +4,37 @@ import axios from 'axios';
 import * as Ws from 'ws';
 import { randomUUID } from 'crypto';
 import {
-  EventStatus,
-  NormalizedEvent,
-  NormalizedOutcome,
-  OutcomeType,
-  PlatformInfo,
-} from '../../../pm-pm-arb/interfaces/types';
-import {
   CachedEvent,
   DexsportDiscipline,
   DexsportEvent,
   DexsportMarket,
-  DexsportOutcome,
   DexsportProfileResponse,
   DexsportTournament,
 } from './dexsport.types';
+import { DexSportsEvent } from '../../interfaces/sports-arb.types';
 
 // ── Constants ──────────────────────────────────────────────────
 
 const BASE_URL = 'https://prod.dexsport.work';
 const WS_URL = 'wss://prod.dexsport.work/ws';
-const BASE_SITE_URL = 'https://sportsbook.dexsport.io';
 const API_KEY = 'ta-dexsport';
 const LANG = 'en';
 
-/** Token lifetime is 10 min; reconnect 60s before expiry */
 const TOKEN_REFRESH_BUFFER_MS = 60_000;
-
 const WS_RECONNECT_DELAY_MS = 5_000;
 
-/** Outcome name labels indexed by position for common market types */
-const OUTCOME_LABELS_2WAY = ['Home', 'Away'];
-const OUTCOME_LABELS_3WAY = ['Home', 'Draw', 'Away'];
+/** Sports we track for arbitrage */
+const TARGET_SPORTS = [
+  'basketball', 'tennis', 'hockey', 'csgo', 'boxing',
+  'dota2', 'call-of-duty', 'baseball', 'lol', 'valorant',
+];
 
 // ── Adapter ────────────────────────────────────────────────────
 
 @Injectable()
 export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
-  readonly platformSlug = 'dexsport';
-  readonly platformName = 'DexSport';
-
   private readonly logger = new Logger(DexsportAdapter.name);
 
-  /** Optional user hash from env — enables authenticated mode (more data) */
   private readonly userHash: string | null;
 
   // ── Token state ──────────────────────────────────────────────
@@ -65,17 +53,21 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
   private readonly subscribedEvents = new Set<string>();
   private readonly subscribedMarkets = new Set<string>();
 
-  // ── Sport tracking through subscription chain ─────────────────
-  /** tournamentId → sportSlug (set when subscribing from discipline) */
+  // ── Sport/tournament tracking ────────────────────────────────
   private readonly tournamentToSport = new Map<string, string>();
-  /** eventId → sportSlug (set when subscribing from tournament) */
+  private readonly tournamentToName = new Map<string, string>();
   private readonly eventToSport = new Map<string, string>();
+  private readonly eventToTournament = new Map<string, string>();
+  private readonly marketToEvent = new Map<string, string>();
 
   // ── Data cache ───────────────────────────────────────────────
-  /** eventId → cached event + main market */
   private readonly eventCache = new Map<string, CachedEvent>();
-  /** marketId → owning eventId */
-  private readonly marketToEvent = new Map<string, string>();
+
+  /** Stable public event objects — updated in-place so match references stay fresh */
+  private readonly publicEvents = new Map<string, DexSportsEvent>();
+
+  /** Called when any market price changes (set by scheduler) */
+  onPriceUpdate: (() => void) | null = null;
 
   constructor(configService: ConfigService) {
     this.userHash = configService.get<string>('DEXSPORT_USER_HASH') || null;
@@ -92,36 +84,12 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     this.ws = null;
   }
 
-  getPlatformInfo(): PlatformInfo {
-    return {
-      slug: this.platformSlug,
-      name: this.platformName,
-      baseUrl: BASE_SITE_URL,
-      defaultPollIntervalMs: 120_000,
-    };
-  }
-
   /**
-   * Returns current snapshot of all cached events with their main market odds.
-   * The WS keeps the cache continuously updated.
+   * Returns stable event objects that are updated in-place when WS data arrives.
+   * Match objects that reference these will always see fresh prices.
    */
-  async fetchEvents(): Promise<NormalizedEvent[]> {
-    return this.fetchEventsSync();
-  }
-
-  /** Synchronous snapshot — used by SportsMatcher without async overhead. */
-  fetchEventsSync(): NormalizedEvent[] {
-    const results: NormalizedEvent[] = [];
-    for (const cached of this.eventCache.values()) {
-      const normalized = this.normalizeEvent(cached);
-      if (normalized) results.push(normalized);
-    }
-    this.logger.debug(`fetchEventsSync: ${results.length} events from cache`);
-    return results;
-  }
-
-  async healthCheck(): Promise<boolean> {
-    return this.ws?.readyState === Ws.WebSocket.OPEN;
+  getEvents(): DexSportsEvent[] {
+    return [...this.publicEvents.values()];
   }
 
   // ── Auth ─────────────────────────────────────────────────────
@@ -150,12 +118,9 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
 
     if (!data.token) throw new Error('DexSport: no token in profile response');
 
-    // Parse expiry from JWE header (base64url encoded)
     const tokenExpiresAt = this.parseTokenExpiry(data.token);
     this.token = data.token;
     this.tokenExpiresAt = tokenExpiresAt;
-
-    // Schedule reconnect before token expires
     this.scheduleTokenRefresh(tokenExpiresAt);
 
     this.logger.log(
@@ -172,15 +137,12 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
       if (header.exp && header.iat) {
         return Date.now() + (header.exp - header.iat) * 1000;
       }
-    } catch {
-      // fallback: assume 10 minutes
-    }
+    } catch { /* fallback */ }
     return Date.now() + 600_000;
   }
 
   private scheduleTokenRefresh(expiresAt: number): void {
     if (this.tokenRefreshTimer) clearTimeout(this.tokenRefreshTimer);
-
     const delay = Math.max(0, expiresAt - Date.now() - TOKEN_REFRESH_BUFFER_MS);
     this.tokenRefreshTimer = setTimeout(() => {
       if (!this.destroyed) {
@@ -207,11 +169,7 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
         .replace(/=+$/, '');
 
       const query = new URLSearchParams({
-        cid: API_KEY,
-        lang: LANG,
-        timestamp,
-        token,
-        format: 'long',
+        cid: API_KEY, lang: LANG, timestamp, token, format: 'long',
       });
 
       const ws = new Ws.WebSocket(`${WS_URL}?${query}`);
@@ -219,7 +177,6 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
 
       ws.on('open', () => {
         this.logger.log('DexSport WebSocket connected');
-        // Reset subscription state on fresh connection
         this.disciplinesJoined = false;
         this.subscribedTournaments.clear();
         this.subscribedEvents.clear();
@@ -229,7 +186,7 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
       ws.on('message', (raw: Ws.RawData) => {
         try {
           this.handleMessage(raw.toString());
-        } catch (err) {
+        } catch (err: any) {
           this.logger.warn(`DexSport WS parse error: ${err.message}`);
         }
       });
@@ -239,14 +196,13 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
       });
 
       ws.on('close', (code: number) => {
-        // Deliberate reconnect already replaced this.ws — ignore this close event
         if (this.ws !== ws) return;
         this.logger.warn(`DexSport WebSocket closed (code=${code}), reconnecting in ${WS_RECONNECT_DELAY_MS}ms`);
         if (!this.destroyed) {
           this.reconnectTimer = setTimeout(() => this.reconnect(), WS_RECONNECT_DELAY_MS);
         }
       });
-    } catch (err) {
+    } catch (err: any) {
       this.logger.error(`DexSport connect failed: ${err.message}, retrying in ${WS_RECONNECT_DELAY_MS}ms`);
       if (!this.destroyed) {
         this.reconnectTimer = setTimeout(() => this.connect(), WS_RECONNECT_DELAY_MS);
@@ -257,7 +213,7 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
   private reconnect(): void {
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     const old = this.ws;
-    this.ws = null;   // replace before terminate so close handler sees the change
+    this.ws = null;
     old?.terminate();
     this.connect();
   }
@@ -289,10 +245,6 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
       const [entityName, entityId, , entityData] = item as [string, string, number, any];
 
       switch (entityName) {
-        case 'count':
-          // count arrives as ["count","count",version,{sports}] — id is "count"
-          this.handleCount(entityData);
-          break;
         case 'discipline':
           this.handleDiscipline(entityId, entityData as DexsportDiscipline);
           break;
@@ -313,40 +265,25 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     if (this.disciplinesJoined) return;
     this.disciplinesJoined = true;
 
-    // Subscribe to count (for live event counts) and all disciplines from config
-    this.send(['join', 'count', [
-      'football', 'csgo', 'dota2', 'efootball', 'lol', 'tennis', 'basketball',
-      'hockey', 'volleyball', 'handball', 'baseball', 'cricket', 'ebasketball', 'ehockey',
-    ]]);
-
     const disciplines = payload?.disciplines ?? [];
-    const disciplineIds = disciplines.flatMap((d) => [`2.${d.id}`, `1.${d.id}`]);
+    const ids = disciplines
+      .filter((d) => TARGET_SPORTS.includes(d.id))
+      .flatMap((d) => [`2.${d.id}`, `1.${d.id}`]);
 
-    if (disciplineIds.length > 0) {
-      this.send(['join', 'discipline', disciplineIds]);
-      this.logger.log(`DexSport: subscribing to ${disciplineIds.length} disciplines`);
-    }
-  }
-
-  private handleCount(data: Record<string, { live?: number; prematch?: number }>): void {
-    // count data used for monitoring only — subscription triggered by config
-    const liveCounts = Object.entries(data)
-      .filter(([, v]) => (v?.live ?? 0) > 0)
-      .map(([sport, v]) => `${sport}:${v.live}`)
-      .join(', ');
-
-    if (liveCounts) {
-      this.logger.debug(`DexSport live counts: ${liveCounts}`);
+    if (ids.length > 0) {
+      this.send(['join', 'discipline', ids]);
+      this.logger.log(`DexSport: subscribing to ${ids.length / 2} disciplines`);
     }
   }
 
   private handleDiscipline(id: string, data: DexsportDiscipline): void {
+    const sportSlug = data?.id ?? id.split('.').slice(1).join('.');
+    if (!TARGET_SPORTS.includes(sportSlug)) return;
+
     const tournamentIds = data?.tournamentIds ?? [];
     const newIds = tournamentIds.filter((tid) => !this.subscribedTournaments.has(tid));
     if (newIds.length === 0) return;
 
-    // Track sport slug for each tournament (from discipline id or data)
-    const sportSlug = data?.id ?? id.split('.').slice(1).join('.');
     newIds.forEach((tid) => {
       this.subscribedTournaments.add(tid);
       this.tournamentToSport.set(tid, sportSlug);
@@ -355,50 +292,82 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
   }
 
   private handleTournament(id: string, data: DexsportTournament): void {
+    const sportSlug = this.tournamentToSport.get(id);
+    if (!sportSlug) return;
+
+    if (data?.name) this.tournamentToName.set(id, data.name);
+
     const eventIds = data?.eventIds ?? [];
     const newIds = eventIds.filter(
       (eid) => eid && !eid.startsWith('outright') && !this.subscribedEvents.has(eid),
     );
     if (newIds.length === 0) return;
 
-    const sportSlug = this.tournamentToSport.get(id) ?? 'sport';
     newIds.forEach((eid) => {
       this.subscribedEvents.add(eid);
       this.eventToSport.set(eid, sportSlug);
+      this.eventToTournament.set(eid, id);
     });
-    for (const eventId of newIds) {
-      this.send(['join', 'event', eventId]);
-    }
+    for (const eid of newIds) this.send(['join', 'event', eid]);
   }
 
   private handleEvent(id: string, data: DexsportEvent): void {
     if (!data) return;
 
-    const sportSlug = this.eventToSport.get(id) ?? 'sport';
+    const sportSlug = this.eventToSport.get(id);
+    if (!sportSlug) return;
 
-    // Update or create cache entry
+    // Update or create internal cache entry
     const existing = this.eventCache.get(id);
     if (existing) {
       existing.event = { ...existing.event, ...data };
     } else {
+      const tournamentId = this.eventToTournament.get(id);
       this.eventCache.set(id, {
         event: data,
         sportSlug,
         disciplineId: id.startsWith('2.') ? `2.${sportSlug}` : `1.${sportSlug}`,
+        tournamentName: tournamentId ? this.tournamentToName.get(tournamentId) : undefined,
+        markets: new Map(),
       });
     }
 
-    // Subscribe to main market
-    const mainMarketId = this.pickMainMarketId(data);
-    if (mainMarketId && !this.subscribedMarkets.has(mainMarketId)) {
-      this.subscribedMarkets.add(mainMarketId);
-      this.marketToEvent.set(mainMarketId, id);
-      this.send(['join', 'market', [mainMarketId]]);
+    // Create or update stable public event object
+    if (data.name && !this.publicEvents.has(id)) {
+      const tournamentId = this.eventToTournament.get(id);
+      this.publicEvents.set(id, {
+        eventId: id,
+        name: data.name,
+        sportKey: sportSlug,
+        isLive: id.startsWith('2.'),
+        startTime: data.startTime,
+        tournamentName: tournamentId ? this.tournamentToName.get(tournamentId) : undefined,
+        markets: [],
+        updatedAt: Date.now(),
+      });
+    } else if (data.name) {
+      const pub = this.publicEvents.get(id)!;
+      pub.name = data.name;
+      if (data.startTime) pub.startTime = data.startTime;
+    }
+
+    // Subscribe to ALL markets for this event (main + additional)
+    const allMarketIds: string[] = [
+      ...(data.mainMarketIds ?? []).filter(Boolean) as string[],
+      ...(data.marketIds ?? []),
+    ];
+    const newMarketIds = allMarketIds.filter((m) => m && !this.subscribedMarkets.has(m));
+    if (newMarketIds.length > 0) {
+      newMarketIds.forEach((m) => {
+        this.subscribedMarkets.add(m);
+        this.marketToEvent.set(m, id);
+      });
+      this.send(['join', 'market', newMarketIds]);
     }
   }
 
   private handleMarket(marketId: string, data: DexsportMarket): void {
-    if (!data?.outcomes) return;
+    if (!data) return;
 
     const eventId = this.marketToEvent.get(marketId);
     if (!eventId) return;
@@ -406,72 +375,47 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     const cached = this.eventCache.get(eventId);
     if (!cached) return;
 
-    cached.mainMarket = data;
-  }
-
-  // ── Normalization ─────────────────────────────────────────────
-
-  private normalizeEvent(cached: CachedEvent): NormalizedEvent | null {
-    const { event, mainMarket, sportSlug } = cached;
-
-    if (!event.name) return null;
-    if (!mainMarket?.outcomes?.length) return null;
-
-    const activeOutcomes = mainMarket.outcomes.filter((o) => !o.isFrozen);
-    if (activeOutcomes.length < 2) return null;
-
-    const outcomes = this.normalizeOutcomes(activeOutcomes, event.lid);
-    if (outcomes.length === 0) return null;
-
-    const isLive = event.lid.startsWith('2.');
-    const eventNumericId = event.lid.replace(/^[12]\./, '');
-
-    return {
-      externalId: event.lid,
-      title: event.name,
-      category: sportSlug,
-      endDate: event.startTime ? new Date(event.startTime * 1000) : undefined,
-      status: EventStatus.ACTIVE,
-      outcomeType: outcomes.length > 2 ? OutcomeType.MULTI : OutcomeType.BINARY,
-      outcomes,
-      url: `${BASE_SITE_URL}/sport/${sportSlug}/event/${eventNumericId}`,
-      metadata: {
-        isLive,
-        sportSlug,
-        mainMarketId: mainMarket.lid,
-        tier: event.tier,
-        hasScoreboard: event.hasScoreboard,
-        startTime: event.startTime,
-      },
-    };
-  }
-
-  private normalizeOutcomes(outcomes: DexsportOutcome[], eventId: string): NormalizedOutcome[] {
-    const labels =
-      outcomes.length === 3 ? OUTCOME_LABELS_3WAY :
-      outcomes.length === 2 ? OUTCOME_LABELS_2WAY :
-      outcomes.map((_, i) => `Outcome ${i + 1}`);
-
-    return outcomes.map((o, i) => ({
-      externalId: `${eventId}.${o.lid}`,
-      name: labels[i] ?? `Outcome ${i + 1}`,
-      // Convert decimal odds → implied probability (0..1)
-      price: o.price > 0 ? Math.min(1, 1 / o.price) : 0,
-      metadata: {
-        decimalOdds: o.price,
-        outcomeId: o.lid,
-      },
+    // Build outcomes with names
+    const outcomes: Array<{ name: string; price: number }> = (data.outcomes ?? []).map((o) => ({
+      name: o.name ?? '',
+      price: o.price ?? 0,
     }));
+
+    // Update internal cache
+    const existingMarket = cached.markets.get(marketId);
+    if (existingMarket) {
+      if (data.name) existingMarket.name = data.name;
+      if (outcomes.length > 0) existingMarket.outcomes = outcomes;
+    } else {
+      cached.markets.set(marketId, {
+        marketId,
+        name: data.name ?? '',
+        outcomes,
+      });
+    }
+
+    // Update stable public event object in-place
+    const pub = this.publicEvents.get(eventId);
+    if (pub) {
+      const marketName = data.name ?? existingMarket?.name ?? '';
+      const pubMarket = pub.markets.find((m) => m.marketId === marketId);
+
+      if (pubMarket) {
+        // Update existing market's outcomes in-place
+        if (data.name) pubMarket.name = data.name;
+        if (outcomes.length > 0) {
+          pubMarket.outcomes = outcomes;
+        }
+      } else if (marketName && outcomes.length > 0) {
+        // New market — add to event
+        pub.markets.push({ marketId, name: marketName, outcomes });
+      }
+
+      pub.updatedAt = Date.now();
+
+      // Notify scheduler about price change
+      this.onPriceUpdate?.();
+    }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────
-
-  private pickMainMarketId(event: DexsportEvent): string | null {
-    // Prefer matchWinnerId (explicitly set match winner market)
-    if (event.matchWinnerId) return event.matchWinnerId;
-
-    // Fall back to first non-null mainMarketId
-    const mainIds = event.mainMarketIds ?? [];
-    return mainIds.find((id) => id !== null) ?? null;
-  }
 }

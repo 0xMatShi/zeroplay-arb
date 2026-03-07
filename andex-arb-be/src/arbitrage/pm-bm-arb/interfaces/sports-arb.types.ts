@@ -1,67 +1,81 @@
 /**
  * In-memory types for the Sports Arbitrage pipeline (Polymarket ↔ DexSport).
- * No database persistence — all data is kept in memory and refreshed continuously.
+ * Supports multiple market types per event (moneyline, totals, spreads, etc.).
  */
 
-// ── Polymarket sports ──────────────────────────────────────────
+// ── Sport mapping ────────────────────────────────────────────
 
-export interface PolymarketSportsEvent {
+export interface SportDef {
+  label: string;
+  dexSlugs: string[];
+  pmTags: string[];
+}
+
+// ── Polymarket sports ────────────────────────────────────────
+
+export interface PmMarket {
   conditionId: string;
-  slug: string;
+  sportsMarketType: string;
   question: string;
-  /** Normalized sport slug: 'csgo', 'football', 'basketball', etc. */
-  sport: string;
-  teamA: string;
-  teamB: string;
-  /** CLOB token IDs for each outcome (index matches outcomeNames) */
-  tokenIds: string[];
   outcomeNames: string[];
-  /** Current probabilities 0..1 (from CLOB mid-price, updated via WS) */
+  /** Probabilities 0..1 (updated via CLOB WS) */
   outcomePrices: number[];
-  isLive: boolean;
-  url: string;
+  tokenIds: string[];
+}
+
+export interface PmSportsEvent {
+  id: string;
+  title: string;
+  sportKey: string;
+  slug: string;
+  markets: PmMarket[];
   updatedAt: number;
 }
 
-// ── DexSport ───────────────────────────────────────────────────
+// ── DexSport ─────────────────────────────────────────────────
 
-export interface DexsportSportsOutcome {
+export interface DexOutcome {
   name: string;
   /** Decimal odds, e.g. 1.85 */
-  decimalOdds: number;
-  /** Implied probability = 1 / decimalOdds */
-  probability: number;
+  price: number;
 }
 
-export interface DexsportSportsEvent {
-  /** "2.33944196" (live) or "1.33944196" (prematch) */
-  eventId: string;
-  /** "MOUZ vs Heroic" */
-  name: string;
-  /** 'csgo', 'football', etc. */
-  sport: string;
-  teamA: string;
-  teamB: string;
-  isLive: boolean;
+export interface DexMarket {
   marketId: string;
-  outcomes: DexsportSportsOutcome[];
+  name: string;
+  outcomes: DexOutcome[];
+}
+
+export interface DexSportsEvent {
+  eventId: string;
+  name: string;
+  sportKey: string;
+  isLive: boolean;
+  startTime?: number;
+  tournamentName?: string;
+  markets: DexMarket[];
   updatedAt: number;
 }
 
-// ── Matched pair ───────────────────────────────────────────────
+// ── Matched pair ─────────────────────────────────────────────
+
+export interface MatchedMarketPair {
+  pmType: string;
+  pmMarket: PmMarket;
+  dexMarket: DexMarket;
+}
 
 export interface SportsMatch {
-  /** Stable ID: hash of poly.conditionId + dex.eventId */
   id: string;
-  sport: string;
-  teamA: string;
-  teamB: string;
-  poly: PolymarketSportsEvent;
-  dex: DexsportSportsEvent;
+  sportKey: string;
+  pmEvent: PmSportsEvent;
+  dexEvent: DexSportsEvent;
+  similarity: number;
+  matchedMarkets: MatchedMarketPair[];
   matchedAt: number;
 }
 
-// ── Arbitrage ─────────────────────────────────────────────────
+// ── Arbitrage ────────────────────────────────────────────────
 
 export interface SportsArbLeg {
   platform: 'polymarket' | 'dexsport';
@@ -70,17 +84,19 @@ export interface SportsArbLeg {
   probability: number;
   /** Decimal odds = 1 / probability */
   decimalOdds: number;
-  url?: string;
 }
 
 export interface SportsArbitrageOpportunity {
   id: string;
   matchId: string;
-  sport: string;
-  /** "MOUZ vs Heroic" */
+  sportKey: string;
   eventName: string;
+  /** Which market type this arb is on: 'moneyline', 'totals', etc. */
+  marketType: string;
+  pmQuestion: string;
+  dexMarketName: string;
   legs: SportsArbLeg[];
-  /** Sum of leg probabilities — must be < 1.0 for profitable arb */
+  /** Sum of best leg probabilities — must be < 1.0 for profitable arb */
   totalCost: number;
   /** (1 - totalCost) / totalCost * 100 */
   profitPercent: number;
