@@ -1,7 +1,8 @@
-import { useState, useMemo, useCallback, Component } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { Toast } from '../components/Toast'
 import { useOpportunities, useArbitrageStats, usePlatforms, useOrderBook, useSubscriptionStatus } from '../api/hooks'
@@ -12,6 +13,7 @@ import type { Opportunity, NewOpportunityEvent, OrderBookAnalysisResponse, Arbit
 
 type SortMode = 'profit' | 'profitUsd' | 'newest'
 type TypeFilter = 'all' | 'binary' | 'multi'
+const POLYMARKET_MIN_PRICE = 0.5
 
 // --- Error Boundary ---
 
@@ -20,7 +22,7 @@ class CardErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
     super(props)
     this.state = { hasError: false }
   }
-  static getDerivedStateFromError(_: Error) {
+  static getDerivedStateFromError() {
     return { hasError: true }
   }
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -286,10 +288,17 @@ export function Scanner() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
-  const [minProfit, setMinProfit] = useState(0)
+  const [minRoi, setMinRoi] = useState(0.5)
+  const [soundRoi, setSoundRoi] = useState(1)
+  const [waitTimeSec, setWaitTimeSec] = useState(0)
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({})
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('profit')
+  const [showPolymarketMin50c, setShowPolymarketMin50c] = useState(true)
+  const [soundEnabled, setSoundEnabled] = useState(true)
+  const [isPaused, setIsPaused] = useState(false)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -316,7 +325,50 @@ export function Scanner() {
   }, [noApiKey, isSubLoading, subStatus, hasSubscription, error])
 
   // WebSocket
+  const playOpportunitySound = useCallback(() => {
+    if (!soundEnabled) return
+
+    try {
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = new AudioContext()
+      }
+      const audioCtx = audioContextRef.current
+      if (audioCtx.state === 'suspended') {
+        void audioCtx.resume()
+      }
+
+      const now = audioCtx.currentTime
+      const notes: Array<{ freq: number; offset: number; duration: number; type: OscillatorType }> = [
+        { freq: 880, offset: 0, duration: 0.08, type: 'triangle' },
+        { freq: 1320, offset: 0.1, duration: 0.11, type: 'sine' },
+      ]
+
+      notes.forEach((note) => {
+        const oscillator = audioCtx.createOscillator()
+        const gainNode = audioCtx.createGain()
+
+        oscillator.type = note.type
+        oscillator.frequency.setValueAtTime(note.freq, now + note.offset)
+
+        gainNode.gain.setValueAtTime(0.0001, now + note.offset)
+        gainNode.gain.exponentialRampToValueAtTime(0.08, now + note.offset + 0.01)
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + note.offset + note.duration)
+
+        oscillator.connect(gainNode)
+        gainNode.connect(audioCtx.destination)
+
+        oscillator.start(now + note.offset)
+        oscillator.stop(now + note.offset + note.duration)
+      })
+    } catch {
+      // Ignore if audio playback is blocked by browser policy.
+    }
+  }, [soundEnabled])
+
   const handleNewOpportunity = useCallback((data: NewOpportunityEvent) => {
+    if (data.profitPercentage >= soundRoi) {
+      playOpportunitySound()
+    }
     setToast({
       message: t('scanner.newOpportunity', {
         profit: data.profitPercentage.toFixed(2),
@@ -324,10 +376,18 @@ export function Scanner() {
       }),
       type: 'success',
     })
-  }, [t])
+  }, [t, playOpportunitySound, soundRoi])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const { isConnected, authError: wsAuthError } = useArbitrageSocket({
     onNewOpportunity: handleNewOpportunity,
+    paused: isPaused,
   })
 
   const effectiveBlockedReason = blockedReason ?? wsAuthError
@@ -369,9 +429,18 @@ export function Scanner() {
         return false
       }
 
-      // Min profit filter
-      if (opp.profitPercentage < minProfit) {
+      // Min ROI filter
+      const effectiveRoi = opp.weightedAvgProfit ?? opp.profitPercentage
+      if (effectiveRoi < minRoi) {
         return false
+      }
+
+      // Wait time filter (age since first seen)
+      if (waitTimeSec > 0) {
+        const ageSeconds = Math.max(0, (nowMs - new Date(opp.foundAt).getTime()) / 1000)
+        if (ageSeconds < waitTimeSec) {
+          return false
+        }
       }
 
       // Type filter
@@ -385,6 +454,20 @@ export function Scanner() {
       )
       if (!allLegsSelected) {
         return false
+      }
+
+      // Polymarket pre-filter — hide low-priced legs (< $0.50) when enabled
+      if (showPolymarketMin50c) {
+        const hasLowPolymarketLeg = opp.legs.some((leg) => {
+          const slug = leg.platformSlug.toLowerCase()
+          const name = leg.platformName.toLowerCase()
+          const isPolymarket = slug === 'polymarket' || name.includes('polymarket')
+          return isPolymarket && leg.price < POLYMARKET_MIN_PRICE
+        })
+
+        if (hasLowPolymarketLeg) {
+          return false
+        }
       }
 
       return true
@@ -407,7 +490,7 @@ export function Scanner() {
     })
 
     return result
-  }, [opportunitiesData, searchQuery, minProfit, typeFilter, effectivePlatforms, sortMode])
+  }, [opportunitiesData, searchQuery, minRoi, waitTimeSec, nowMs, typeFilter, effectivePlatforms, sortMode, showPolymarketMin50c])
 
   const filteredAvgProfit = useMemo(() => {
     if (filteredOpportunities.length === 0) return null
@@ -441,9 +524,9 @@ export function Scanner() {
           <div className="scanner-status">
             <span className="status-label">{t('scanner.systemLabel')}</span>
             <span className="status-value">
-              {isConnected ? t('scanner.scanning') : t('scanner.wsReconnecting')}
+              {isPaused ? t('scanner.paused') : isConnected ? t('scanner.scanning') : t('scanner.wsReconnecting')}
             </span>
-            <span className={`status-pulse ${isConnected ? '' : 'status-pulse--offline'}`}></span>
+            <span className={`status-pulse ${isPaused ? 'status-pulse--paused' : isConnected ? '' : 'status-pulse--offline'}`}></span>
           </div>
         </div>
         <div className="scanner-header-right">
@@ -520,21 +603,6 @@ export function Scanner() {
         </div>
 
         <div className="filter-group">
-          <label className="filter-label">{t('scanner.minProfit')}</label>
-          <div className="roi-buttons">
-            {[0, 1, 2, 5, 10].map((value) => (
-              <button
-                key={value}
-                className={`roi-button ${minProfit === value ? 'active' : ''}`}
-                onClick={() => setMinProfit(value)}
-              >
-                {value === 0 ? 'ALL' : `${value}%`}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="filter-group">
           <label className="filter-label">{t('scanner.type')}</label>
           <div className="roi-buttons">
             {(['all', 'binary', 'multi'] as TypeFilter[]).map((value) => (
@@ -580,6 +648,110 @@ export function Scanner() {
             </div>
           </div>
         )}
+
+        <div className="filter-group polymarket-config">
+          <label className="filter-label">{t('scanner.polymarketConfig')}</label>
+          <button
+            type="button"
+            className={`switch-toggle ${showPolymarketMin50c ? 'switch-toggle--active' : ''}`}
+            onClick={() => setShowPolymarketMin50c((prev) => !prev)}
+            aria-pressed={showPolymarketMin50c}
+          >
+            <span className="switch-toggle-label">{t('scanner.showPolymarketAbove50')}</span>
+            <span className="switch-toggle-track">
+              <span className="switch-toggle-thumb" />
+            </span>
+          </button>
+        </div>
+
+        <div className="filter-group scanner-settings">
+          <label className="filter-label">{t('scanner.settings')}</label>
+          <div className="settings-panel">
+            <div className="settings-toolbar">
+              <button
+                type="button"
+                className={`settings-icon-button ${soundEnabled ? 'active' : ''}`}
+                onClick={() => setSoundEnabled((prev) => !prev)}
+                aria-label={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+                title={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+                style={{ color: '#fff' }}
+              >
+                <span className="settings-icon-content" aria-hidden="true">
+                  {soundEnabled
+                    ? <Volume2 size={16} color="#fff" style={{ stroke: '#fff' }} />
+                    : <VolumeX size={16} color="#fff" style={{ stroke: '#fff' }} />
+                  }
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className={`settings-icon-button settings-icon-button--pause ${isPaused ? 'active' : ''}`}
+                onClick={() => setIsPaused((prev) => !prev)}
+                aria-label={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
+                title={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
+                style={{ color: '#fff' }}
+              >
+                <span className="settings-icon-content" aria-hidden="true">
+                  {isPaused
+                    ? <Play size={16} color="#fff" style={{ stroke: '#fff' }} />
+                    : <Pause size={16} color="#fff" style={{ stroke: '#fff' }} />
+                  }
+                </span>
+              </button>
+            </div>
+
+            <div className="settings-sliders">
+              <div className="settings-slider-row">
+                <div className="settings-slider-head">
+                  <span className="settings-slider-label">{t('scanner.settingsMinRoi')}</span>
+                  <span className="settings-slider-value">{minRoi.toFixed(1)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={20}
+                  step={0.1}
+                  value={minRoi}
+                  onChange={(e) => setMinRoi(Number(e.target.value))}
+                  className="settings-range"
+                />
+              </div>
+
+              <div className="settings-slider-row">
+                <div className="settings-slider-head">
+                  <span className="settings-slider-label">{t('scanner.settingsSoundRoi')}</span>
+                  <span className="settings-slider-value settings-slider-value--accent">{soundRoi.toFixed(1)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={20}
+                  step={0.1}
+                  value={soundRoi}
+                  onChange={(e) => setSoundRoi(Number(e.target.value))}
+                  className="settings-range"
+                />
+              </div>
+
+              <div className="settings-slider-row">
+                <div className="settings-slider-head">
+                  <span className="settings-slider-label">{t('scanner.settingsWaitTime')}</span>
+                  <span className="settings-slider-value">{waitTimeSec}s</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={120}
+                  step={1}
+                  value={waitTimeSec}
+                  onChange={(e) => setWaitTimeSec(Number(e.target.value))}
+                  className="settings-range"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Opportunities List */}

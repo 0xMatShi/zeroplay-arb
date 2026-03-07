@@ -18,6 +18,7 @@ export type SocketAuthError = 'auth_required' | 'subscription_required' | null
 
 interface UseArbitrageSocketOptions {
   onNewOpportunity?: (data: NewOpportunityEvent) => void
+  paused?: boolean
 }
 
 export function useArbitrageSocket(options?: UseArbitrageSocketOptions) {
@@ -29,11 +30,23 @@ export function useArbitrageSocket(options?: UseArbitrageSocketOptions) {
 
   const onNewOpportunityRef = useRef(options?.onNewOpportunity)
   onNewOpportunityRef.current = options?.onNewOpportunity
+  const pausedRef = useRef(options?.paused ?? false)
+  pausedRef.current = options?.paused ?? false
+  const prevPausedRef = useRef(options?.paused ?? false)
 
   const invalidateAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: queryKeys.opportunities })
     queryClient.invalidateQueries({ queryKey: queryKeys.arbitrageStats })
   }, [queryClient])
+
+  useEffect(() => {
+    const paused = options?.paused ?? false
+    if (prevPausedRef.current && !paused) {
+      // While paused we skip socket deltas; refetch once resumed.
+      invalidateAll()
+    }
+    prevPausedRef.current = paused
+  }, [options?.paused, invalidateAll])
 
   useEffect(() => {
     const apiKey = localStorage.getItem('apiKey') || ''
@@ -75,6 +88,8 @@ export function useArbitrageSocket(options?: UseArbitrageSocketOptions) {
 
     // Новая арбитражная возможность
     socket.on('opportunity:new', (data: NewOpportunityEvent) => {
+      if (pausedRef.current) return
+
       queryClient.setQueryData<OpportunitiesResponse>(
         queryKeys.opportunities,
         (old) => {
@@ -107,6 +122,8 @@ export function useArbitrageSocket(options?: UseArbitrageSocketOptions) {
 
     // Обновление цен существующей возможности
     socket.on('opportunity:updated', (data: UpdatedOpportunityEvent) => {
+      if (pausedRef.current) return
+
       queryClient.setQueryData<OpportunitiesResponse>(
         queryKeys.opportunities,
         (old) => {
@@ -139,6 +156,8 @@ export function useArbitrageSocket(options?: UseArbitrageSocketOptions) {
 
     // Арбитраж истёк
     socket.on('opportunity:expired', (data: ExpiredOpportunityEvent) => {
+      if (pausedRef.current) return
+
       queryClient.setQueryData<OpportunitiesResponse>(
         queryKeys.opportunities,
         (old) => {
