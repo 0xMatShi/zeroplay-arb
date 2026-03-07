@@ -185,6 +185,8 @@
     "sortProfit": "PROFIT %",
     "sortProfitUsd": "PROFIT $",
     "sortNewest": "NEWEST",
+    "polymarketConfig": "POLYMARKET CONFIG",
+    "showPolymarketAbove50": "SHOW ≥ 50¢ (PRE)",
     "noOpportunities": "NO ARBITRAGE OPPORTUNITIES FOUND",
     "emptyHint": "Waiting for the scanner to detect price discrepancies across platforms...",
     "profit": "+{{value}}%",

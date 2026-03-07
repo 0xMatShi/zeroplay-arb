@@ -12,6 +12,7 @@ import type { Opportunity, NewOpportunityEvent, OrderBookAnalysisResponse, Arbit
 
 type SortMode = 'profit' | 'profitUsd' | 'newest'
 type TypeFilter = 'all' | 'binary' | 'multi'
+const POLYMARKET_MIN_PRICE = 0.5
 
 // --- Error Boundary ---
 
@@ -290,6 +291,7 @@ export function Scanner() {
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({})
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('profit')
+  const [showPolymarketMin50c, setShowPolymarketMin50c] = useState(true)
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -387,6 +389,20 @@ export function Scanner() {
         return false
       }
 
+      // Polymarket pre-filter — hide low-priced legs (< $0.50) when enabled
+      if (showPolymarketMin50c) {
+        const hasLowPolymarketLeg = opp.legs.some((leg) => {
+          const slug = leg.platformSlug.toLowerCase()
+          const name = leg.platformName.toLowerCase()
+          const isPolymarket = slug === 'polymarket' || name.includes('polymarket')
+          return isPolymarket && leg.price < POLYMARKET_MIN_PRICE
+        })
+
+        if (hasLowPolymarketLeg) {
+          return false
+        }
+      }
+
       return true
     })
 
@@ -407,7 +423,7 @@ export function Scanner() {
     })
 
     return result
-  }, [opportunitiesData, searchQuery, minProfit, typeFilter, effectivePlatforms, sortMode])
+  }, [opportunitiesData, searchQuery, minProfit, typeFilter, effectivePlatforms, sortMode, showPolymarketMin50c])
 
   const filteredAvgProfit = useMemo(() => {
     if (filteredOpportunities.length === 0) return null
@@ -580,6 +596,21 @@ export function Scanner() {
             </div>
           </div>
         )}
+
+        <div className="filter-group polymarket-config">
+          <label className="filter-label">{t('scanner.polymarketConfig')}</label>
+          <button
+            type="button"
+            className={`switch-toggle ${showPolymarketMin50c ? 'switch-toggle--active' : ''}`}
+            onClick={() => setShowPolymarketMin50c((prev) => !prev)}
+            aria-pressed={showPolymarketMin50c}
+          >
+            <span className="switch-toggle-label">{t('scanner.showPolymarketAbove50')}</span>
+            <span className="switch-toggle-track">
+              <span className="switch-toggle-thumb" />
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Opportunities List */}

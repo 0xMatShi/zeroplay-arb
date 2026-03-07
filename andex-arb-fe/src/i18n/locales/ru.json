@@ -185,6 +185,8 @@
     "sortProfit": "ПРИБЫЛЬ %",
     "sortProfitUsd": "ПРИБЫЛЬ $",
     "sortNewest": "НОВЫЕ",
+    "polymarketConfig": "POLYMARKET CONFIG",
+    "showPolymarketAbove50": "ПОКАЗЫВАТЬ ≥ 50¢ (PRE)",
     "noOpportunities": "АРБИТРАЖНЫХ ВОЗМОЖНОСТЕЙ НЕ НАЙДЕНО",
     "emptyHint": "Ожидание обнаружения расхождений цен между платформами...",
     "profit": "+{{value}}%",

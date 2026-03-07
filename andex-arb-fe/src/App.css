@@ -3396,6 +3396,70 @@
   color: var(--secondary-color);
 }
 
+.polymarket-config {
+  min-width: 260px;
+}
+
+.switch-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 220px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.switch-toggle:hover {
+  border-color: var(--secondary-color);
+}
+
+.switch-toggle-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+.switch-toggle-track {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.switch-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #9ca3af;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.switch-toggle--active .switch-toggle-track {
+  background: rgba(0, 122, 255, 0.25);
+  border-color: #2f7dff;
+}
+
+.switch-toggle--active .switch-toggle-thumb {
+  transform: translateX(16px);
+  background: #4c8fff;
+}
+
 /* Opportunities List */
 .opportunities-list {
   display: flex;
