@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { Toast } from '../components/Toast'
-import { useOpportunities, useArbitrageStats, usePlatforms, useOrderBook, useSubscriptionStatus, useSportsOpportunities, useSportsStats, queryKeys } from '../api/hooks'
+import { useOpportunities, usePlatforms, useOrderBook, useSubscriptionStatus, useSportsOpportunities, queryKeys } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
 import { ApiError } from '../api/client'
@@ -297,7 +297,6 @@ function formatMarketType(mt: string): string {
 function SportsOpportunityCard({
   opp,
   index,
-  locale,
   perfectAmount,
   isPinned,
   isStale,
@@ -306,7 +305,6 @@ function SportsOpportunityCard({
 }: {
   opp: SportsOpportunity
   index: number
-  locale: string
   perfectAmount: number
   isPinned: boolean
   isStale: boolean
@@ -482,10 +480,10 @@ export function Scanner() {
   }, [queryClient])
 
   // Filters
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery] = useState('')
   const [minRoi, setMinRoi] = useState(0.5)
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({})
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [selectedPlatforms] = useState<Record<string, boolean>>({})
+  const [typeFilter] = useState<TypeFilter>('all')
   const [liveFilter, setLiveFilter] = useState<LiveFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('profit')
   const [showPolymarketMin50c, setShowPolymarketMin50c] = useState(true)
@@ -508,14 +506,11 @@ export function Scanner() {
 
   // Data — only fetch when subscription is confirmed active
   const pmpmQuery = useOpportunities()
-  const pmpmStats = useArbitrageStats()
   const pmbmQuery = useSportsOpportunities(isPaused)
-  const pmbmStats = useSportsStats()
   const { data: platforms } = usePlatforms()
 
   // Select data source based on arb mode
-  const { data: opportunitiesData, isLoading, isError, error } = arbMode === 'pm-pm' ? pmpmQuery : pmbmQuery
-  const stats = arbMode === 'pm-pm' ? pmpmStats.data : pmbmStats.data
+  const { isLoading, isError, error } = arbMode === 'pm-pm' ? pmpmQuery : pmbmQuery
 
   // Access control: subscription check first, then fallback to API 401/403
   const blockedReason = useMemo(() => {
@@ -605,14 +600,6 @@ export function Scanner() {
     return selectedPlatforms
   }, [selectedPlatforms, platformSlugs])
 
-  const togglePlatform = (slug: string) => {
-    setSelectedPlatforms((prev) => {
-      const current = Object.keys(prev).length === 0
-        ? platformSlugs.reduce((acc, s) => ({ ...acc, [s]: true }), {} as Record<string, boolean>)
-        : prev
-      return { ...current, [slug]: !current[slug] }
-    })
-  }
 
   // Filter & sort opportunities
   const filteredOpportunities = useMemo(() => {
@@ -732,18 +719,6 @@ export function Scanner() {
     return [...pinnedList, ...nonPinned]
   }, [arbMode, filteredOpportunities, pinnedOpps])
 
-  const filteredAvgProfit = useMemo(() => {
-    if (filteredOpportunities.length === 0) return null
-    const getProfit = (o: Opportunity) => arbMode === 'pm-bm' ? o.profitPercentage : (o.weightedAvgProfit ?? o.profitPercentage)
-    const sum = filteredOpportunities.reduce((acc, o) => acc + getProfit(o), 0)
-    return sum / filteredOpportunities.length
-  }, [filteredOpportunities, arbMode])
-
-  const filteredMaxProfit = useMemo(() => {
-    if (filteredOpportunities.length === 0) return null
-    const getProfit = (o: Opportunity) => arbMode === 'pm-bm' ? o.profitPercentage : (o.weightedAvgProfit ?? o.profitPercentage)
-    return Math.max(...filteredOpportunities.map(getProfit))
-  }, [filteredOpportunities, arbMode])
 
   const locale = i18n.language === 'ru' ? 'ru' : 'en'
 
@@ -1016,7 +991,6 @@ export function Scanner() {
                   <SportsOpportunityCard
                     opp={opp}
                     index={index}
-                    locale={locale}
                     perfectAmount={perfectAmount}
                     isPinned={pinnedOpps.has(opp.id)}
                     isStale={isStale}
