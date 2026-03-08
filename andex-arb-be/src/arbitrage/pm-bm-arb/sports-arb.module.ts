@@ -11,6 +11,13 @@ import { SportsArbScanner } from './services/sports-arb-scanner.service';
 // Scheduler
 import { SportsScheduler } from './scheduler/sports-scheduler';
 
+// Controller
+import { SportsArbController } from './controllers/sports-arb.controller';
+
+// Auth & Subscriptions (needed by SubscriptionGuard)
+import { UsersModule } from '../../users/users.module';
+import { SubscriptionsModule } from '../../subscriptions/subscriptions.module';
+
 /**
  * Sports Arbitrage module — Prediction Markets ↔ Bookmakers pipeline.
  *
@@ -24,7 +31,8 @@ import { SportsScheduler } from './scheduler/sports-scheduler';
  *   SportsArbScanner (Cron 4)— detects arbitrage on each matched market pair
  */
 @Module({
-  imports: [],
+  imports: [UsersModule, SubscriptionsModule],
+  controllers: [SportsArbController],
   providers: [
     // Data sources
     PolymarketSportsAdapter,

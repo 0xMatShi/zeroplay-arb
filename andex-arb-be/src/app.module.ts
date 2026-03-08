@@ -32,7 +32,6 @@ import { DatabaseConfig } from './config/database.config';
     BlockchainModule,
     SubscriptionsModule,
 
-    // Core arbitrage engine (PM vs PM) — temporarily disabled for sports arb testing
     // ArbitrageModule,
     SportsArbModule,
   ],

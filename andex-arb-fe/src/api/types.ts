@@ -119,6 +119,7 @@ export interface Opportunity {
   totalCost: number
   guaranteedPayout: number    // always 1.0
   legs: ArbitrageLeg[]
+  isLive?: boolean
   status: 'active'
   foundAt: string
   lastValidatedAt: string
@@ -128,6 +129,31 @@ export interface Opportunity {
 
 export interface OpportunitiesResponse {
   items: Opportunity[]
+  total: number
+  limit: number
+  offset: number
+}
+
+// Sports Arbitrage (PM vs DexSport)
+export interface SportsOpportunityLeg {
+  platform: 'polymarket' | 'dexsport'
+  outcomeName: string
+  probability: number       // 0..1 (price in $; cents = *100)
+  decimalOdds: number       // 1/probability
+  pmBestAskQty: number      // contracts at best ask (0 for DEX legs)
+  url?: string
+}
+
+export interface SportsOpportunity extends Opportunity {
+  sportKey: string
+  tournamentName: string | null
+  marketType: string
+  dexMarketName?: string
+  sportsLegs: SportsOpportunityLeg[]
+}
+
+export interface SportsOpportunitiesResponse {
+  items: SportsOpportunity[]
   total: number
   limit: number
   offset: number

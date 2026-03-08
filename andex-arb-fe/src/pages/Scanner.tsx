@@ -1,18 +1,21 @@
-import { useState, useMemo, useCallback, useRef, useEffect, Component } from 'react'
+import { useState, useMemo, useCallback, useRef, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { Toast } from '../components/Toast'
-import { useOpportunities, useArbitrageStats, usePlatforms, useOrderBook, useSubscriptionStatus } from '../api/hooks'
+import { useOpportunities, useArbitrageStats, usePlatforms, useOrderBook, useSubscriptionStatus, useSportsOpportunities, useSportsStats, queryKeys } from '../api/hooks'
+import { useQueryClient } from '@tanstack/react-query'
 import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
 import { ApiError } from '../api/client'
 import { formatRelativeTime } from '../utils/time'
-import type { Opportunity, NewOpportunityEvent, OrderBookAnalysisResponse, ArbitrageTier } from '../api/types'
+import type { Opportunity, SportsOpportunity, SportsOpportunityLeg, NewOpportunityEvent, OrderBookAnalysisResponse, ArbitrageTier } from '../api/types'
 
 type SortMode = 'profit' | 'profitUsd' | 'newest'
 type TypeFilter = 'all' | 'binary' | 'multi'
+type LiveFilter = 'all' | 'live' | 'pre'
+type ArbMode = 'pm-pm' | 'pm-bm'
 const POLYMARKET_MIN_PRICE = 0.5
 
 // --- Error Boundary ---
@@ -166,14 +169,17 @@ function OpportunityCard({
   opp,
   index,
   locale,
+  arbMode,
 }: {
   opp: Opportunity
   index: number
   locale: string
+  arbMode: ArbMode
 }) {
   const { t } = useTranslation()
   const [obOpen, setObOpen] = useState(false)
-  const { data: obData, isLoading: obLoading, isError: obError } = useOrderBook(opp.id, true)
+  const isPmPm = arbMode === 'pm-pm'
+  const { data: obData, isLoading: obLoading, isError: obError } = useOrderBook(opp.id, isPmPm)
   const ob = obData as OrderBookAnalysisResponse | undefined
 
   return (
@@ -241,29 +247,22 @@ function OpportunityCard({
         })}
       </div>
 
-      {/* OrderBook Panel */}
-      <OrderBookPanel data={ob} isLoading={obLoading} isError={obError} isOpen={obOpen} locale={locale} />
+      {/* OrderBook Panel — only for PM-PM */}
+      {isPmPm && (
+        <OrderBookPanel data={ob} isLoading={obLoading} isError={obError} isOpen={obOpen} locale={locale} />
+      )}
 
       {/* Card Footer */}
       <div className="opp-footer">
-        <div className="opp-cost-payout">
-          <span className="opp-cost">
-            {t('scanner.totalCost', { value: opp.totalCost.toFixed(4) })}
+        <div className="opp-timestamps">
+          <span className="opp-timestamp">
+            {t('scanner.foundAt', { time: formatRelativeTime(opp.foundAt, locale) })}
           </span>
-          <span className="opp-arrow">&rarr;</span>
-          <span className="opp-payout">
-            {t('scanner.payout', { value: opp.guaranteedPayout.toFixed(2) })}
+          <span className="opp-timestamp">
+            {t('scanner.validatedAt', { time: formatRelativeTime(opp.lastValidatedAt, locale) })}
           </span>
         </div>
-        <div className="opp-footer-right">
-          <div className="opp-timestamps">
-            <span className="opp-timestamp">
-              {t('scanner.foundAt', { time: formatRelativeTime(opp.foundAt, locale) })}
-            </span>
-            <span className="opp-timestamp">
-              {t('scanner.validatedAt', { time: formatRelativeTime(opp.lastValidatedAt, locale) })}
-            </span>
-          </div>
+        {isPmPm && (
           <button
             className={`ob-toggle-button ${obOpen ? 'ob-toggle-button--active' : ''}`}
             onClick={(e) => {
@@ -274,7 +273,189 @@ function OpportunityCard({
           >
             {obOpen ? t('scanner.hideDepth') : t('scanner.viewDepth')}
           </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// --- Helpers ---
+
+const MARKET_TYPE_LABELS: Record<string, string> = {
+  moneyline: 'Match Winner',
+  totals: 'Total',
+  spreads: 'Handicap',
+  child_moneyline: 'Map Winner',
+}
+
+function formatMarketType(mt: string): string {
+  return MARKET_TYPE_LABELS[mt] ?? mt
+}
+
+// --- Sports Opportunity Card (PM-BM) ---
+
+function SportsOpportunityCard({
+  opp,
+  index,
+  locale,
+  perfectAmount,
+  isPinned,
+  isStale,
+  onPin,
+  onUnpin,
+}: {
+  opp: SportsOpportunity
+  index: number
+  locale: string
+  perfectAmount: number
+  isPinned: boolean
+  isStale: boolean
+  onPin: (opp: SportsOpportunity) => void
+  onUnpin: (id: string) => void
+}) {
+  const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(false)
+
+  const pmLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'polymarket')
+  const dexLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'dexsport')
+
+  const totalCost = opp.totalCost
+  const profitPct = opp.profitPercentage
+  const isNegative = profitPct <= 0
+
+  // Perfect amounts (proportional to leg probability)
+  const pmPerfect = pmLeg ? perfectAmount * (pmLeg.probability / totalCost) : 0
+  const dexPerfect = dexLeg ? perfectAmount * (dexLeg.probability / totalCost) : 0
+
+  // Real amounts (limited by PM best ask qty)
+  const pmQty = pmLeg?.pmBestAskQty ?? 0
+  const pmReal = pmLeg ? pmQty * pmLeg.probability : 0
+  const dexReal = dexLeg ? pmQty * dexLeg.probability : 0
+  const realTotal = pmQty * totalCost
+  const profitUsd = realTotal > 0 ? realTotal * (profitPct / 100) : 0
+
+  const sportLabel = (opp.sportKey ?? '').toUpperCase()
+  const secsAgo = Math.floor((Date.now() - new Date(opp.lastValidatedAt).getTime()) / 1000)
+  const displayMarketType = opp.dexMarketName || formatMarketType(opp.marketType)
+
+  let cardClass = 'opportunity-card sports-card'
+  if (isPinned && !isStale) cardClass += ' sports-card--pinned'
+  else if (isPinned && isStale) cardClass += ' sports-card--pinned-stale'
+  else if (isStale) cardClass += ' sports-card--stale'
+
+  return (
+    <div className={cardClass} style={{ animationDelay: `${index * 0.05}s` }}>
+      {/* Main row */}
+      <div className="sports-card-main" onClick={() => setExpanded(prev => !prev)}>
+
+        {/* Left: event info */}
+        <div className="sports-card-info">
+          <div className="sports-event-title">
+            {opp.matchTitle}{opp.tournamentName ? ` — ${opp.tournamentName}` : ''}
+          </div>
+          <div className="sports-badges">
+            {sportLabel && <span className="sports-sport-badge">{sportLabel}</span>}
+            {opp.isLive ? (
+              <span className="sports-live-badge sports-live-badge--live">
+                <span className="sports-live-dot" />
+                LIVE
+              </span>
+            ) : (
+              <span className="sports-live-badge sports-live-badge--pre">PRE</span>
+            )}
+            <span className="sports-validated">{secsAgo}s</span>
+          </div>
+          <div className="sports-market-type">{displayMarketType}</div>
         </div>
+
+        {/* Center: platform boxes */}
+        <div className="sports-card-platforms">
+          {/* Polymarket box */}
+          <div className="sports-platform-box">
+            <div className="sports-platform-label sports-platform-label--pm">POLYMARKET</div>
+            <div className="sports-outcome-name">{pmLeg?.outcomeName ?? '—'}</div>
+            <div className="sports-amounts-inline">
+              <span className="sports-amount-key">A:</span>
+              <span className="sports-amount-val">${pmPerfect.toFixed(0)}</span>
+              <span className="sports-amounts-sep">|</span>
+              <span className="sports-amount-key">R:</span>
+              <span className="sports-amount-val">${pmReal.toFixed(0)}</span>
+            </div>
+            <div className="sports-price-row">
+              {pmLeg ? (
+                <>
+                  <span className="sports-cents">{(pmLeg.probability * 100).toFixed(0)}¢</span>
+                  <span className="sports-odds">{pmLeg.decimalOdds.toFixed(2)}x</span>
+                </>
+              ) : <span className="sports-cents">—</span>}
+            </div>
+          </div>
+
+          {/* DexSport box */}
+          <div className="sports-platform-box">
+            <div className="sports-platform-label sports-platform-label--dex">DEXSPORT</div>
+            <div className="sports-outcome-name">{dexLeg?.outcomeName ?? '—'}</div>
+            <div className="sports-amounts-inline">
+              <span className="sports-amount-key">A:</span>
+              <span className="sports-amount-val">${dexPerfect.toFixed(0)}</span>
+              <span className="sports-amounts-sep">|</span>
+              <span className="sports-amount-key">R:</span>
+              <span className="sports-amount-val">${dexReal.toFixed(0)}</span>
+            </div>
+            <div className="sports-price-row">
+              {dexLeg ? (
+                <>
+                  <span className="sports-cents">{(dexLeg.probability * 100).toFixed(0)}¢</span>
+                  <span className="sports-odds">{dexLeg.decimalOdds.toFixed(2)}x</span>
+                </>
+              ) : <span className="sports-cents">—</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Spread + Profit */}
+        <div className="sports-card-metrics">
+          <div className="sports-metric-box">
+            <div className={`sports-metric-value ${isNegative ? 'sports-metric-value--neg' : 'sports-metric-value--pos'}`}>
+              {isNegative ? '' : '+'}{profitPct.toFixed(2)}%
+            </div>
+          </div>
+          <div className="sports-metric-box">
+            <div className={`sports-metric-value ${(isNegative || profitUsd === 0) ? 'sports-metric-value--neg' : 'sports-metric-value--pos'}`}>
+              {profitUsd === 0 ? '—' : `${isNegative ? '-' : '+'}$${Math.abs(profitUsd).toFixed(2)}`}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Expanded: action buttons */}
+      <div className={`sports-card-actions ${expanded ? 'sports-card-actions--open' : ''}`}>
+        <button
+          className={`sports-action-btn sports-action-btn--pin ${isPinned ? 'active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (isPinned) onUnpin(opp.id)
+            else onPin(opp)
+          }}
+        >
+          {isPinned ? t('scanner.unpin') : t('scanner.pin')}
+        </button>
+        <button
+          className="sports-action-btn sports-action-btn--calc"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {t('scanner.calc')}
+        </button>
+        <button
+          className="sports-action-btn sports-action-btn--open"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (pmLeg?.url) window.open(pmLeg.url, '_blank', 'noopener,noreferrer')
+            if (dexLeg?.url) window.open(dexLeg.url, '_blank', 'noopener,noreferrer')
+          }}
+        >
+          {t('scanner.open')}
+        </button>
       </div>
     </div>
   )
@@ -286,19 +467,36 @@ export function Scanner() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
 
+  // Arb mode
+  const [arbMode, setArbMode] = useState<ArbMode>('pm-pm')
+  const queryClient = useQueryClient()
+
+  const handleModeSwitch = useCallback((mode: ArbMode) => {
+    setArbMode(mode)
+    // Reset the target query cache so stale cards are cleared before fresh fetch
+    if (mode === 'pm-pm') {
+      queryClient.resetQueries({ queryKey: queryKeys.opportunities })
+    } else {
+      queryClient.resetQueries({ queryKey: queryKeys.sportsOpportunities })
+    }
+  }, [queryClient])
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
   const [minRoi, setMinRoi] = useState(0.5)
-  const [soundRoi, setSoundRoi] = useState(1)
-  const [waitTimeSec, setWaitTimeSec] = useState(0)
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({})
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [liveFilter, setLiveFilter] = useState<LiveFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('profit')
   const [showPolymarketMin50c, setShowPolymarketMin50c] = useState(true)
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [isPaused, setIsPaused] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
-  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  // PM-BM settings
+  const [perfectAmount, setPerfectAmount] = useState(1000)
+  const [realMinAmount, setRealMinAmount] = useState(10)
+  const [pinnedOpps, setPinnedOpps] = useState<Map<string, SportsOpportunity>>(new Map())
 
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -309,9 +507,15 @@ export function Scanner() {
   const noApiKey = !localStorage.getItem('apiKey')
 
   // Data — only fetch when subscription is confirmed active
-  const { data: opportunitiesData, isLoading, isError, error } = useOpportunities()
-  const { data: stats } = useArbitrageStats()
+  const pmpmQuery = useOpportunities()
+  const pmpmStats = useArbitrageStats()
+  const pmbmQuery = useSportsOpportunities(isPaused)
+  const pmbmStats = useSportsStats()
   const { data: platforms } = usePlatforms()
+
+  // Select data source based on arb mode
+  const { data: opportunitiesData, isLoading, isError, error } = arbMode === 'pm-pm' ? pmpmQuery : pmbmQuery
+  const stats = arbMode === 'pm-pm' ? pmpmStats.data : pmbmStats.data
 
   // Access control: subscription check first, then fallback to API 401/403
   const blockedReason = useMemo(() => {
@@ -326,8 +530,6 @@ export function Scanner() {
 
   // WebSocket
   const playOpportunitySound = useCallback(() => {
-    if (!soundEnabled) return
-
     try {
       if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
         audioContextRef.current = new AudioContext()
@@ -363,10 +565,10 @@ export function Scanner() {
     } catch {
       // Ignore if audio playback is blocked by browser policy.
     }
-  }, [soundEnabled])
+  }, [])
 
   const handleNewOpportunity = useCallback((data: NewOpportunityEvent) => {
-    if (data.profitPercentage >= soundRoi) {
+    if (soundEnabled && data.profitPercentage >= minRoi) {
       playOpportunitySound()
     }
     setToast({
@@ -376,14 +578,7 @@ export function Scanner() {
       }),
       type: 'success',
     })
-  }, [t, playOpportunitySound, soundRoi])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNowMs(Date.now())
-    }, 1000)
-    return () => window.clearInterval(timer)
-  }, [])
+  }, [t, playOpportunitySound, minRoi, soundEnabled])
 
   const { isConnected, authError: wsAuthError } = useArbitrageSocket({
     onNewOpportunity: handleNewOpportunity,
@@ -421,43 +616,49 @@ export function Scanner() {
 
   // Filter & sort opportunities
   const filteredOpportunities = useMemo(() => {
-    if (!opportunitiesData?.items) return []
+    // Read directly from the correct query to avoid cross-mode contamination
+    const sourceItems = arbMode === 'pm-pm' ? pmpmQuery.data?.items : pmbmQuery.data?.items
+    if (!sourceItems) return []
 
-    let result = opportunitiesData.items.filter((opp: Opportunity) => {
+    let result = sourceItems.filter((opp: Opportunity) => {
       // Search filter
       if (searchQuery && !opp.matchTitle.toLowerCase().includes(searchQuery.toLowerCase())) {
         return false
       }
 
       // Min ROI filter
-      const effectiveRoi = opp.weightedAvgProfit ?? opp.profitPercentage
+      // pm-bm: use profitPercentage directly (= profitPercent from the scanner)
+      // pm-pm: prefer weightedAvgProfit (order-book depth) if available, fallback to profitPercentage
+      const effectiveRoi = arbMode === 'pm-bm'
+        ? Number(opp.profitPercentage) || 0
+        : Number(opp.weightedAvgProfit ?? opp.profitPercentage) || 0
       if (effectiveRoi < minRoi) {
         return false
       }
 
-      // Wait time filter (age since first seen)
-      if (waitTimeSec > 0) {
-        const ageSeconds = Math.max(0, (nowMs - new Date(opp.foundAt).getTime()) / 1000)
-        if (ageSeconds < waitTimeSec) {
+      // Type filter (pm-pm only)
+      if (arbMode === 'pm-pm' && typeFilter !== 'all' && opp.type !== typeFilter) {
+        return false
+      }
+
+      // Live/pre filter (pm-bm only)
+      if (arbMode === 'pm-bm') {
+        if (liveFilter === 'live' && !opp.isLive) return false
+        if (liveFilter === 'pre' && opp.isLive) return false
+      }
+
+      // Platform filter — only for pm-pm mode
+      if (arbMode === 'pm-pm') {
+        const allLegsSelected = opp.legs.every(
+          (leg) => effectivePlatforms[leg.platformSlug] === true
+        )
+        if (!allLegsSelected) {
           return false
         }
       }
 
-      // Type filter
-      if (typeFilter !== 'all' && opp.type !== typeFilter) {
-        return false
-      }
-
-      // Platform filter — show only if ALL legs belong to enabled platforms
-      const allLegsSelected = opp.legs.every(
-        (leg) => effectivePlatforms[leg.platformSlug] === true
-      )
-      if (!allLegsSelected) {
-        return false
-      }
-
-      // Polymarket pre-filter — hide low-priced legs (< $0.50) when enabled
-      if (showPolymarketMin50c) {
+      // Polymarket pre-filter — hide low-priced legs (< $0.50) when enabled (pm-bm pre-match only)
+      if (arbMode === 'pm-bm' && showPolymarketMin50c && !opp.isLive) {
         const hasLowPolymarketLeg = opp.legs.some((leg) => {
           const slug = leg.platformSlug.toLowerCase()
           const name = leg.platformName.toLowerCase()
@@ -470,38 +671,79 @@ export function Scanner() {
         }
       }
 
+      // REAL MIN filter — hide cards where PM liquidity is below threshold
+      if (arbMode === 'pm-bm' && realMinAmount > 0) {
+        const sOpp = opp as SportsOpportunity
+        if (sOpp.sportsLegs?.length > 0) {
+          const pmLeg = sOpp.sportsLegs.find(l => l.platform === 'polymarket')
+          const realTotal = (pmLeg?.pmBestAskQty ?? 0) * opp.totalCost
+          if (realTotal < realMinAmount) return false
+        }
+      }
+
       return true
     })
 
     // Sort
     result = [...result].sort((a, b) => {
       if (sortMode === 'profit') {
-        const pa = a.weightedAvgProfit ?? a.profitPercentage
-        const pb = b.weightedAvgProfit ?? b.profitPercentage
+        const pa = arbMode === 'pm-bm'
+          ? Number(a.profitPercentage) || 0
+          : Number(a.weightedAvgProfit ?? a.profitPercentage) || 0
+        const pb = arbMode === 'pm-bm'
+          ? Number(b.profitPercentage) || 0
+          : Number(b.weightedAvgProfit ?? b.profitPercentage) || 0
         return pb - pa
       }
       if (sortMode === 'profitUsd') {
-        const pa = a.totalGrossProfit ?? 0
-        const pb = b.totalGrossProfit ?? 0
-        return pb - pa
+        const getRealProfit = (o: Opportunity): number => {
+          if (arbMode === 'pm-bm') {
+            const sOpp = o as SportsOpportunity
+            const pmLeg = sOpp.sportsLegs?.find(l => l.platform === 'polymarket')
+            return (pmLeg?.pmBestAskQty ?? 0) * (1 - o.totalCost)
+          }
+          return Number(o.totalGrossProfit) || 0
+        }
+        return getRealProfit(b) - getRealProfit(a)
       }
       // newest
       return new Date(b.foundAt).getTime() - new Date(a.foundAt).getTime()
     })
 
     return result
-  }, [opportunitiesData, searchQuery, minRoi, waitTimeSec, nowMs, typeFilter, effectivePlatforms, sortMode, showPolymarketMin50c])
+  }, [pmpmQuery.data, pmbmQuery.data, searchQuery, minRoi, typeFilter, liveFilter, effectivePlatforms, sortMode, showPolymarketMin50c, arbMode, realMinAmount])
+
+  // PM-BM display list: pinned cards first, then non-pinned filtered cards
+  const displayPmBmOpps = useMemo(() => {
+    if (arbMode !== 'pm-bm') return []
+    const filteredSports = filteredOpportunities.map(o => o as SportsOpportunity)
+    const filteredIds = new Set(filteredSports.map(o => o.id))
+
+    const pinnedList: Array<{ opp: SportsOpportunity; isStale: boolean }> =
+      Array.from(pinnedOpps.entries()).map(([id, saved]) => {
+        const latest = filteredSports.find(o => o.id === id)
+        return { opp: latest ?? saved, isStale: !filteredIds.has(id) }
+      })
+
+    const nonPinned = filteredSports
+      .filter(o => !pinnedOpps.has(o.id))
+      .map(o => ({ opp: o, isStale: false }))
+
+    return [...pinnedList, ...nonPinned]
+  }, [arbMode, filteredOpportunities, pinnedOpps])
 
   const filteredAvgProfit = useMemo(() => {
     if (filteredOpportunities.length === 0) return null
-    const sum = filteredOpportunities.reduce((acc, o) => acc + (o.weightedAvgProfit ?? o.profitPercentage), 0)
+    const getProfit = (o: Opportunity) => arbMode === 'pm-bm' ? o.profitPercentage : (o.weightedAvgProfit ?? o.profitPercentage)
+    const sum = filteredOpportunities.reduce((acc, o) => acc + getProfit(o), 0)
     return sum / filteredOpportunities.length
-  }, [filteredOpportunities])
+  }, [filteredOpportunities, arbMode])
 
   const filteredMaxProfit = useMemo(() => {
     if (filteredOpportunities.length === 0) return null
-    return Math.max(...filteredOpportunities.map((o) => o.weightedAvgProfit ?? o.profitPercentage))
-  }, [filteredOpportunities])
+    const getProfit = (o: Opportunity) => arbMode === 'pm-bm' ? o.profitPercentage : (o.weightedAvgProfit ?? o.profitPercentage)
+    return Math.max(...filteredOpportunities.map(getProfit))
+  }, [filteredOpportunities, arbMode])
 
   const locale = i18n.language === 'ru' ? 'ru' : 'en'
 
@@ -564,224 +806,240 @@ export function Scanner() {
       )}
 
       {!effectiveBlockedReason && <>
-      {/* Stats Bar */}
-      <div className="stats-bar">
-        <div className="stats-item">
-          <span className="stats-label">{t('scanner.statsActive')}</span>
-          <span className="stats-value">{stats?.activeCount ?? '—'}</span>
-        </div>
-        <div className="stats-item">
-          <span className="stats-label">{t('scanner.statsAvgProfit')}</span>
-          <span className="stats-value stats-value--green">
-            {filteredAvgProfit !== null ? `+${filteredAvgProfit.toFixed(2)}%` : '—'}
-          </span>
-        </div>
-        <div className="stats-item">
-          <span className="stats-label">{t('scanner.statsMaxProfit')}</span>
-          <span className="stats-value stats-value--green">
-            {filteredMaxProfit !== null ? `+${filteredMaxProfit.toFixed(2)}%` : '—'}
-          </span>
-        </div>
-        <div className="stats-item">
-          <span className="stats-label">WS:</span>
-          <span className={`stats-ws-badge ${isConnected ? 'stats-ws-badge--online' : 'stats-ws-badge--offline'}`}>
-            {isConnected ? t('scanner.wsConnected') : t('scanner.wsDisconnected')}
-          </span>
-        </div>
-      </div>
-
-      {/* Filter Panel */}
-      <div className="filter-panel">
-        <div className="filter-group filter-search">
-          <input
-            type="text"
-            placeholder={t('scanner.filterPlaceholder')}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="filter-input"
-          />
-        </div>
-
-        <div className="filter-group">
-          <label className="filter-label">{t('scanner.type')}</label>
-          <div className="roi-buttons">
-            {(['all', 'binary', 'multi'] as TypeFilter[]).map((value) => (
+      <div className="scanner-layout">
+        {/* Sidebar */}
+        <aside className="scanner-sidebar">
+          {/* Arb mode switcher */}
+          <div className="sidebar-section">
+            <label className="sidebar-section-label">{t('scanner.arbMode')}</label>
+            <div className="sidebar-mode-buttons">
               <button
-                key={value}
-                className={`roi-button ${typeFilter === value ? 'active' : ''}`}
-                onClick={() => setTypeFilter(value)}
+                className={`sidebar-mode-button ${arbMode === 'pm-pm' ? 'active' : ''}`}
+                onClick={() => handleModeSwitch('pm-pm')}
               >
-                {t(`scanner.type${value.charAt(0).toUpperCase() + value.slice(1)}`)}
+                PM — PM
               </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="filter-group">
-          <label className="filter-label">{t('scanner.sortBy')}</label>
-          <div className="roi-buttons">
-            {(['profit', 'profitUsd', 'newest'] as SortMode[]).map((value) => (
               <button
-                key={value}
-                className={`roi-button ${sortMode === value ? 'active' : ''}`}
-                onClick={() => setSortMode(value)}
+                className={`sidebar-mode-button ${arbMode === 'pm-bm' ? 'active' : ''}`}
+                onClick={() => handleModeSwitch('pm-bm')}
               >
-                {t(`scanner.sort${value.charAt(0).toUpperCase() + value.slice(1)}`)}
+                PM — BK
               </button>
-            ))}
+            </div>
           </div>
-        </div>
 
-        {platformSlugs.length > 0 && (
-          <div className="filter-group">
-            <label className="filter-label">{t('scanner.platforms')}</label>
-            <div className="market-toggles">
-              {platforms?.filter((p) => p.isActive).map((platform) => (
+          {/* Settings — always visible */}
+          <div className="sidebar-section">
+            <label className="sidebar-section-label">{t('scanner.settings')}</label>
+            <div className="settings-panel">
+              <div className="settings-toolbar">
                 <button
-                  key={platform.slug}
-                  className={`market-toggle ${effectivePlatforms[platform.slug] !== false ? 'active' : ''}`}
-                  onClick={() => togglePlatform(platform.slug)}
+                  type="button"
+                  className={`settings-icon-button ${soundEnabled ? 'active' : ''}`}
+                  onClick={() => {
+                    if (!soundEnabled) playOpportunitySound()
+                    setSoundEnabled((prev) => !prev)
+                  }}
+                  aria-label={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+                  title={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+                  style={{ color: '#fff' }}
                 >
-                  [{effectivePlatforms[platform.slug] !== false ? 'x' : ' '}] {platform.name.toUpperCase()}
+                  <span className="settings-icon-content" aria-hidden="true">
+                    {soundEnabled
+                      ? <Volume2 size={16} color="#fff" style={{ stroke: '#fff' }} />
+                      : <VolumeX size={16} color="#fff" style={{ stroke: '#fff' }} />
+                    }
+                  </span>
                 </button>
-              ))}
+
+                <button
+                  type="button"
+                  className={`settings-icon-button settings-icon-button--pause ${isPaused ? 'active' : ''}`}
+                  onClick={() => setIsPaused((prev) => !prev)}
+                  aria-label={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
+                  title={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
+                  style={{ color: '#fff' }}
+                >
+                  <span className="settings-icon-content" aria-hidden="true">
+                    {isPaused
+                      ? <Play size={16} color="#fff" style={{ stroke: '#fff' }} />
+                      : <Pause size={16} color="#fff" style={{ stroke: '#fff' }} />
+                    }
+                  </span>
+                </button>
+              </div>
+
+              {arbMode === 'pm-pm' && (
+                <div className="filter-group">
+                  <label className="filter-label">{t('scanner.sortBy')}</label>
+                  <div className="roi-buttons">
+                    {(['profit', 'profitUsd'] as SortMode[]).map((value) => (
+                      <button
+                        key={value}
+                        className={`roi-button ${sortMode === value ? 'active' : ''}`}
+                        onClick={() => setSortMode(value)}
+                      >
+                        {t(`scanner.sort${value.charAt(0).toUpperCase() + value.slice(1)}`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {arbMode === 'pm-bm' && (
+                <>
+                  <div className="filter-group">
+                    <label className="filter-label">{t('scanner.type')}</label>
+                    <div className="roi-buttons">
+                      {(['all', 'live', 'pre'] as LiveFilter[]).map((value) => (
+                        <button
+                          key={value}
+                          className={`roi-button ${liveFilter === value ? 'active' : ''}`}
+                          onClick={() => setLiveFilter(value)}
+                        >
+                          {t(`scanner.type${value.charAt(0).toUpperCase() + value.slice(1)}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="filter-group">
+                    <label className="filter-label">{t('scanner.sortBy')}</label>
+                    <div className="roi-buttons">
+                      {(['profit', 'profitUsd'] as SortMode[]).map((value) => (
+                        <button
+                          key={value}
+                          className={`roi-button ${sortMode === value ? 'active' : ''}`}
+                          onClick={() => setSortMode(value)}
+                        >
+                          {t(`scanner.sort${value.charAt(0).toUpperCase() + value.slice(1)}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="settings-sliders">
+                <div className="settings-slider-row">
+                  <div className="settings-slider-head">
+                    <span className="settings-slider-label">{t('scanner.settingsMinRoi')}</span>
+                    <span className="settings-slider-value">{minRoi.toFixed(1)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={20}
+                    step={0.1}
+                    value={minRoi}
+                    onChange={(e) => setMinRoi(Number(e.target.value))}
+                    className="settings-range"
+                  />
+                </div>
+              </div>
             </div>
           </div>
-        )}
 
-        <div className="filter-group polymarket-config">
-          <label className="filter-label">{t('scanner.polymarketConfig')}</label>
-          <button
-            type="button"
-            className={`switch-toggle ${showPolymarketMin50c ? 'switch-toggle--active' : ''}`}
-            onClick={() => setShowPolymarketMin50c((prev) => !prev)}
-            aria-pressed={showPolymarketMin50c}
-          >
-            <span className="switch-toggle-label">{t('scanner.showPolymarketAbove50')}</span>
-            <span className="switch-toggle-track">
-              <span className="switch-toggle-thumb" />
-            </span>
-          </button>
+          {/* PM-BM specific settings */}
+          {arbMode === 'pm-bm' && (
+            <>
+              <div className="sidebar-section">
+                <label className="sidebar-section-label">{t('scanner.pmBmConfig')}</label>
+                <div className="settings-sliders">
+                  <div className="settings-slider-row">
+                    <div className="settings-slider-head">
+                      <span className="settings-slider-label">ABSOLUTE ($)</span>
+                      <span className="settings-slider-value">${perfectAmount}</span>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={perfectAmount}
+                      onChange={(e) => setPerfectAmount(Math.max(0, Number(e.target.value)))}
+                      className="settings-number-input"
+                    />
+                  </div>
+                  <div className="settings-slider-row">
+                    <div className="settings-slider-head">
+                      <span className="settings-slider-label">REAL MIN ($)</span>
+                      <span className="settings-slider-value">${realMinAmount}</span>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      step="10"
+                      value={realMinAmount}
+                      onChange={(e) => setRealMinAmount(Math.max(0, Number(e.target.value)))}
+                      className="settings-number-input"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="sidebar-section">
+                <button
+                  type="button"
+                  className={`switch-toggle ${showPolymarketMin50c ? 'switch-toggle--active' : ''}`}
+                  onClick={() => setShowPolymarketMin50c((prev) => !prev)}
+                  aria-pressed={showPolymarketMin50c}
+                >
+                  <span className="switch-toggle-label">{t('scanner.showPolymarketAbove50')}</span>
+                  <span className="switch-toggle-track">
+                    <span className="switch-toggle-thumb" />
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
+        </aside>
+
+        {/* Main content */}
+        <div className="scanner-main">
+
+
+          {/* Opportunities List */}
+          <div className="opportunities-list">
+            {isLoading ? (
+              <div className="empty-state">
+                <p>{t('scanner.loading')}</p>
+              </div>
+            ) : isError ? (
+              <div className="empty-state">
+                <p>{t('scanner.errorLoading')}</p>
+              </div>
+            ) : (arbMode === 'pm-bm' ? displayPmBmOpps.length : filteredOpportunities.length) === 0 ? (
+              <div className="empty-state">
+                <p>{t('scanner.noOpportunities')}</p>
+                <p className="empty-hint">{t('scanner.emptyHint')}</p>
+              </div>
+            ) : arbMode === 'pm-bm' ? (
+              displayPmBmOpps.map(({ opp, isStale }, index) => (
+                <CardErrorBoundary key={`pm-bm-${opp.id}`}>
+                  <SportsOpportunityCard
+                    opp={opp}
+                    index={index}
+                    locale={locale}
+                    perfectAmount={perfectAmount}
+                    isPinned={pinnedOpps.has(opp.id)}
+                    isStale={isStale}
+                    onPin={(o) => setPinnedOpps(prev => new Map(prev).set(o.id, o))}
+                    onUnpin={(id) => setPinnedOpps(prev => { const n = new Map(prev); n.delete(id); return n })}
+                  />
+                </CardErrorBoundary>
+              ))
+            ) : (
+              filteredOpportunities.map((opp, index) => (
+                <CardErrorBoundary key={`pm-pm-${opp.id}`}>
+                  <OpportunityCard opp={opp} index={index} locale={locale} arbMode={arbMode} />
+                </CardErrorBoundary>
+              ))
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="scanner-footer">
+            <p>{t('scanner.opportunitiesFound', { count: filteredOpportunities.length })}</p>
+            <p className="scanner-disclaimer">{t('scanner.disclaimerText')}</p>
+          </div>
         </div>
-
-        <div className="filter-group scanner-settings">
-          <label className="filter-label">{t('scanner.settings')}</label>
-          <div className="settings-panel">
-            <div className="settings-toolbar">
-              <button
-                type="button"
-                className={`settings-icon-button ${soundEnabled ? 'active' : ''}`}
-                onClick={() => setSoundEnabled((prev) => !prev)}
-                aria-label={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
-                title={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
-                style={{ color: '#fff' }}
-              >
-                <span className="settings-icon-content" aria-hidden="true">
-                  {soundEnabled
-                    ? <Volume2 size={16} color="#fff" style={{ stroke: '#fff' }} />
-                    : <VolumeX size={16} color="#fff" style={{ stroke: '#fff' }} />
-                  }
-                </span>
-              </button>
-
-              <button
-                type="button"
-                className={`settings-icon-button settings-icon-button--pause ${isPaused ? 'active' : ''}`}
-                onClick={() => setIsPaused((prev) => !prev)}
-                aria-label={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
-                title={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
-                style={{ color: '#fff' }}
-              >
-                <span className="settings-icon-content" aria-hidden="true">
-                  {isPaused
-                    ? <Play size={16} color="#fff" style={{ stroke: '#fff' }} />
-                    : <Pause size={16} color="#fff" style={{ stroke: '#fff' }} />
-                  }
-                </span>
-              </button>
-            </div>
-
-            <div className="settings-sliders">
-              <div className="settings-slider-row">
-                <div className="settings-slider-head">
-                  <span className="settings-slider-label">{t('scanner.settingsMinRoi')}</span>
-                  <span className="settings-slider-value">{minRoi.toFixed(1)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={20}
-                  step={0.1}
-                  value={minRoi}
-                  onChange={(e) => setMinRoi(Number(e.target.value))}
-                  className="settings-range"
-                />
-              </div>
-
-              <div className="settings-slider-row">
-                <div className="settings-slider-head">
-                  <span className="settings-slider-label">{t('scanner.settingsSoundRoi')}</span>
-                  <span className="settings-slider-value settings-slider-value--accent">{soundRoi.toFixed(1)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={20}
-                  step={0.1}
-                  value={soundRoi}
-                  onChange={(e) => setSoundRoi(Number(e.target.value))}
-                  className="settings-range"
-                />
-              </div>
-
-              <div className="settings-slider-row">
-                <div className="settings-slider-head">
-                  <span className="settings-slider-label">{t('scanner.settingsWaitTime')}</span>
-                  <span className="settings-slider-value">{waitTimeSec}s</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={120}
-                  step={1}
-                  value={waitTimeSec}
-                  onChange={(e) => setWaitTimeSec(Number(e.target.value))}
-                  className="settings-range"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Opportunities List */}
-      <div className="opportunities-list">
-        {isLoading ? (
-          <div className="empty-state">
-            <p>{t('scanner.loading')}</p>
-          </div>
-        ) : isError ? (
-          <div className="empty-state">
-            <p>{t('scanner.errorLoading')}</p>
-          </div>
-        ) : filteredOpportunities.length === 0 ? (
-          <div className="empty-state">
-            <p>{t('scanner.noOpportunities')}</p>
-            <p className="empty-hint">{t('scanner.emptyHint')}</p>
-          </div>
-        ) : (
-          filteredOpportunities.map((opp, index) => (
-            <CardErrorBoundary key={opp.id}>
-              <OpportunityCard opp={opp} index={index} locale={locale} />
-            </CardErrorBoundary>
-          ))
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="scanner-footer">
-        <p>{t('scanner.opportunitiesFound', { count: filteredOpportunities.length })}</p>
-        <p className="scanner-disclaimer">{t('scanner.disclaimerText')}</p>
       </div>
       </>}
     </div>

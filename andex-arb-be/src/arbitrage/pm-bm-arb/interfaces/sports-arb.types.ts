@@ -20,6 +20,8 @@ export interface PmMarket {
   outcomeNames: string[];
   /** Probabilities 0..1 (updated via CLOB WS) */
   outcomePrices: number[];
+  /** Best ask quantity at each price level (updated via CLOB WS) */
+  outcomeQtys: number[];
   tokenIds: string[];
 }
 
@@ -84,6 +86,8 @@ export interface SportsArbLeg {
   probability: number;
   /** Decimal odds = 1 / probability */
   decimalOdds: number;
+  /** PM only: contracts available at best ask */
+  pmBestAskQty?: number;
 }
 
 export interface SportsArbitrageOpportunity {
@@ -100,5 +104,9 @@ export interface SportsArbitrageOpportunity {
   totalCost: number;
   /** (1 - totalCost) / totalCost * 100 */
   profitPercent: number;
+  /** Timestamp of the latest scan that confirmed this opportunity */
   detectedAt: number;
+  /** Timestamp when this opportunity was first detected (stable across rescans) */
+  firstDetectedAt: number;
+  isLive: boolean;
 }

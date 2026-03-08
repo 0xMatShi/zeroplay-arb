@@ -12,6 +12,7 @@ import type {
   ActiveSubscriptionDto,
   SubscriptionHistoryItemDto,
   OpportunitiesResponse,
+  SportsOpportunitiesResponse,
   StatsResponse,
   Platform,
   OrderBookAnalysisResponse,
@@ -224,6 +225,27 @@ export const subscriptionsApi = {
 
   getHistory: async (): Promise<SubscriptionHistoryItemDto[]> => {
     const response = await fetch(`${getBackendUrl()}/subscriptions/history`, {
+      method: 'GET',
+      headers: createHeaders(true),
+    })
+    return handleResponse(response)
+  },
+}
+
+/**
+ * Sports Arbitrage API — PM vs BM (requires auth + active subscription)
+ */
+export const sportsArbApi = {
+  getOpportunities: async (): Promise<SportsOpportunitiesResponse> => {
+    const response = await fetch(
+      `${getBackendUrl()}/sports-arbitrage/opportunities`,
+      { method: 'GET', headers: createHeaders(true) }
+    )
+    return handleResponse(response)
+  },
+
+  getStats: async (): Promise<StatsResponse> => {
+    const response = await fetch(`${getBackendUrl()}/sports-arbitrage/stats`, {
       method: 'GET',
       headers: createHeaders(true),
     })

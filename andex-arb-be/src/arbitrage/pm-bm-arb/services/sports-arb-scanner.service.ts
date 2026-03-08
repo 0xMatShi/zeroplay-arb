@@ -55,10 +55,15 @@ export class SportsArbScanner {
   ): SportsArbitrageOpportunity | null {
     const { pmMarket, dexMarket } = mp;
 
-    // PM outcomes: names + probabilities
+    // Skip resolved PM markets: if any outcome price is near 0 (<2¢),
+    // the market is already settled (e.g. completed CS:GO map) — not a real arb.
+    if (Math.min(...pmMarket.outcomePrices) < 0.02) return null;
+
+    // PM outcomes: names + probabilities + best ask qty
     const pmOutcomes = pmMarket.outcomeNames.map((name, i) => ({
       name,
       probability: pmMarket.outcomePrices[i] ?? 0,
+      qty: pmMarket.outcomeQtys?.[i] ?? 0,
     }));
 
     // DEX outcomes: names + decimal odds → probability
@@ -88,6 +93,7 @@ export class SportsArbScanner {
           outcomeName: pmOut.name,
           probability: pmProb,
           decimalOdds: pmProb > 0 ? 1 / pmProb : 0,
+          pmBestAskQty: pmOut.qty,
         });
         totalCost += pmProb;
       } else {
@@ -110,7 +116,7 @@ export class SportsArbScanner {
     if (profitPercent < this.MIN_PROFIT_PCT) return null;
 
     const id = createHash('sha256')
-      .update(`arb:${match.id}:${mp.pmType}:${Date.now()}`)
+      .update(`arb:${match.id}:${mp.pmType}:${mp.pmMarket.conditionId}:${mp.dexMarket.marketId}`)
       .digest('hex')
       .slice(0, 16);
 
@@ -126,6 +132,8 @@ export class SportsArbScanner {
       totalCost,
       profitPercent,
       detectedAt: Date.now(),
+      firstDetectedAt: Date.now(),
+      isLive: match.dexEvent.isLive,
     };
   }
 

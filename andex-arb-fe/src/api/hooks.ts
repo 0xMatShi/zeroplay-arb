@@ -6,6 +6,7 @@ import {
   paymentsApi,
   subscriptionsApi,
   arbitrageApi,
+  sportsArbApi,
 } from './client'
 import type {
   RequestSiweDto,
@@ -57,6 +58,8 @@ export const queryKeys = {
   arbitrageStats: ['arbitrage', 'stats'] as const,
   platforms: ['arbitrage', 'platforms'] as const,
   orderBook: (id: string) => ['arbitrage', 'orderbook', id] as const,
+  sportsOpportunities: ['sports-arbitrage', 'opportunities'] as const,
+  sportsStats: ['sports-arbitrage', 'stats'] as const,
 }
 
 /**
@@ -214,6 +217,22 @@ export const usePlatforms = () => {
   return useQuery({
     queryKey: queryKeys.platforms,
     queryFn: arbitrageApi.getPlatforms,
+  })
+}
+
+export const useSportsOpportunities = (paused = false) => {
+  return useQuery({
+    queryKey: queryKeys.sportsOpportunities,
+    queryFn: sportsArbApi.getOpportunities,
+    refetchInterval: paused ? false : 5_000,
+  })
+}
+
+export const useSportsStats = () => {
+  return useQuery({
+    queryKey: queryKeys.sportsStats,
+    queryFn: sportsArbApi.getStats,
+    refetchInterval: 5_000,
   })
 }
 

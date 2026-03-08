@@ -10,7 +10,7 @@ const CLOB_WS = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
 
 const FETCH_INTERVAL_MS = 10 * 60_000;
 const WS_RECONNECT_DELAY_MS = 5_000;
-const WS_PING_INTERVAL_MS = 15_000;
+const WS_PING_INTERVAL_MS = 9_000;
 const PM_PAGE = 500;
 
 /**
@@ -25,6 +25,8 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
   private readonly eventCache = new Map<string, PmSportsEvent>();
   /** tokenId → { eventId, marketIndex } for WS price updates */
   private readonly tokenIndex = new Map<string, { eventId: string; conditionId: string; outcomeIdx: number }>();
+  /** Only tokens from matched events — set by subscribeToMatchedEvents() */
+  private activeTokenIds = new Set<string>();
 
   private ws: Ws.WebSocket | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -36,8 +38,8 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
   onPriceUpdate: (() => void) | null = null;
 
   onModuleInit(): void {
-    this.fetchAndConnect();
-    this.fetchTimer = setInterval(() => this.fetchAndConnect(), FETCH_INTERVAL_MS);
+    this.fetchEvents();
+    this.fetchTimer = setInterval(() => this.fetchEvents(), FETCH_INTERVAL_MS);
   }
 
   onModuleDestroy(): void {
@@ -52,12 +54,31 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
     return [...this.eventCache.values()];
   }
 
-  // ── Fetch events from Gamma API ──────────────────────────────
+  /**
+   * Subscribe WS only to tokens belonging to matched event IDs.
+   * Called by scheduler after findMatches().
+   */
+  subscribeToMatchedEvents(eventIds: string[]): void {
+    const matchedTokenIds: string[] = [];
+    for (const [tokenId, ref] of this.tokenIndex) {
+      if (eventIds.includes(ref.eventId)) {
+        matchedTokenIds.push(tokenId);
+      }
+    }
 
-  private async fetchAndConnect(): Promise<void> {
-    await this.fetchEvents();
+    if (matchedTokenIds.length === 0) {
+      this.logger.log('PolymarketSports: no matched tokens to subscribe');
+      return;
+    }
+
+    this.activeTokenIds = new Set(matchedTokenIds);
     this.connectWs();
+    this.logger.log(
+      `PolymarketSports: subscribing to ${matchedTokenIds.length} tokens from ${eventIds.length} matched events`,
+    );
   }
+
+  // ── Fetch events from Gamma API ──────────────────────────────
 
   private async fetchEvents(): Promise<void> {
     let offset = 0;
@@ -107,6 +128,7 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
               question: m.question ?? '',
               outcomeNames,
               outcomePrices,
+              outcomeQtys: new Array(outcomeNames.length).fill(0),
               tokenIds,
             });
 
@@ -123,18 +145,24 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
           if (markets.length === 0) continue;
 
           const existing = this.eventCache.get(String(raw.id));
-          const event: PmSportsEvent = {
-            id: String(raw.id),
-            title: raw.title,
-            sportKey,
-            slug: raw.slug ?? '',
-            markets: existing
-              ? this.mergeMarkets(existing.markets, markets)
-              : markets,
-            updatedAt: Date.now(),
-          };
-
-          this.eventCache.set(event.id, event);
+          if (existing) {
+            // Update in-place to preserve references held by currentMatches in scheduler
+            existing.title = raw.title;
+            existing.sportKey = sportKey;
+            existing.slug = raw.slug ?? '';
+            existing.markets = this.mergeMarkets(existing.markets, markets);
+            existing.updatedAt = Date.now();
+          } else {
+            const event: PmSportsEvent = {
+              id: String(raw.id),
+              title: raw.title,
+              sportKey,
+              slug: raw.slug ?? '',
+              markets,
+              updatedAt: Date.now(),
+            };
+            this.eventCache.set(event.id, event);
+          }
           totalEvents++;
           totalMarkets += markets.length;
         }
@@ -151,14 +179,22 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Merge new markets keeping WS-updated prices from existing ones */
+  /** Merge new markets keeping WS-updated prices; reuse existing objects to preserve references */
   private mergeMarkets(existing: PmMarket[], fresh: PmMarket[]): PmMarket[] {
     const existingMap = new Map(existing.map((m) => [m.conditionId, m]));
     return fresh.map((m) => {
       const old = existingMap.get(m.conditionId);
       if (old) {
-        // Keep WS-updated prices if fresher
-        return { ...m, outcomePrices: old.outcomePrices };
+        // Update existing object in-place — scanner/scheduler hold references to it
+        old.sportsMarketType = m.sportsMarketType;
+        old.question = m.question;
+        old.outcomeNames = m.outcomeNames;
+        old.tokenIds = m.tokenIds;
+        // Keep outcomePrices/outcomeQtys as-is (WS keeps them fresh)
+        if (!old.outcomeQtys || old.outcomeQtys.length !== m.outcomeNames.length) {
+          old.outcomeQtys = new Array(m.outcomeNames.length).fill(0);
+        }
+        return old;
       }
       return m;
     });
@@ -185,7 +221,7 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
 
       if (this.pingTimer) clearInterval(this.pingTimer);
       this.pingTimer = setInterval(() => {
-        if (ws.readyState === Ws.WebSocket.OPEN) ws.ping();
+        if (ws.readyState === Ws.WebSocket.OPEN) ws.send('PING');
       }, WS_PING_INTERVAL_MS);
     });
 
@@ -209,27 +245,64 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
   }
 
   private subscribeAll(): void {
-    const tokenIds = [...this.tokenIndex.keys()];
+    const tokenIds = [...this.activeTokenIds];
     if (tokenIds.length === 0) return;
 
     const CHUNK = 200;
     for (let i = 0; i < tokenIds.length; i += CHUNK) {
       const chunk = tokenIds.slice(i, i + CHUNK);
-      this.ws?.send(JSON.stringify({ auth: {}, assets_ids: chunk, type: 'market' }));
+      this.ws?.send(JSON.stringify({ assets_ids: chunk, type: 'market', custom_feature_enabled: true }));
     }
     this.logger.log(`PolymarketSports WS: subscribed to ${tokenIds.length} tokens`);
   }
 
   private handleWsMessage(str: string): void {
+    if (str === 'PONG') return;
     const parsed = JSON.parse(str);
     const items: any[] = Array.isArray(parsed) ? parsed : [parsed];
 
     for (const msg of items) {
-      if (msg.event_type !== 'book') continue;
+      if (msg.event_type === 'book') {
+        this.handleBookMsg(msg);
+      } else if (msg.event_type === 'price_change') {
+        this.handlePriceChangeMsg(msg);
+      }
+    }
+  }
 
-      const tokenId: string = msg.asset_id ?? '';
+  private handleBookMsg(msg: any): void {
+    const tokenId: string = msg.asset_id ?? '';
+    const ref = this.tokenIndex.get(tokenId);
+    if (!ref) return;
+
+    const event = this.eventCache.get(ref.eventId);
+    if (!event) return;
+
+    const market = event.markets.find((m) => m.conditionId === ref.conditionId);
+    if (!market) return;
+
+    const asks: any[] = [...(msg.asks ?? [])].sort(
+      (a: any, b: any) => parseFloat(a.price) - parseFloat(b.price),
+    );
+
+    const bestAsk = asks[0];
+    if (!bestAsk) return;
+
+    const bestAskQty = parseFloat(bestAsk.size ?? '0') || 0;
+    this.applyPrice(market, event, ref.outcomeIdx, parseFloat(bestAsk.price), bestAskQty);
+  }
+
+  private handlePriceChangeMsg(msg: any): void {
+    for (const change of (msg.price_changes ?? [])) {
+      const tokenId: string = change.asset_id ?? '';
       const ref = this.tokenIndex.get(tokenId);
       if (!ref) continue;
+
+      // price_change provides best_ask directly — no need to reconstruct the book
+      const bestAsk = change.best_ask != null ? parseFloat(change.best_ask) : NaN;
+      if (!isFinite(bestAsk) || bestAsk <= 0) continue;
+
+      const bestAskQty = change.best_ask_size != null ? parseFloat(change.best_ask_size) : undefined;
 
       const event = this.eventCache.get(ref.eventId);
       if (!event) continue;
@@ -237,32 +310,20 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
       const market = event.markets.find((m) => m.conditionId === ref.conditionId);
       if (!market) continue;
 
-      const bids: any[] = [...(msg.bids ?? [])].sort(
-        (a: any, b: any) => parseFloat(b.price) - parseFloat(a.price),
-      );
-      const asks: any[] = [...(msg.asks ?? [])].sort(
-        (a: any, b: any) => parseFloat(a.price) - parseFloat(b.price),
-      );
+      this.applyPrice(market, event, ref.outcomeIdx, bestAsk, bestAskQty);
+    }
+  }
 
-      const bestBid = bids[0];
-      const bestAsk = asks[0];
-      if (!bestBid && !bestAsk) continue;
-
-      const midPrice =
-        bestBid && bestAsk
-          ? (parseFloat(bestBid.price) + parseFloat(bestAsk.price)) / 2
-          : parseFloat(bestAsk?.price ?? bestBid?.price ?? '0');
-
-      if (midPrice > 0 && ref.outcomeIdx < market.outcomePrices.length) {
-        const oldPrice = market.outcomePrices[ref.outcomeIdx];
-        market.outcomePrices[ref.outcomeIdx] = midPrice;
-        event.updatedAt = Date.now();
-
-        // Notify scheduler about price change
-        if (Math.abs(oldPrice - midPrice) > 0.001) {
-          this.onPriceUpdate?.();
-        }
-      }
+  private applyPrice(market: PmMarket, event: PmSportsEvent, outcomeIdx: number, price: number, qty?: number): void {
+    if (outcomeIdx >= market.outcomePrices.length) return;
+    const oldPrice = market.outcomePrices[outcomeIdx];
+    market.outcomePrices[outcomeIdx] = price;
+    if (qty !== undefined && outcomeIdx < market.outcomeQtys.length) {
+      market.outcomeQtys[outcomeIdx] = qty;
+    }
+    event.updatedAt = Date.now();
+    if (Math.abs(oldPrice - price) > 0.001) {
+      this.onPriceUpdate?.();
     }
   }
 

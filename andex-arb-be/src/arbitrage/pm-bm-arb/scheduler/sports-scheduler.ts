@@ -6,14 +6,11 @@ import { SportsMatcher } from '../services/sports-matcher.service';
 import { SportsArbScanner } from '../services/sports-arb-scanner.service';
 import { SportsMatch, SportsArbitrageOpportunity } from '../interfaces/sports-arb.types';
 
-/** Debounce delay for reactive scans (ms). Prevents scanning on every single WS tick. */
-const SCAN_DEBOUNCE_MS = 200;
-
 /**
  * Sports Arbitrage pipeline:
  *
  *  Cron (every 5 min): Re-match Polymarket sports events with DexSport events.
- *  Reactive:           On any price change from either WS, debounced re-scan
+ *  Reactive:           On any price change from either WS, immediate re-scan
  *                      of all matched pairs for arbitrage.
  *
  * Both adapters maintain persistent WS connections. Prices are updated
@@ -29,11 +26,15 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   /** Latest detected opportunities */
   private currentOpportunities: SportsArbitrageOpportunity[] = [];
 
-  /** Debounce timer for reactive scans */
-  private scanDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Tracks when each opportunity was first detected (by stable ID) */
+  private firstSeenMap: Map<string, number> = new Map();
 
   /** Initial delay timer */
   private initTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Debounce timer for reactive price-update scans */
+  private scanDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly SCAN_DEBOUNCE_MS = 200;
 
   constructor(
     private readonly polyAdapter: PolymarketSportsAdapter,
@@ -43,7 +44,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    // Register reactive price change handlers on both adapters
+    // Register reactive price change handlers on both adapters (debounced)
     const handler = () => this.scheduleScan();
     this.polyAdapter.onPriceUpdate = handler;
     this.dexAdapter.onPriceUpdate = handler;
@@ -53,8 +54,8 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy(): void {
-    if (this.scanDebounceTimer) { clearTimeout(this.scanDebounceTimer); this.scanDebounceTimer = null; }
     if (this.initTimer) { clearTimeout(this.initTimer); this.initTimer = null; }
+    if (this.scanDebounceTimer) { clearTimeout(this.scanDebounceTimer); this.scanDebounceTimer = null; }
     this.polyAdapter.onPriceUpdate = null;
     this.dexAdapter.onPriceUpdate = null;
   }
@@ -71,32 +72,54 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       this.currentMatches = this.matcher.findMatches();
       this.logger.log(`Sports match cycle: ${this.currentMatches.length} matched pairs`);
 
-      // Immediately scan after fresh match
+      // Subscribe PM WS only to live events (pre-match markets have very low WS activity)
+      const liveMatches = this.currentMatches.filter((m) => m.dexEvent.isLive);
+      const liveEventIds = [...new Set(liveMatches.map((m) => m.pmEvent.id))];
+      this.logger.log(`Sports match cycle: ${liveMatches.length} live matches out of ${this.currentMatches.length} total`);
+      if (liveEventIds.length > 0) {
+        this.polyAdapter.subscribeToMatchedEvents(liveEventIds);
+      } else {
+        this.logger.warn('No live matched events found — PM WS not subscribed');
+      }
+
+      // Immediately scan after fresh match (no debounce — explicit trigger)
       this.runScanNow();
     } catch (err: any) {
       this.logger.error(`Sports match cycle failed: ${err.message}`);
     }
   }
 
-  // ── Reactive scan (debounced, triggered by WS price changes) ──
-
-  /**
-   * Called by adapter price change callbacks.
-   * Debounces to avoid scanning on every WS tick.
-   */
+  /** Debounce reactive scans: coalesce rapid price updates into a single scan */
   private scheduleScan(): void {
-    if (this.scanDebounceTimer) return; // already scheduled
+    if (this.scanDebounceTimer) clearTimeout(this.scanDebounceTimer);
     this.scanDebounceTimer = setTimeout(() => {
       this.scanDebounceTimer = null;
       this.runScanNow();
-    }, SCAN_DEBOUNCE_MS);
+    }, this.SCAN_DEBOUNCE_MS);
   }
 
   private runScanNow(): void {
     if (this.currentMatches.length === 0) return;
 
     try {
-      this.currentOpportunities = this.scanner.scan(this.currentMatches);
+      const scanned = this.scanner.scan(this.currentMatches);
+
+      // Preserve firstDetectedAt for opportunities seen in previous scans
+      const now = Date.now();
+      const activeIds = new Set<string>();
+      for (const opp of scanned) {
+        const first = this.firstSeenMap.get(opp.id) ?? now;
+        this.firstSeenMap.set(opp.id, first);
+        opp.firstDetectedAt = first;
+        activeIds.add(opp.id);
+      }
+
+      // Remove IDs that are no longer active
+      for (const id of this.firstSeenMap.keys()) {
+        if (!activeIds.has(id)) this.firstSeenMap.delete(id);
+      }
+
+      this.currentOpportunities = scanned;
     } catch (err: any) {
       this.logger.error(`Sports scan cycle failed: ${err.message}`);
     }
