@@ -7,7 +7,7 @@
 
 @font-face {
   font-family: 'SF Pro Text';
-  src: url('/fonts/SFProText-Bold.ttf') format('truetype');
+  src: url('/fonts/SFProText-Light.ttf') format('truetype');
   font-weight: 700;
   font-style: normal;
 }
