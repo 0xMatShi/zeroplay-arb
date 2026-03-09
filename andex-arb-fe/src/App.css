@@ -5061,6 +5061,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
+  margin-left: auto;
 }
 
 .sports-platform-box {
