@@ -170,7 +170,7 @@
     "checkStatus": "Я ОПЛАТИЛ / ПРОВЕРИТЬ СТАТУС"
   },
   "scanner": {
-    "title": "АРБИТРАЖ СКАНЕР",
+    "title": "ZeroPlay",
     "systemLabel": "СИСТЕМА:",
     "scanning": "СКАНИРОВАНИЕ...",
     "backToDashboard": "НАЗАД В ПАНЕЛЬ",
@@ -183,6 +183,8 @@
     "typeMulti": "MULTI",
     "typeLive": "ЛАЙВ",
     "typePre": "ПРЕ",
+    "platforms": "Площадки:",
+    "sports": "Спорт:",
     "sortBy": "Сорт.:",
     "sortProfit": "ПРИБЫЛЬ %",
     "sortProfitUsd": "ПРИБЫЛЬ $",

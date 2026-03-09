@@ -56,12 +56,6 @@ function OrderBookPanel({ data, isLoading, isError, isOpen, locale }: {
   const summaryRow = ob && tiersSummary ? (
     <div className="ob-summary">
       <div className="ob-summary-item">
-        <span className="ob-summary-label">{t('scanner.tiersBestProfit')}</span>
-        <span className="ob-summary-value ob-summary-value--green">
-          {hasTiers ? `+${tiersSummary.bestProfitPercentage.toFixed(2)}%` : '—'}
-        </span>
-      </div>
-      <div className="ob-summary-item">
         <span className="ob-summary-label">{t('scanner.tiersTotalContracts')}</span>
         <span className={`ob-summary-value ${!hasTiers ? 'ob-summary-value--warn' : ''}`}>
           {hasTiers ? tiersSummary.totalQuantity.toFixed(0) : t('scanner.noTiers')}
@@ -70,16 +64,6 @@ function OrderBookPanel({ data, isLoading, isError, isOpen, locale }: {
       <div className="ob-summary-item">
         <span className="ob-summary-label">{t('scanner.tiersTotalInvestment')}</span>
         <span className="ob-summary-value">${tiersSummary.totalInvestment.toFixed(2)}</span>
-      </div>
-      <div className="ob-summary-item">
-        <span className="ob-summary-label">{t('scanner.tiersTotalGrossProfit')}</span>
-        <span className="ob-summary-value ob-summary-value--green">
-          ${tiersSummary.totalGrossProfit.toFixed(2)}
-        </span>
-      </div>
-      <div className="ob-summary-item">
-        <span className="ob-summary-label">{t('scanner.tiersAvgProfit')}</span>
-        <span className="ob-summary-value">+{tiersSummary.weightedAvgProfit.toFixed(2)}%</span>
       </div>
     </div>
   ) : null
@@ -206,9 +190,11 @@ function OpportunityCard({
         <div className="opp-header-right">
           {(() => {
             const displayProfit = opp.weightedAvgProfit ?? opp.profitPercentage
+            const grossProfit = opp.totalGrossProfit
             return (
               <span className={`opp-profit ${displayProfit < 0.5 ? 'opp-profit--dim' : ''}`}>
                 {t('scanner.profit', { value: displayProfit.toFixed(2) })}
+                {grossProfit != null && ` | +$${grossProfit.toFixed(2)}`}
               </span>
             )
           })()}
@@ -219,6 +205,9 @@ function OpportunityCard({
       <div className="opp-legs">
         {opp.legs.map((leg, legIndex) => {
           const obLeg = ob?.legs?.[legIndex]
+          const legInvestment = ob?.tiers?.tiers?.reduce(
+            (sum, tier) => sum + tier.quantity * (tier.legPrices[legIndex]?.price ?? 0), 0
+          ) ?? 0
           return (
           <div key={legIndex} className="arb-leg">
             <div className="leg-platform">{leg.platformName}</div>
@@ -228,6 +217,7 @@ function OpportunityCard({
             </div>
             <div className="leg-price">
               ${(obLeg ? obLeg.effectivePrice : leg.price).toFixed(2)}
+              {legInvestment > 0 && <span className="leg-investment"> | ${legInvestment.toFixed(2)}</span>}
             </div>
             {leg.url && (
               <a
@@ -330,7 +320,9 @@ function SportsOpportunityCard({
   const realTotal = pmQty * totalCost
   const profitUsd = realTotal > 0 ? realTotal * (profitPct / 100) : 0
 
-  const sportLabel = (opp.sportKey ?? '').toUpperCase()
+  const SPORT_DISPLAY: Record<string, string> = { csgo: 'CS2' }
+  const sportKey = opp.sportKey ?? ''
+  const sportLabel = SPORT_DISPLAY[sportKey] ?? sportKey.toUpperCase()
   const secsAgo = Math.floor((Date.now() - new Date(opp.lastValidatedAt).getTime()) / 1000)
   const displayMarketType = opp.dexMarketName || formatMarketType(opp.marketType)
 
@@ -446,8 +438,15 @@ function SportsOpportunityCard({
           className="sports-action-btn sports-action-btn--open"
           onClick={(e) => {
             e.stopPropagation()
-            if (pmLeg?.url) window.open(pmLeg.url, '_blank', 'noopener,noreferrer')
-            if (dexLeg?.url) window.open(dexLeg.url, '_blank', 'noopener,noreferrer')
+            const openTab = (url: string) => {
+              const a = document.createElement('a')
+              a.href = url
+              a.target = '_blank'
+              a.rel = 'noopener noreferrer'
+              a.click()
+            }
+            if (pmLeg?.url) openTab(pmLeg.url)
+            if (dexLeg?.url) openTab(dexLeg.url)
           }}
         >
           {t('scanner.open')}
@@ -480,9 +479,12 @@ export function Scanner() {
   // Filters
   const [searchQuery] = useState('')
   const [minRoi, setMinRoi] = useState(0.5)
-  const [selectedPlatforms] = useState<Record<string, boolean>>({})
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({})
   const [typeFilter] = useState<TypeFilter>('all')
   const [liveFilter, setLiveFilter] = useState<LiveFilter>('all')
+  const [sportFilter, setSportFilter] = useState<Set<string>>(new Set())
+  const [platformsOpen, setPlatformsOpen] = useState(false)
+  const [sportsOpen, setSportsOpen] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('profit')
   const [showPolymarketMin50c, setShowPolymarketMin50c] = useState(true)
   const [soundEnabled, setSoundEnabled] = useState(true)
@@ -599,17 +601,15 @@ export function Scanner() {
     return platforms.filter((p) => p.isActive).map((p) => p.slug)
   }, [platforms])
 
+  const STATIC_PLATFORM_SLUGS = ['polymarket', 'kalshi', 'opinion', 'probable', 'predict.fun']
+
   // Effective selected platforms — default to all enabled
   const effectivePlatforms = useMemo(() => {
-    if (Object.keys(selectedPlatforms).length === 0 && platformSlugs.length > 0) {
-      const defaults: Record<string, boolean> = {}
-      platformSlugs.forEach((slug) => {
-        defaults[slug] = true
-      })
-      return defaults
+    if (Object.keys(selectedPlatforms).length === 0) {
+      return Object.fromEntries(STATIC_PLATFORM_SLUGS.map(s => [s, true]))
     }
     return selectedPlatforms
-  }, [selectedPlatforms, platformSlugs])
+  }, [selectedPlatforms])
 
 
   // Filter & sort opportunities
@@ -669,6 +669,12 @@ export function Scanner() {
         }
       }
 
+      // Sport filter
+      if (arbMode === 'pm-bm' && sportFilter.size > 0) {
+        const sOpp = opp as SportsOpportunity
+        if (!sportFilter.has(sOpp.sportKey)) return false
+      }
+
       // REAL MIN filter — hide cards where PM liquidity is below threshold
       if (arbMode === 'pm-bm' && realMinAmount > 0) {
         const sOpp = opp as SportsOpportunity
@@ -709,7 +715,7 @@ export function Scanner() {
     })
 
     return result
-  }, [pmpmQuery.data, pmbmQuery.data, searchQuery, minRoi, typeFilter, liveFilter, effectivePlatforms, sortMode, showPolymarketMin50c, arbMode, realMinAmount])
+  }, [pmpmQuery.data, pmbmQuery.data, searchQuery, minRoi, typeFilter, liveFilter, effectivePlatforms, sortMode, showPolymarketMin50c, arbMode, realMinAmount, sportFilter])
 
   // PM-BM display list: pinned cards first, then non-pinned filtered cards
   const displayPmBmOpps = useMemo(() => {
@@ -748,7 +754,7 @@ export function Scanner() {
       {/* Header */}
       <div className="scanner-header">
         <div className="scanner-header-left">
-          <h1 className="scanner-title">{t('scanner.title')}</h1>
+          <h1 className="scanner-title scanner-title--link" data-text={t('scanner.title')} onClick={() => navigate('/')}>{t('scanner.title')}</h1>
           <div className="scanner-status">
             <span className="status-label">{t('scanner.systemLabel')}</span>
             <span className="status-value">
@@ -851,81 +857,8 @@ export function Scanner() {
           <div className="sidebar-section">
             <div className="settings-panel">
 
-              {arbMode === 'pm-pm' && (
-                <div className="filter-group">
-                  <label className="filter-label">{t('scanner.sortBy')}</label>
-                  <div className="roi-buttons">
-                    {(['profit', 'profitUsd'] as SortMode[]).map((value) => (
-                      <button
-                        key={value}
-                        className={`roi-button ${sortMode === value ? 'active' : ''}`}
-                        onClick={() => setSortMode(value)}
-                      >
-                        {t(`scanner.sort${value.charAt(0).toUpperCase() + value.slice(1)}`)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
               {arbMode === 'pm-bm' && (
-                <>
-                  <div className="filter-group">
-                    <label className="filter-label">{t('scanner.type')}</label>
-                    <div className="roi-buttons">
-                      {(['all', 'live', 'pre'] as LiveFilter[]).map((value) => (
-                        <button
-                          key={value}
-                          className={`roi-button ${liveFilter === value ? 'active' : ''}`}
-                          onClick={() => setLiveFilter(value)}
-                        >
-                          {t(`scanner.type${value.charAt(0).toUpperCase() + value.slice(1)}`)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="filter-group">
-                    <label className="filter-label">{t('scanner.sortBy')}</label>
-                    <div className="roi-buttons">
-                      {(['profit', 'profitUsd'] as SortMode[]).map((value) => (
-                        <button
-                          key={value}
-                          className={`roi-button ${sortMode === value ? 'active' : ''}`}
-                          onClick={() => setSortMode(value)}
-                        >
-                          {t(`scanner.sort${value.charAt(0).toUpperCase() + value.slice(1)}`)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <div className="settings-sliders">
-                <div className="settings-slider-row">
-                  <div className="settings-slider-head">
-                    <span className="settings-slider-label">{t('scanner.settingsMinRoi')}</span>
-                    <span className="settings-slider-value">{minRoi.toFixed(1)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={20}
-                    step={0.1}
-                    value={minRoi}
-                    onChange={(e) => setMinRoi(Number(e.target.value))}
-                    className="settings-range"
-                    style={{ '--fill': `${(minRoi / 20) * 100}%` } as React.CSSProperties}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* PM-BM specific settings */}
-          {arbMode === 'pm-bm' && (
-            <>
-              <div className="sidebar-section">
-<div className="settings-sliders">
+                <div className="settings-sliders">
                   <div className="settings-slider-row">
                     <div className="settings-slider-head">
                       <span className="settings-slider-label">ABSOLUTE ($)</span>
@@ -955,22 +888,165 @@ export function Scanner() {
                     />
                   </div>
                 </div>
+              )}
+
+              <div className="settings-sliders">
+                <div className="settings-slider-row">
+                  <div className="settings-slider-head">
+                    <span className="settings-slider-label">{t('scanner.settingsMinRoi')}</span>
+                    <span className="settings-slider-value">{minRoi.toFixed(1)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={20}
+                    step={0.1}
+                    value={minRoi}
+                    onChange={(e) => setMinRoi(Number(e.target.value))}
+                    className="settings-range"
+                    style={{ '--fill': `${(minRoi / 20) * 100}%` } as React.CSSProperties}
+                  />
+                </div>
               </div>
-              <div className="sidebar-section">
-                <button
-                  type="button"
-                  className={`switch-toggle ${showPolymarketMin50c ? 'switch-toggle--active' : ''}`}
-                  onClick={() => setShowPolymarketMin50c((prev) => !prev)}
-                  aria-pressed={showPolymarketMin50c}
-                >
-                  <span className="switch-toggle-label">{t('scanner.showPolymarketAbove50')}</span>
-                  <span className="switch-toggle-track">
-                    <span className="switch-toggle-thumb" />
-                  </span>
-                </button>
-              </div>
-            </>
-          )}
+
+              {arbMode === 'pm-pm' && (
+                <>
+                  <div className="filter-group">
+                    <label className="filter-label">{t('scanner.sortBy')}</label>
+                    <div className="roi-buttons">
+                      {(['profit', 'profitUsd'] as SortMode[]).map((value) => (
+                        <button
+                          key={value}
+                          className={`roi-button ${sortMode === value ? 'active' : ''}`}
+                          onClick={() => setSortMode(value)}
+                        >
+                          {t(`scanner.sort${value.charAt(0).toUpperCase() + value.slice(1)}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="filter-group">
+                    <button className="collapsible-label" onClick={() => setPlatformsOpen(p => !p)}>
+                      <span>{t('scanner.platforms')}</span>
+                      <span className={`collapsible-arrow ${platformsOpen ? 'open' : ''}`}>▾</span>
+                    </button>
+                    <div className={`collapsible-body ${platformsOpen ? 'collapsible-body--open' : ''}`}>
+                      <div className="platform-buttons">
+                        {([
+                          { slug: 'polymarket', label: 'Polymarket' },
+                          { slug: 'kalshi', label: 'Kalshi' },
+                          { slug: 'opinion', label: 'Opinion' },
+                          { slug: 'probable', label: 'Probable' },
+                          { slug: 'predict.fun', label: 'Predict.Fun' },
+                        ] as { slug: string; label: string }[]).map(({ slug, label }) => {
+                          const isActive = effectivePlatforms[slug] !== false
+                          return (
+                            <button
+                              key={slug}
+                              className={`sidebar-mode-button ${isActive ? 'active' : ''}`}
+                              onClick={() => setSelectedPlatforms((prev) => {
+                                const base = Object.keys(prev).length === 0
+                                  ? { polymarket: true, kalshi: true, opinion: true, probable: true, 'predict.fun': true }
+                                  : { ...prev }
+                                return { ...base, [slug]: !isActive }
+                              })}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+              {arbMode === 'pm-bm' && (
+                <>
+                  <button
+                    type="button"
+                    className={`switch-toggle ${showPolymarketMin50c ? 'switch-toggle--active' : ''}`}
+                    onClick={() => setShowPolymarketMin50c((prev) => !prev)}
+                    aria-pressed={showPolymarketMin50c}
+                  >
+                    <span className="switch-toggle-label">{t('scanner.showPolymarketAbove50')}</span>
+                    <span className="switch-toggle-track">
+                      <span className="switch-toggle-thumb" />
+                    </span>
+                  </button>
+                  <div className="filter-group">
+                    <label className="filter-label">{t('scanner.type')}</label>
+                    <div className="roi-buttons">
+                      {(['all', 'live', 'pre'] as LiveFilter[]).map((value) => (
+                        <button
+                          key={value}
+                          className={`roi-button ${liveFilter === value ? 'active' : ''}`}
+                          onClick={() => setLiveFilter(value)}
+                        >
+                          {t(`scanner.type${value.charAt(0).toUpperCase() + value.slice(1)}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="filter-group">
+                    <label className="filter-label">{t('scanner.sortBy')}</label>
+                    <div className="roi-buttons">
+                      {(['profit', 'profitUsd'] as SortMode[]).map((value) => (
+                        <button
+                          key={value}
+                          className={`roi-button ${sortMode === value ? 'active' : ''}`}
+                          onClick={() => setSortMode(value)}
+                        >
+                          {t(`scanner.sort${value.charAt(0).toUpperCase() + value.slice(1)}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="filter-group">
+                    <button className="collapsible-label" onClick={() => setSportsOpen(p => !p)}>
+                      <span>{t('scanner.sports')}</span>
+                      <span className={`collapsible-arrow ${sportsOpen ? 'open' : ''}`}>▾</span>
+                    </button>
+                    <div className={`collapsible-body ${sportsOpen ? 'collapsible-body--open' : ''}`}>
+                      <div className="platform-buttons">
+                        {([
+                          { key: 'basketball', label: 'Basketball' },
+                          { key: 'baseball',   label: 'Baseball' },
+                          { key: 'tennis',     label: 'Tennis' },
+                          { key: 'hockey',     label: 'Hockey' },
+                          { key: 'boxing',     label: 'Boxing' },
+                          { key: 'csgo',       label: 'CS2' },
+                          { key: 'valorant',   label: 'Valorant' },
+                          { key: 'dota2',      label: 'Dota 2' },
+                          { key: 'lol',        label: 'League of Legends' },
+                          { key: 'cod',        label: 'Call of Duty' },
+                        ]).map(({ key, label }) => {
+                          const isActive = sportFilter.size === 0 || sportFilter.has(key)
+                          return (
+                            <button
+                              key={key}
+                              className={`sidebar-mode-button ${isActive ? 'active' : ''}`}
+                              onClick={() => setSportFilter((prev) => {
+                                const next = new Set(prev.size === 0
+                                  ? ['basketball','tennis','hockey','csgo','boxing','dota2','cod','baseball','lol','valorant']
+                                  : prev)
+                                if (next.has(key)) next.delete(key); else next.add(key)
+                                if (next.size === 10) return new Set()
+                                return next
+                              })}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+            </div>
+          </div>
+
         </aside>
 
         {/* Main content */}

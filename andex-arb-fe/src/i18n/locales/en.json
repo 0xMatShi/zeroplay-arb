@@ -170,7 +170,7 @@
     "checkStatus": "I HAVE PAID / CHECK STATUS"
   },
   "scanner": {
-    "title": "LIVE ARBITRAGE SCANNER",
+    "title": "ZeroPlay",
     "systemLabel": "SYSTEM:",
     "scanning": "SCANNING...",
     "backToDashboard": "BACK TO DASHBOARD",
@@ -183,6 +183,8 @@
     "typeMulti": "MULTI",
     "typeLive": "LIVE",
     "typePre": "PRE",
+    "platforms": "Platforms:",
+    "sports": "Sports:",
     "sortBy": "Sort:",
     "sortProfit": "PROFIT %",
     "sortProfitUsd": "PROFIT $",

@@ -17,14 +17,21 @@ export class SportsArbController {
     const matches = this.scheduler.getMatches();
     const matchMap = new Map(matches.map((m) => [m.id, m]));
 
+    const ESPORTS = new Set(['csgo', 'dota2', 'lol', 'valorant', 'call-of-duty']);
+
     return {
       items: opps.map((opp) => {
         const match = matchMap.get(opp.matchId);
         const pmSlug = match?.pmEvent.slug ?? '';
         const dexEventId = match?.dexEvent.eventId ?? '';
+        const dexEventName = match?.dexEvent.name ?? '';
+        const dexSportKey = match?.dexEvent.sportKey ?? opp.sportKey;
         const tournamentName = match?.dexEvent.tournamentName ?? null;
         const pmUrl = pmSlug ? `https://polymarket.com/event/${pmSlug}` : undefined;
-        const dexUrl = dexEventId ? `https://dexsport.io/en/event/${dexEventId}` : undefined;
+        const rawId = dexEventId.includes('.') ? dexEventId.split('.')[1] : dexEventId;
+        const nameSlug = dexEventName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const dexCategory = ESPORTS.has(dexSportKey) ? 'esports' : 'sports';
+        const dexUrl = rawId ? `https://dexsport.io/${dexCategory}/${dexSportKey}/${nameSlug}-${rawId}/bets/` : undefined;
 
         return {
           // Standard Opportunity fields (used by existing filter/sort logic)

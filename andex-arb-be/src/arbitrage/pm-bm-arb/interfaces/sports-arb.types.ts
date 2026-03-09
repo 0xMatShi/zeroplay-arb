@@ -13,15 +13,22 @@ export interface SportDef {
 
 // ── Polymarket sports ────────────────────────────────────────
 
+export interface AskLevel {
+  price: number;
+  size: number;
+}
+
 export interface PmMarket {
   conditionId: string;
   sportsMarketType: string;
   question: string;
   outcomeNames: string[];
-  /** Probabilities 0..1 (updated via CLOB WS) */
+  /** Best ask price per outcome (updated via CLOB WS / REST books) */
   outcomePrices: number[];
-  /** Best ask quantity at each price level (updated via CLOB WS) */
+  /** Best ask quantity per outcome (updated via CLOB WS / REST books) */
   outcomeQtys: number[];
+  /** Full ask book per outcome sorted ascending by price (from WS book / REST books) */
+  outcomeAsks: AskLevel[][];
   tokenIds: string[];
 }
 
@@ -104,6 +111,10 @@ export interface SportsArbitrageOpportunity {
   totalCost: number;
   /** (1 - totalCost) / totalCost * 100 */
   profitPercent: number;
+  /** Max total investment ($) across all profitable PM ask levels */
+  maxInvestment: number;
+  /** Max guaranteed profit ($) at maxInvestment depth */
+  maxProfit: number;
   /** Timestamp of the latest scan that confirmed this opportunity */
   detectedAt: number;
   /** Timestamp when this opportunity was first detected (stable across rescans) */

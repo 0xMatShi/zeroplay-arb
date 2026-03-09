@@ -3269,6 +3269,29 @@
   text-transform: uppercase;
 }
 
+.scanner-title--link {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.scanner-title--link::after {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: linear-gradient(135deg, #3ED6FF 0%, #F472B6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.scanner-title--link:hover::after {
+  opacity: 1;
+}
+
 .scanner-status {
   display: flex;
   align-items: center;
@@ -3462,6 +3485,56 @@
   text-transform: uppercase;
 }
 
+.collapsible-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.collapsible-label:hover {
+  color: var(--text-main);
+}
+
+.collapsible-arrow {
+  font-size: 14px;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.collapsible-arrow.open {
+  transform: rotate(180deg);
+}
+
+.collapsible-body {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-4px);
+  transition: max-height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              opacity 0.4s ease,
+              transform 0.4s ease;
+}
+
+.collapsible-body--open {
+  max-height: 600px;
+  opacity: 1;
+  transform: translateY(0);
+  transition: max-height 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              opacity 0.4s ease,
+              transform 0.4s ease;
+}
+
 .filter-input {
   width: 100%;
   background: rgba(255, 255, 255, 0.03);
@@ -3489,6 +3562,23 @@
   display: flex;
   gap: 8px;
 }
+
+.platform-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.platform-buttons .sidebar-mode-button {
+  padding: 8px 16px;
+  font-size: 13px;
+  width: auto;
+}
+
+.platform-buttons .sidebar-mode-button.active {
+  box-shadow: none;
+}
+
 
 .roi-button {
   position: relative;
@@ -3889,10 +3979,12 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
+  padding-left: 8px;
 }
 
 .opp-header-right {
   flex-shrink: 0;
+  padding-right: 24px;
 }
 
 .opp-type-badge {
@@ -3943,12 +4035,14 @@
   font-family: var(--font-mono);
   font-size: 22px;
   font-weight: 700;
-  color: var(--primary-color);
+  color: #3ED6FF;
+  text-shadow: 0 0 10px rgba(62, 214, 255, 0.7), 0 0 20px rgba(62, 214, 255, 0.4);
   letter-spacing: -0.5px;
 }
 
 .opp-profit--dim {
   color: var(--text-muted);
+  text-shadow: none;
   opacity: 0.6;
 }
 
@@ -3966,7 +4060,7 @@
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 44px;
-  padding: 14px 16px;
+  padding: 14px 24px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -4004,6 +4098,12 @@
   color: var(--text-main);
 }
 
+.leg-investment {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
 .leg-best-ask {
   display: block;
   font-size: 11px;
@@ -4017,7 +4117,7 @@
   margin-top: auto;
   font-size: 11px;
   font-weight: 700;
-  color: var(--primary-color);
+  color: #3ED6FF;
   text-decoration: none;
   letter-spacing: 0.5px;
   padding: 6px 0;
@@ -4026,7 +4126,8 @@
 }
 
 .leg-open-link:hover {
-  color: #00cc01;
+  color: #3ED6FF;
+  opacity: 0.75;
   text-decoration: underline;
 }
 
@@ -4322,7 +4423,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 24px;
+  padding: 12px 16px 12px 48px;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
   background: rgba(255, 255, 255, 0.01);
 }
@@ -4827,9 +4928,12 @@
   cursor: default;
 }
 
+.sports-card--pinned::before {
+  opacity: 1;
+}
+
 .sports-card--pinned {
-  border-color: #f59e0b !important;
-  box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
+  box-shadow: 0 0 16px rgba(62, 214, 255, 0.1), 0 0 16px rgba(244, 114, 182, 0.1);
 }
 
 .sports-card--pinned-stale {
@@ -4962,7 +5066,7 @@
 .sports-platform-box {
   width: 220px;
   min-width: 0;
-  background: rgba(255, 255, 255, 0.025);
+  background: #191A21;
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 48px;
   padding: 10px 12px;
@@ -5125,42 +5229,42 @@
   letter-spacing: 0.8px;
   padding: 10px 28px;
   border-radius: 40px;
-  border: 1px solid;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.sports-action-btn--pin {
-  background: transparent;
-  color: #f59e0b;
-  border-color: rgba(245, 158, 11, 0.4);
-}
-
-.sports-action-btn--pin:hover,
-.sports-action-btn--pin.active {
-  background: rgba(245, 158, 11, 0.12);
-  border-color: #f59e0b;
-}
-
-.sports-action-btn--calc {
-  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #000000;
   color: var(--text-muted);
-  border-color: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.25s ease, box-shadow 0.25s ease;
+  overflow: hidden;
+  z-index: 0;
 }
 
-.sports-action-btn--calc:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-main);
+.sports-action-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 40px;
+  background: linear-gradient(135deg, #3ED6FF 0%, #F472B6 100%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  z-index: -1;
 }
 
-.sports-action-btn--open {
-  background: transparent;
-  color: var(--primary-color);
-  border-color: rgba(0, 149, 1, 0.4);
+.sports-action-btn:hover {
+  color: #000000;
+  border-color: transparent;
+  box-shadow: 0 0 14px rgba(62, 214, 255, 0.3), 0 0 14px rgba(244, 114, 182, 0.3);
 }
 
-.sports-action-btn--open:hover {
-  background: rgba(0, 149, 1, 0.1);
-  border-color: var(--primary-color);
-  box-shadow: 0 0 10px rgba(0, 149, 1, 0.2);
+.sports-action-btn:hover::before {
+  opacity: 1;
+}
+
+.sports-action-btn--pin.active {
+  color: #000000;
+  border-color: transparent;
+}
+
+.sports-action-btn--pin.active::before {
+  opacity: 1;
 }

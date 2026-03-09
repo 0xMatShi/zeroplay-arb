@@ -11,8 +11,8 @@ import { SportsArbGateway } from '../gateways/sports-arb.gateway';
  * Sports Arbitrage pipeline:
  *
  *  Cron (every 5 min): Re-match Polymarket sports events with DexSport events.
- *  Reactive:           On any price change from either WS, immediate re-scan
- *                      of all matched pairs for arbitrage.
+ *  Cron (every 10s):   Fetch PM order books via REST → immediate re-scan.
+ *  Reactive:           On any price change from either WS, throttled re-scan (200ms).
  *
  * Both adapters maintain persistent WS connections. Prices are updated
  * in-place on the cached event objects, so the scanner always reads fresh data.
@@ -69,19 +69,30 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     await this.runMatchCycle();
   }
 
+  // ── Cron: Refresh PM order books every 10 seconds ─────────────
+
+  @Cron('*/10 * * * * *')
+  async handleBooksCron(): Promise<void> {
+    if (this.currentMatches.length === 0) return;
+    const allEventIds = [...new Set(this.currentMatches.map((m) => m.pmEvent.id))];
+    const tokenIds = this.polyAdapter.getTokenIdsForEvents(allEventIds);
+    await this.polyAdapter.fetchBooksForTokens(tokenIds);
+    this.runScanNow();
+  }
+
   async runMatchCycle(): Promise<void> {
     try {
       this.currentMatches = this.matcher.findMatches();
       this.logger.log(`Sports match cycle: ${this.currentMatches.length} matched pairs`);
 
-      // Subscribe PM WS only to live events (pre-match markets have very low WS activity)
-      const liveMatches = this.currentMatches.filter((m) => m.dexEvent.isLive);
-      const liveEventIds = [...new Set(liveMatches.map((m) => m.pmEvent.id))];
-      this.logger.log(`Sports match cycle: ${liveMatches.length} live matches out of ${this.currentMatches.length} total`);
-      if (liveEventIds.length > 0) {
-        this.polyAdapter.subscribeToMatchedEvents(liveEventIds);
+      // Subscribe PM WS to all matched events (live + pre-match)
+      const allEventIds = [...new Set(this.currentMatches.map((m) => m.pmEvent.id))];
+      const liveCount = this.currentMatches.filter((m) => m.dexEvent.isLive).length;
+      this.logger.log(`Sports match cycle: ${liveCount} live, ${this.currentMatches.length - liveCount} pre-match`);
+      if (allEventIds.length > 0) {
+        this.polyAdapter.subscribeToMatchedEvents(allEventIds);
       } else {
-        this.logger.warn('No live matched events found — PM WS not subscribed');
+        this.logger.warn('No matched events found — PM WS not subscribed');
       }
 
       // Immediately scan after fresh match (no debounce — explicit trigger)
@@ -91,9 +102,9 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Debounce reactive scans: coalesce rapid price updates into a single scan */
+  /** Throttle reactive scans: run at most once per SCAN_DEBOUNCE_MS regardless of update frequency */
   private scheduleScan(): void {
-    if (this.scanDebounceTimer) clearTimeout(this.scanDebounceTimer);
+    if (this.scanDebounceTimer) return;
     this.scanDebounceTimer = setTimeout(() => {
       this.scanDebounceTimer = null;
       this.runScanNow();

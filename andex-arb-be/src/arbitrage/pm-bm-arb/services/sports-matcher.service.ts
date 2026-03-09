@@ -173,18 +173,16 @@ function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): D
     const numMatch = pm.question.match(/(?:Map|Game)\s+(\d+)/i);
     if (!numMatch) return null;
     const n = numMatch[1];
-    candidates = [`Winner. Map ${n}`, `Winner. Game ${n}`, `Map ${n}`, `Game ${n}`];
-    isDynamic = true;
+    // Exact match: "Winner. Map N" or "Winner. Game N", optionally "(With overtime)"
+    // Excludes sub-markets like "Winner. Map 1. Pistol Round 1"
+    const pattern = new RegExp(`^winner\\.\\s*(map|game)\\s+${n}(\\s*\\(with\\s+overtime\\))?$`, 'i');
+    return dexMarkets.find((dex) => pattern.test(dex.name.trim())) ?? null;
   }
 
   if (candidates.length === 0) return null;
 
   const nameMatches = dexMarkets.filter((dex) =>
-    candidates.some((c) =>
-      isDynamic
-        ? dex.name.toLowerCase().includes(c.toLowerCase())
-        : dexNameMatchesCandidate(dex.name, c),
-    ),
+    candidates.some((c) => dexNameMatchesCandidate(dex.name, c)),
   );
 
   if (nameMatches.length === 0) return null;
@@ -192,7 +190,7 @@ function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): D
   if (VALUE_TYPES.has(type)) {
     const pmValue = extractPmValue(pm.question);
     if (pmValue !== null) {
-      const valueMatch = nameMatches.find((dex) => {
+      const valueMatches = nameMatches.filter((dex) => {
         const dexValue = extractDexValue(dex.outcomes);
         if (dexValue === null) return false;
         if (SPREAD_TYPES.has(type)) {
@@ -200,8 +198,28 @@ function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): D
         }
         return Math.abs(pmValue - dexValue) < 0.01;
       });
-      if (valueMatch) return valueMatch;
-      return null;
+      if (valueMatches.length === 0) return null;
+      if (valueMatches.length === 1) return valueMatches[0];
+
+      // DEX sometimes lists two spread markets with the same name and value but opposite signs
+      // (e.g. two "Maps Handicap" markets: one with TeamA -1.5, another with TeamA +1.5).
+      // PM outcomeNames[0] is always the team with the NEGATIVE handicap — use it to pick
+      // the DEX market where that same team also has a negative-sign outcome.
+      if (SPREAD_TYPES.has(type) && pm.outcomeNames.length >= 1) {
+        const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const pmNegNorm = norm(pm.outcomeNames[0]);
+        const directionMatch = valueMatches.find((dex) =>
+          dex.outcomes.some((o) => {
+            if (!o.name.includes('-')) return false;
+            const teamName = o.name.replace(/\s*[+-][\d.]+$/, '').trim();
+            const teamNorm = norm(teamName);
+            return teamNorm.includes(pmNegNorm) || pmNegNorm.includes(teamNorm);
+          }),
+        );
+        if (directionMatch) return directionMatch;
+      }
+
+      return valueMatches[0];
     }
   }
 

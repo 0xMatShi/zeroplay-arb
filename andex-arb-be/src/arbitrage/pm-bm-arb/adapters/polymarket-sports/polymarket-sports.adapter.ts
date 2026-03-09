@@ -115,20 +115,20 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
             if (!m.sportsMarketType) continue;
 
             const outcomeNames = this.safeParse<string[]>(m.outcomes, []);
-            const outcomePricesRaw = this.safeParse<string[]>(m.outcomePrices, []);
             const tokenIds = this.safeParse<string[]>(m.clobTokenIds, []);
 
             if (outcomeNames.length < 2 || tokenIds.length < 2) continue;
 
-            const outcomePrices = outcomePricesRaw.map((p) => parseFloat(p) || 0);
-
+            // Prices are intentionally zeroed — WS/REST books provide real best-ask prices.
+            // The scanner skips markets with price < 0.02, so these won't appear until updated.
             markets.push({
               conditionId: m.conditionId,
               sportsMarketType: m.sportsMarketType,
               question: m.question ?? '',
               outcomeNames,
-              outcomePrices,
+              outcomePrices: new Array(outcomeNames.length).fill(0),
               outcomeQtys: new Array(outcomeNames.length).fill(0),
+              outcomeAsks: new Array(outcomeNames.length).fill(null).map(() => []),
               tokenIds,
             });
 
@@ -190,9 +190,12 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
         old.question = m.question;
         old.outcomeNames = m.outcomeNames;
         old.tokenIds = m.tokenIds;
-        // Keep outcomePrices/outcomeQtys as-is (WS keeps them fresh)
+        // Keep outcomePrices/outcomeQtys/outcomeAsks as-is (WS/REST keeps them fresh)
         if (!old.outcomeQtys || old.outcomeQtys.length !== m.outcomeNames.length) {
           old.outcomeQtys = new Array(m.outcomeNames.length).fill(0);
+        }
+        if (!old.outcomeAsks || old.outcomeAsks.length !== m.outcomeNames.length) {
+          old.outcomeAsks = new Array(m.outcomeNames.length).fill(null).map(() => []);
         }
         return old;
       }
@@ -290,6 +293,12 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
 
     const bestAskQty = parseFloat(bestAsk.size ?? '0') || 0;
     this.applyPrice(market, event, ref.outcomeIdx, parseFloat(bestAsk.price), bestAskQty);
+
+    // Store full ask levels for depth analysis
+    market.outcomeAsks[ref.outcomeIdx] = asks.map((a: any) => ({
+      price: parseFloat(a.price),
+      size: parseFloat(a.size ?? '0'),
+    }));
   }
 
   private handlePriceChangeMsg(msg: any): void {
@@ -325,6 +334,71 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
     if (Math.abs(oldPrice - price) > 0.001) {
       this.onPriceUpdate?.();
     }
+  }
+
+  /** Returns all token IDs belonging to the given event IDs */
+  getTokenIdsForEvents(eventIds: string[]): string[] {
+    const ids: string[] = [];
+    for (const [tokenId, ref] of this.tokenIndex) {
+      if (eventIds.includes(ref.eventId)) ids.push(tokenId);
+    }
+    return ids;
+  }
+
+  /**
+   * Fetches full order books via CLOB REST API for the given token IDs.
+   * Updates outcomePrices, outcomeQtys, and outcomeAsks in-place.
+   * Called once after each match cycle so the scanner has best-ask prices immediately.
+   */
+  async fetchBooksForTokens(tokenIds: string[]): Promise<void> {
+    if (tokenIds.length === 0) return;
+
+    const CHUNK = 500;
+    let updated = 0;
+
+    for (let i = 0; i < tokenIds.length; i += CHUNK) {
+      const chunk = tokenIds.slice(i, i + CHUNK);
+      try {
+        const { data } = await axios.post<any[]>(
+          'https://clob.polymarket.com/books',
+          chunk.map((id) => ({ token_id: id })),
+          { timeout: 15_000 },
+        );
+
+        for (const book of data) {
+          const tokenId: string = book.asset_id ?? '';
+          const ref = this.tokenIndex.get(tokenId);
+          if (!ref) continue;
+
+          const event = this.eventCache.get(ref.eventId);
+          if (!event) continue;
+
+          const market = event.markets.find((m) => m.conditionId === ref.conditionId);
+          if (!market) continue;
+
+          const asks: any[] = [...(book.asks ?? [])].sort(
+            (a: any, b: any) => parseFloat(a.price) - parseFloat(b.price),
+          );
+
+          if (asks.length === 0) continue;
+
+          const bestAsk = asks[0];
+          const bestAskQty = parseFloat(bestAsk.size ?? '0') || 0;
+          this.applyPrice(market, event, ref.outcomeIdx, parseFloat(bestAsk.price), bestAskQty);
+
+          market.outcomeAsks[ref.outcomeIdx] = asks.map((a: any) => ({
+            price: parseFloat(a.price),
+            size: parseFloat(a.size ?? '0'),
+          }));
+
+          updated++;
+        }
+      } catch (err: any) {
+        this.logger.warn(`fetchBooksForTokens chunk failed: ${err.message}`);
+      }
+    }
+
+    this.logger.log(`PolymarketSports: REST books fetched for ${updated}/${tokenIds.length} tokens`);
   }
 
   private safeParse<T>(value: string | undefined, fallback: T): T {

@@ -80,13 +80,22 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
     this.logger.log(`Client disconnected: ${client.id}`);
   }
 
+  private static readonly ESPORTS = new Set(['csgo', 'dota2', 'lol', 'valorant', 'call-of-duty']);
+
   private mapOpportunity(opp: SportsArbitrageOpportunity, matchMap: Map<string, SportsMatch>) {
     const match = matchMap.get(opp.matchId);
     const pmSlug = match?.pmEvent.slug ?? '';
     const dexEventId = match?.dexEvent.eventId ?? '';
+    const dexEventName = match?.dexEvent.name ?? '';
+    const dexSportKey = match?.dexEvent.sportKey ?? opp.sportKey;
     const tournamentName = match?.dexEvent.tournamentName ?? null;
     const pmUrl = pmSlug ? `https://polymarket.com/event/${pmSlug}` : undefined;
-    const dexUrl = dexEventId ? `https://dexsport.io/en/event/${dexEventId}` : undefined;
+
+    // Build DexSport URL: https://dexsport.io/{esports|sports}/{sport}/{name-slug}-{id}/bets/
+    const rawId = dexEventId.includes('.') ? dexEventId.split('.')[1] : dexEventId;
+    const nameSlug = dexEventName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const dexCategory = SportsArbGateway.ESPORTS.has(dexSportKey) ? 'esports' : 'sports';
+    const dexUrl = rawId ? `https://dexsport.io/${dexCategory}/${dexSportKey}/${nameSlug}-${rawId}/bets/` : undefined;
 
     return {
       id: opp.id,
@@ -107,6 +116,8 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
         url: leg.platform === 'polymarket' ? pmUrl : dexUrl,
       })),
       isLive: opp.isLive,
+      maxInvestment: opp.maxInvestment,
+      maxProfit: opp.maxProfit,
       status: 'active' as const,
       foundAt: new Date(opp.firstDetectedAt).toISOString(),
       lastValidatedAt: new Date(opp.detectedAt).toISOString(),
