@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { Toast } from '../components/Toast'
-import { useOpportunities, usePlatforms, useOrderBook, useSubscriptionStatus, useSportsOpportunities, queryKeys } from '../api/hooks'
+import { useOpportunities, useOrderBook, useSubscriptionStatus, useSportsOpportunities, queryKeys } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
 import { useSportsArbSocket } from '../hooks/useSportsArbSocket'
@@ -507,7 +507,7 @@ export function Scanner() {
   // Data — only fetch when subscription is confirmed active
   const pmpmQuery = useOpportunities()
   const pmbmQuery = useSportsOpportunities()
-  const { data: platforms } = usePlatforms()
+
 
   // Select data source based on arb mode
   const { isLoading, isError, error } = arbMode === 'pm-pm' ? pmpmQuery : pmbmQuery
