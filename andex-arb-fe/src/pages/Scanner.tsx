@@ -8,6 +8,7 @@ import { Toast } from '../components/Toast'
 import { useOpportunities, usePlatforms, useOrderBook, useSubscriptionStatus, useSportsOpportunities, queryKeys } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
+import { useSportsArbSocket } from '../hooks/useSportsArbSocket'
 import { ApiError } from '../api/client'
 import { formatRelativeTime } from '../utils/time'
 import type { Opportunity, SportsOpportunity, SportsOpportunityLeg, NewOpportunityEvent, OrderBookAnalysisResponse, ArbitrageTier } from '../api/types'
@@ -191,9 +192,6 @@ function OpportunityCard({
       {/* Card Header */}
       <div className="opp-header">
         <div className="opp-header-left">
-          <span className={`opp-type-badge opp-type-badge--${opp.type}`}>
-            {opp.type.toUpperCase()}
-          </span>
           <h3 className="opp-match-title">
             {opp.legs.map((leg, i) => (
               <span key={i}>
@@ -506,7 +504,7 @@ export function Scanner() {
 
   // Data — only fetch when subscription is confirmed active
   const pmpmQuery = useOpportunities()
-  const pmbmQuery = useSportsOpportunities(isPaused)
+  const pmbmQuery = useSportsOpportunities()
   const { data: platforms } = usePlatforms()
 
   // Select data source based on arb mode
@@ -580,7 +578,20 @@ export function Scanner() {
     paused: isPaused,
   })
 
-  const effectiveBlockedReason = blockedReason ?? wsAuthError
+  // PM-BM real-time WebSocket
+  const handleNewSportsOpportunity = useCallback((opp: SportsOpportunity) => {
+    if (!soundEnabled || isPaused) return
+    if (opp.profitPercentage >= minRoi) {
+      playOpportunitySound()
+    }
+  }, [soundEnabled, isPaused, minRoi, playOpportunitySound])
+
+  const { isConnected: isSportsConnected, authError: sportsWsAuthError } = useSportsArbSocket({
+    onNewOpportunity: handleNewSportsOpportunity,
+    paused: isPaused,
+  })
+
+  const effectiveBlockedReason = blockedReason ?? wsAuthError ?? sportsWsAuthError
 
   // Initialize platform toggles from API data
   const platformSlugs = useMemo(() => {
@@ -747,6 +758,39 @@ export function Scanner() {
           </div>
         </div>
         <div className="scanner-header-right">
+          <div className="settings-toolbar">
+            <button
+              type="button"
+              className={`settings-icon-button ${soundEnabled ? 'active' : ''}`}
+              onClick={() => {
+                if (!soundEnabled) playOpportunitySound()
+                setSoundEnabled((prev) => !prev)
+              }}
+              aria-label={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+              title={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+            >
+              <span className="settings-icon-content" aria-hidden="true">
+                {soundEnabled
+                  ? <Volume2 size={16} color="#1BBDE8" style={{ stroke: '#1BBDE8' }} />
+                  : <VolumeX size={16} color="#fff" style={{ stroke: '#fff' }} />
+                }
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-icon-button settings-icon-button--pause ${isPaused ? 'active' : ''}`}
+              onClick={() => setIsPaused((prev) => !prev)}
+              aria-label={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
+              title={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
+            >
+              <span className="settings-icon-content" aria-hidden="true">
+                {isPaused
+                  ? <Play size={16} color="#D9569E" style={{ stroke: '#D9569E' }} />
+                  : <Pause size={16} color="#fff" style={{ stroke: '#fff' }} />
+                }
+              </span>
+            </button>
+          </div>
           <LanguageSwitcher />
           <button className="scanner-back-button" onClick={() => navigate('/dashboard')}>
             {t('scanner.backToDashboard')}
@@ -805,44 +849,7 @@ export function Scanner() {
 
           {/* Settings — always visible */}
           <div className="sidebar-section">
-            <label className="sidebar-section-label">{t('scanner.settings')}</label>
             <div className="settings-panel">
-              <div className="settings-toolbar">
-                <button
-                  type="button"
-                  className={`settings-icon-button ${soundEnabled ? 'active' : ''}`}
-                  onClick={() => {
-                    if (!soundEnabled) playOpportunitySound()
-                    setSoundEnabled((prev) => !prev)
-                  }}
-                  aria-label={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
-                  title={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
-                  style={{ color: '#fff' }}
-                >
-                  <span className="settings-icon-content" aria-hidden="true">
-                    {soundEnabled
-                      ? <Volume2 size={16} color="#fff" style={{ stroke: '#fff' }} />
-                      : <VolumeX size={16} color="#fff" style={{ stroke: '#fff' }} />
-                    }
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`settings-icon-button settings-icon-button--pause ${isPaused ? 'active' : ''}`}
-                  onClick={() => setIsPaused((prev) => !prev)}
-                  aria-label={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
-                  title={isPaused ? t('scanner.resumeScanner') : t('scanner.pauseScanner')}
-                  style={{ color: '#fff' }}
-                >
-                  <span className="settings-icon-content" aria-hidden="true">
-                    {isPaused
-                      ? <Play size={16} color="#fff" style={{ stroke: '#fff' }} />
-                      : <Pause size={16} color="#fff" style={{ stroke: '#fff' }} />
-                    }
-                  </span>
-                </button>
-              </div>
 
               {arbMode === 'pm-pm' && (
                 <div className="filter-group">
@@ -907,6 +914,7 @@ export function Scanner() {
                     value={minRoi}
                     onChange={(e) => setMinRoi(Number(e.target.value))}
                     className="settings-range"
+                    style={{ '--fill': `${(minRoi / 20) * 100}%` } as React.CSSProperties}
                   />
                 </div>
               </div>
@@ -917,8 +925,7 @@ export function Scanner() {
           {arbMode === 'pm-bm' && (
             <>
               <div className="sidebar-section">
-                <label className="sidebar-section-label">{t('scanner.pmBmConfig')}</label>
-                <div className="settings-sliders">
+<div className="settings-sliders">
                   <div className="settings-slider-row">
                     <div className="settings-slider-head">
                       <span className="settings-slider-label">ABSOLUTE ($)</span>

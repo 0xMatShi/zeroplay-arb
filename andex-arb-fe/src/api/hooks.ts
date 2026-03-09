@@ -220,11 +220,11 @@ export const usePlatforms = () => {
   })
 }
 
-export const useSportsOpportunities = (paused = false) => {
+export const useSportsOpportunities = () => {
   return useQuery({
     queryKey: queryKeys.sportsOpportunities,
     queryFn: sportsArbApi.getOpportunities,
-    refetchInterval: paused ? false : 5_000,
+    // No polling — real-time updates come via useSportsArbSocket WebSocket
   })
 }
 

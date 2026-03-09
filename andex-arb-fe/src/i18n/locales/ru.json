@@ -16,7 +16,7 @@
     "widgetTitle": "LIVE АРБИТРАЖ ФИД",
     "live": "LIVE",
     "eventName": "US strikes Iran by...?",
-    "arbDetected": "[ АРБИТРАЖ НАЙДЕН: ROI +11.1% ]"
+    "arbDetected": "АРБИТРАЖ НАЙДЕН: ROI +11.1%"
   },
   "dataSources": {
     "title": "ИСТОЧНИКИ ДАННЫХ"
@@ -188,7 +188,7 @@
     "sortProfitUsd": "ПРИБЫЛЬ $",
     "sortNewest": "НОВЫЕ",
     "polymarketConfig": "POLYMARKET CONFIG",
-    "showPolymarketAbove50": "ПОКАЗЫВАТЬ ≥ 50¢ (PRE)",
+    "showPolymarketAbove50": "POLYMARKET ≥ 50¢",
     "arbMode": "РЕЖИМ АРБИТРАЖА",
     "settings": "НАСТРОЙКИ",
     "settingsMinRoi": "MIN ROI",

@@ -510,7 +510,7 @@ export function Dashboard() {
 
                 <div className="status-panel-actions">
                   <button className="status-btn-primary" onClick={() => navigate('/scanner')}>
-                    {'[ > '}{t('dashboard.launchScanner')}{' ]'}
+                    {t('dashboard.launchScanner')}
                   </button>
                 </div>
               </div>

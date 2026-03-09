@@ -1,10 +1,11 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PolymarketSportsAdapter } from '../adapters/polymarket-sports/polymarket-sports.adapter';
 import { DexsportAdapter } from '../adapters/dexsport/dexsport.adapter';
 import { SportsMatcher } from '../services/sports-matcher.service';
 import { SportsArbScanner } from '../services/sports-arb-scanner.service';
 import { SportsMatch, SportsArbitrageOpportunity } from '../interfaces/sports-arb.types';
+import { SportsArbGateway } from '../gateways/sports-arb.gateway';
 
 /**
  * Sports Arbitrage pipeline:
@@ -41,6 +42,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly dexAdapter: DexsportAdapter,
     private readonly matcher: SportsMatcher,
     private readonly scanner: SportsArbScanner,
+    @Optional() private readonly gateway: SportsArbGateway | null = null,
   ) {}
 
   onModuleInit(): void {
@@ -103,15 +105,40 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
 
     try {
       const scanned = this.scanner.scan(this.currentMatches);
+      const matchMap = new Map(this.currentMatches.map((m) => [m.id, m]));
 
       // Preserve firstDetectedAt for opportunities seen in previous scans
       const now = Date.now();
+      const prevById = new Map(this.currentOpportunities.map((o) => [o.id, o]));
       const activeIds = new Set<string>();
+
       for (const opp of scanned) {
         const first = this.firstSeenMap.get(opp.id) ?? now;
         this.firstSeenMap.set(opp.id, first);
         opp.firstDetectedAt = first;
         activeIds.add(opp.id);
+
+        if (this.gateway) {
+          if (!prevById.has(opp.id)) {
+            // New opportunity — push to all clients
+            this.gateway.emitNew(opp, matchMap);
+          } else {
+            // Existing — emit update only if profit changed by more than 0.01%
+            const prev = prevById.get(opp.id)!;
+            if (Math.abs(prev.profitPercent - opp.profitPercent) > 0.01) {
+              this.gateway.emitUpdated(opp, matchMap);
+            }
+          }
+        }
+      }
+
+      // Emit expired for opportunities that disappeared
+      if (this.gateway) {
+        for (const id of prevById.keys()) {
+          if (!activeIds.has(id)) {
+            this.gateway.emitExpired(id);
+          }
+        }
       }
 
       // Remove IDs that are no longer active

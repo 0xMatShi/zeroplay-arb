@@ -16,7 +16,7 @@
     "widgetTitle": "LIVE ARBITRAGE FEED",
     "live": "LIVE",
     "eventName": "US strikes Iran by...?",
-    "arbDetected": "[ ARBITRAGE DETECTED: ROI +11.1% ]"
+    "arbDetected": "ARBITRAGE DETECTED: ROI +11.1%"
   },
   "dataSources": {
     "title": "DATA SOURCES"
@@ -188,7 +188,7 @@
     "sortProfitUsd": "PROFIT $",
     "sortNewest": "NEWEST",
     "polymarketConfig": "POLYMARKET CONFIG",
-    "showPolymarketAbove50": "SHOW ≥ 50¢ (PRE)",
+    "showPolymarketAbove50": "POLYMARKET ≥ 50¢",
     "arbMode": "ARB MODE",
     "settings": "SETTINGS",
     "settingsMinRoi": "MIN ROI",

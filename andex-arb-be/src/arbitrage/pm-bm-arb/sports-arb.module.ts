@@ -14,6 +14,9 @@ import { SportsScheduler } from './scheduler/sports-scheduler';
 // Controller
 import { SportsArbController } from './controllers/sports-arb.controller';
 
+// Gateway
+import { SportsArbGateway } from './gateways/sports-arb.gateway';
+
 // Auth & Subscriptions (needed by SubscriptionGuard)
 import { UsersModule } from '../../users/users.module';
 import { SubscriptionsModule } from '../../subscriptions/subscriptions.module';
@@ -44,6 +47,9 @@ import { SubscriptionsModule } from '../../subscriptions/subscriptions.module';
 
     // Schedulers
     SportsScheduler,
+
+    // WebSocket gateway
+    SportsArbGateway,
   ],
   exports: [SportsScheduler],
 })
