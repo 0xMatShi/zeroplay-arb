@@ -588,7 +588,7 @@ export function Scanner() {
     }
   }, [soundEnabled, isPaused, minRoi, playOpportunitySound])
 
-  const { isConnected: isSportsConnected, authError: sportsWsAuthError } = useSportsArbSocket({
+  const { authError: sportsWsAuthError } = useSportsArbSocket({
     onNewOpportunity: handleNewSportsOpportunity,
     paused: isPaused,
   })
@@ -596,11 +596,6 @@ export function Scanner() {
   const effectiveBlockedReason = blockedReason ?? wsAuthError ?? sportsWsAuthError
 
   // Initialize platform toggles from API data
-  const platformSlugs = useMemo(() => {
-    if (!platforms) return []
-    return platforms.filter((p) => p.isActive).map((p) => p.slug)
-  }, [platforms])
-
   const STATIC_PLATFORM_SLUGS = ['polymarket', 'kalshi', 'opinion', 'probable', 'predict.fun']
 
   // Effective selected platforms — default to all enabled
