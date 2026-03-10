@@ -1,5 +1,7 @@
-import { useState, useMemo, useCallback, useRef, useEffect, Component } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect, Component, createElement } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
+import { createRoot } from 'react-dom/client'
+import { CalculatorContent, type CalcParams } from '../components/CalculatorContent'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Calculator, ExternalLink, Pause, Pin, Play, Volume2, VolumeX } from 'lucide-react'
@@ -11,6 +13,39 @@ import { useSportsArbSocket } from '../hooks/useSportsArbSocket'
 import { ApiError } from '../api/client'
 import { formatRelativeTime } from '../utils/time'
 import type { Opportunity, SportsOpportunity, SportsOpportunityLeg, NewOpportunityEvent, OrderBookAnalysisResponse, ArbitrageTier } from '../api/types'
+
+async function openCalcWindow(params: CalcParams) {
+  const q = new URLSearchParams(params as unknown as Record<string, string>)
+
+  if ('documentPictureInPicture' in window) {
+    try {
+      const pipWin: Window = await (window as { documentPictureInPicture: { requestWindow: (o: object) => Promise<Window> } }).documentPictureInPicture.requestWindow({ width: 480, height: 350 })
+
+      // Copy all styles from the main document
+      document.querySelectorAll('link[rel="stylesheet"], style').forEach((node) => {
+        pipWin.document.head.appendChild(node.cloneNode(true))
+      })
+      pipWin.document.body.style.cssText = 'margin:0;padding:0;background:#191A21;'
+
+      const container = pipWin.document.createElement('div')
+      pipWin.document.body.appendChild(container)
+
+      const root = createRoot(container)
+      root.render(createElement(CalculatorContent, params))
+
+      pipWin.addEventListener('pagehide', () => root.unmount())
+      return
+    } catch {
+      // fall through to window.open
+    }
+  }
+
+  window.open(
+    `/calculator?${q}`,
+    '_blank',
+    'width=480,height=350,left=0,top=0,resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no',
+  )
+}
 
 function useNow(intervalMs = 1000) {
   const [, setTick] = useState(0)
@@ -466,7 +501,7 @@ function SportsOpportunityCard({
           className="sports-action-btn sports-action-btn--calc"
           onClick={(e) => {
             e.stopPropagation()
-            const q = new URLSearchParams({
+            void openCalcWindow({
               pmOutcome: pmLeg?.outcomeName ?? '',
               dexOutcome: dexLeg?.outcomeName ?? '',
               pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
@@ -474,11 +509,6 @@ function SportsOpportunityCard({
               pmAmount: pmPerfect.toFixed(2),
               dexAmount: dexPerfect.toFixed(2),
             })
-            window.open(
-              `/calculator?${q}`,
-              '_blank',
-              'width=480,height=350,left=0,top=0,resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no',
-            )
           }}
         >
           <Calculator size={28} />
@@ -496,7 +526,7 @@ function SportsOpportunityCard({
             }
             if (pmLeg?.url) openTab(pmLeg.url)
             if (dexLeg?.url) openTab(dexLeg.url)
-            const q = new URLSearchParams({
+            void openCalcWindow({
               pmOutcome: pmLeg?.outcomeName ?? '',
               dexOutcome: dexLeg?.outcomeName ?? '',
               pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
@@ -504,11 +534,6 @@ function SportsOpportunityCard({
               pmAmount: pmPerfect.toFixed(2),
               dexAmount: dexPerfect.toFixed(2),
             })
-            window.open(
-              `/calculator?${q}`,
-              '_blank',
-              'width=480,height=340,left=0,top=0,resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no',
-            )
           }}
         >
           <ExternalLink size={28} />

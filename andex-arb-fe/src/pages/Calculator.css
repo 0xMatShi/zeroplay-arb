@@ -101,6 +101,28 @@
   -webkit-appearance: none;
 }
 
+.calc-input-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.calc-input-prefix {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+  user-select: none;
+}
+
+.calc-input--prefixed {
+  padding-left: 32px;
+}
+
 .calc-qty {
   position: relative;
   background: rgba(0, 240, 255, 0.07);
