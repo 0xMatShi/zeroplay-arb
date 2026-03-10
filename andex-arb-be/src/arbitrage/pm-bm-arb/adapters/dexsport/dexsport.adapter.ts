@@ -12,6 +12,7 @@ import {
   DexsportTournament,
 } from './dexsport.types';
 import { DexSportsEvent } from '../../interfaces/sports-arb.types';
+import { MARKET_MAP } from '../../services/sports-constants';
 
 // ── Constants ──────────────────────────────────────────────────
 
@@ -21,7 +22,14 @@ const API_KEY = 'ta-dexsport';
 const LANG = 'en';
 
 const TOKEN_REFRESH_BUFFER_MS = 60_000;
-const WS_RECONNECT_DELAY_MS = 5_000;
+const WS_RECONNECT_DELAY_MS = 3_000;
+
+/** How long to wait for event list to stabilize before checking phase 1 (ms) */
+const EVENT_SETTLE_MS = 5_000;
+/** How long to wait for Match Winner on all events after list settles (ms) */
+const PHASE1_TIMEOUT_MS = 10_000;
+/** How long to wait for phase 2 market data before firing ready anyway (ms) */
+const PHASE2_TIMEOUT_MS = 10_000;
 
 /** Sports we track for arbitrage */
 const TARGET_SPORTS = [
@@ -29,7 +37,19 @@ const TARGET_SPORTS = [
   'dota2', 'call-of-duty', 'baseball', 'lol', 'valorant',
 ];
 
-// ── Adapter ────────────────────────────────────────────────────
+/**
+ * Match Winner market name patterns — collected from MARKET_MAP moneyline entries.
+ * Used to detect when phase 1 (Match Winner discovered) is complete per event.
+ */
+const MATCH_WINNER_NAMES: string[] = [
+  ...new Set(
+    Object.values(MARKET_MAP)
+      .flatMap((sport) => sport['moneyline'] ?? [])
+      .map((name) => name.toLowerCase()),
+  ),
+];
+
+// ── Main adapter ───────────────────────────────────────────────
 
 @Injectable()
 export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
@@ -41,7 +61,7 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
   private token: string | null = null;
   private tokenExpiresAt = 0;
 
-  // ── WS state ────────────────────────────────────────────────
+  // ── Main WS state (discovery connection) ─────────────────────
   private ws: Ws.WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private tokenRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -66,8 +86,45 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
   /** Stable public event objects — updated in-place so match references stay fresh */
   private readonly publicEvents = new Map<string, DexSportsEvent>();
 
+  // ── Phase 1: Match Winner detection ─────────────────────────
+  /** All marketIds (from DexsportEvent.marketIds) per event — for phase 2 expansion */
+  private readonly eventAllMarketIds = new Map<string, string[]>();
+  /** Events where a Match Winner market has been confirmed via market message */
+  private readonly eventMatchWinnerFound = new Set<string>();
+  /** True once the event list has been stable for EVENT_SETTLE_MS */
+  private eventSettled = false;
+  /** Debounce timer reset on each new event subscription */
+  private eventSettleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Fallback: start phase 2 after PHASE1_TIMEOUT_MS even if not all events are ready */
+  private phase1TimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ── Phase 2: All market types ────────────────────────────────
+  /** True after phase 2 subscriptions have been sent */
+  private phase2Started = false;
+  /** Market IDs subscribed during phase 2 (not in mainMarketIds) */
+  private readonly phase2MarketIds = new Set<string>();
+  /** Count of phase 2 market messages received */
+  private phase2Received = 0;
+  /** Total phase 2 market IDs subscribed */
+  private phase2Total = 0;
+  /** True after onAllMarketsReady has been called once in this cycle */
+  private readyFired = false;
+  /** Timeout to fire ready if not all phase 2 markets respond */
+  private readyDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Periodic resubscription interval — resends join for all subscribed markets every 5s */
+  private marketRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+  // ── Callbacks ────────────────────────────────────────────────
   /** Called when any market price changes (set by scheduler) */
   onPriceUpdate: (() => void) | null = null;
+  /**
+   * Called once per discovery cycle when all events have Match Winner confirmed.
+   * Set by scheduler — triggers PM fetch + matching.
+   */
+  onAllMarketsReady: (() => void) | null = null;
+
+  /** Market IDs currently in matched pairs — used to filter debug logs */
+  trackedMarketIds: Set<string> = new Set();
 
   constructor(configService: ConfigService) {
     this.userHash = configService.get<string>('DEXSPORT_USER_HASH') || null;
@@ -132,10 +189,10 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
 
   private parseTokenExpiry(token: string): number {
     try {
-      const encodedHeader = token.replace(/_/g, '/').replace(/-/g, '+').split('.')[0];
-      const header = JSON.parse(Buffer.from(encodedHeader, 'base64').toString('utf8'));
-      if (header.exp && header.iat) {
-        return Date.now() + (header.exp - header.iat) * 1000;
+      const encodedPayload = token.replace(/_/g, '/').replace(/-/g, '+').split('.')[1];
+      const payload = JSON.parse(Buffer.from(encodedPayload, 'base64').toString('utf8'));
+      if (payload.exp && payload.iat) {
+        return Date.now() + (payload.exp - payload.iat) * 1000;
       }
     } catch { /* fallback */ }
     return Date.now() + 600_000;
@@ -152,7 +209,30 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     }, delay);
   }
 
-  // ── WebSocket lifecycle ───────────────────────────────────────
+  // ── Post-match market subscription ───────────────────────────
+
+  /**
+   * Subscribe the main WS connection to matched market IDs found after a match cycle.
+   * Updates marketToEvent mapping and sends join messages for any new IDs.
+   */
+  subscribeToMatchedMarkets(entries: Array<{ eventId: string; marketId: string }>): void {
+    const newIds: string[] = [];
+    for (const { eventId, marketId } of entries) {
+      this.marketToEvent.set(marketId, eventId);
+      if (!this.subscribedMarkets.has(marketId)) {
+        this.subscribedMarkets.add(marketId);
+        newIds.push(marketId);
+      }
+    }
+    if (newIds.length > 0) {
+      this.send(['join', 'market', newIds]);
+      this.logger.log(`DexSport: subscribed to ${newIds.length} matched market(s)`);
+    }
+    // Start periodic resubscription now that we're in the arbitrage phase
+    this.startMarketRefresh();
+  }
+
+  // ── Main WebSocket lifecycle ───────────────────────────────────
 
   private async connect(): Promise<void> {
     if (this.destroyed) return;
@@ -177,10 +257,23 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
 
       ws.on('open', () => {
         this.logger.log('DexSport WebSocket connected');
+        // Reset subscription state
         this.disciplinesJoined = false;
         this.subscribedTournaments.clear();
         this.subscribedEvents.clear();
         this.subscribedMarkets.clear();
+        // Reset phase state
+        this.eventAllMarketIds.clear();
+        this.eventMatchWinnerFound.clear();
+        this.eventSettled = false;
+        if (this.eventSettleTimer) { clearTimeout(this.eventSettleTimer); this.eventSettleTimer = null; }
+        if (this.phase1TimeoutTimer) { clearTimeout(this.phase1TimeoutTimer); this.phase1TimeoutTimer = null; }
+        if (this.readyDebounceTimer) { clearTimeout(this.readyDebounceTimer); this.readyDebounceTimer = null; }
+        this.phase2Started = false;
+        this.phase2MarketIds.clear();
+        this.phase2Received = 0;
+        this.phase2Total = 0;
+        this.readyFired = false;
       });
 
       ws.on('message', (raw: Ws.RawData) => {
@@ -197,6 +290,7 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
 
       ws.on('close', (code: number) => {
         if (this.ws !== ws) return;
+        if (this.marketRefreshTimer) { clearInterval(this.marketRefreshTimer); this.marketRefreshTimer = null; }
         this.logger.warn(`DexSport WebSocket closed (code=${code}), reconnecting in ${WS_RECONNECT_DELAY_MS}ms`);
         if (!this.destroyed) {
           this.reconnectTimer = setTimeout(() => this.reconnect(), WS_RECONNECT_DELAY_MS);
@@ -221,6 +315,18 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
   private clearTimers(): void {
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     if (this.tokenRefreshTimer) { clearTimeout(this.tokenRefreshTimer); this.tokenRefreshTimer = null; }
+    if (this.eventSettleTimer) { clearTimeout(this.eventSettleTimer); this.eventSettleTimer = null; }
+    if (this.phase1TimeoutTimer) { clearTimeout(this.phase1TimeoutTimer); this.phase1TimeoutTimer = null; }
+    if (this.readyDebounceTimer) { clearTimeout(this.readyDebounceTimer); this.readyDebounceTimer = null; }
+    if (this.marketRefreshTimer) { clearInterval(this.marketRefreshTimer); this.marketRefreshTimer = null; }
+  }
+
+  private startMarketRefresh(): void {
+    if (this.marketRefreshTimer) clearInterval(this.marketRefreshTimer);
+    this.marketRefreshTimer = setInterval(() => {
+      const ids = [...this.subscribedMarkets];
+      if (ids.length > 0) this.send(['join', 'market', ids]);
+    }, 3_000);
   }
 
   private send(msg: unknown): void {
@@ -309,6 +415,9 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
       this.eventToTournament.set(eid, id);
     });
     for (const eid of newIds) this.send(['join', 'event', eid]);
+
+    // Reset event-settle debounce — new events were added, list is not yet stable
+    this.resetEventSettleTimer();
   }
 
   private handleEvent(id: string, data: DexsportEvent): void {
@@ -351,18 +460,19 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
       if (data.startTime) pub.startTime = data.startTime;
     }
 
-    // Subscribe to ALL markets for this event (main + additional)
-    const allMarketIds: string[] = [
-      ...(data.mainMarketIds ?? []).filter(Boolean) as string[],
-      ...(data.marketIds ?? []),
-    ];
-    const newMarketIds = allMarketIds.filter((m) => m && !this.subscribedMarkets.has(m));
-    if (newMarketIds.length > 0) {
-      newMarketIds.forEach((m) => {
-        this.subscribedMarkets.add(m);
-        this.marketToEvent.set(m, id);
-      });
-      this.send(['join', 'market', newMarketIds]);
+    // Store ALL marketIds for phase 2 expansion (after Match Winner confirmed for all events)
+    const allMarketIds = (data.marketIds ?? []).filter(Boolean) as string[];
+    if (allMarketIds.length > 0) {
+      this.eventAllMarketIds.set(id, allMarketIds);
+    }
+
+    // Phase 1: subscribe ONLY to the Match Winner market (matchWinnerId).
+    // We wait for this specific market to confirm the event is active and ready.
+    const matchWinnerId = data.matchWinnerId ?? null;
+    if (matchWinnerId && !this.subscribedMarkets.has(matchWinnerId)) {
+      this.subscribedMarkets.add(matchWinnerId);
+      this.marketToEvent.set(matchWinnerId, id);
+      this.send(['join', 'market', [matchWinnerId]]);
     }
   }
 
@@ -375,17 +485,19 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     const cached = this.eventCache.get(eventId);
     if (!cached) return;
 
-    // Build outcomes with names
-    const outcomes: Array<{ name: string; price: number }> = (data.outcomes ?? []).map((o) => ({
-      name: o.name ?? '',
-      price: o.price ?? 0,
-    }));
+    // Build outcomes — skip frozen outcomes (betting closed on DEX side)
+    const outcomes: Array<{ name: string; price: number }> = (data.outcomes ?? [])
+      .filter((o) => !o.isFrozen && (o.price ?? 0) > 0)
+      .map((o) => ({ name: o.name ?? '', price: o.price }));
+
+    const allFrozen = (data.outcomes ?? []).length > 0 &&
+      (data.outcomes ?? []).every((o) => o.isFrozen || (o.price ?? 0) === 0);
 
     // Update internal cache
     const existingMarket = cached.markets.get(marketId);
     if (existingMarket) {
       if (data.name) existingMarket.name = data.name;
-      if (outcomes.length > 0) existingMarket.outcomes = outcomes;
+      existingMarket.outcomes = outcomes;
     } else {
       cached.markets.set(marketId, {
         marketId,
@@ -400,22 +512,157 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
       const marketName = data.name ?? existingMarket?.name ?? '';
       const pubMarket = pub.markets.find((m) => m.marketId === marketId);
 
-      if (pubMarket) {
-        // Update existing market's outcomes in-place
-        if (data.name) pubMarket.name = data.name;
-        if (outcomes.length > 0) {
-          pubMarket.outcomes = outcomes;
+      if (allFrozen) {
+        // All outcomes frozen — betting closed, remove market from public event
+        if (pubMarket) {
+          pub.markets = pub.markets.filter((m) => m.marketId !== marketId);
+          this.logger.log(`[DEX] Market "${marketName}" for "${pub.name}" frozen/closed, removed`);
         }
+      } else if (pubMarket) {
+        if (data.name) pubMarket.name = data.name;
+        pubMarket.outcomes = outcomes;
       } else if (marketName && outcomes.length > 0) {
-        // New market — add to event
         pub.markets.push({ marketId, name: marketName, outcomes });
       }
 
       pub.updatedAt = Date.now();
 
-      // Notify scheduler about price change
+      if (pubMarket && !allFrozen && this.trackedMarketIds.has(marketId)) {
+        this.logger.debug(
+          `[DEX PRICE] ${pub.name} / ${pubMarket.name}: ${pubMarket.outcomes.map((o) => `${o.name}=${o.price}`).join(', ')}`,
+        );
+      }
       this.onPriceUpdate?.();
     }
+
+    // ── Phase 1: detect Match Winner ─────────────────────────
+    if (!this.eventMatchWinnerFound.has(eventId)) {
+      const marketName = data.name ?? existingMarket?.name ?? '';
+      if (this.isMatchWinnerMarket(marketName)) {
+        this.eventMatchWinnerFound.add(eventId);
+        this.logger.debug(
+          `DexSport Phase 1: Match Winner found for event ${eventId}: "${marketName}"`,
+        );
+        this.checkPhase1Complete();
+      }
+    }
+
+    // ── Phase 2: track received market data ──────────────────
+    if (this.phase2Started && !this.readyFired && this.phase2MarketIds.has(marketId)) {
+      this.phase2Received++;
+      if (this.phase2Received >= this.phase2Total) {
+        this.fireAllMarketsReady();
+      }
+    }
+  }
+
+  // ── Phase helpers ────────────────────────────────────────────
+
+  private isMatchWinnerMarket(name: string): boolean {
+    if (!name) return false;
+    const lower = name.toLowerCase().trim();
+    return MATCH_WINNER_NAMES.some((p) => lower === p || lower.startsWith(p + ' '));
+  }
+
+  private resetEventSettleTimer(): void {
+    if (this.eventSettleTimer) clearTimeout(this.eventSettleTimer);
+    this.eventSettled = false;
+    this.eventSettleTimer = setTimeout(() => {
+      this.eventSettleTimer = null;
+      this.onEventListSettled();
+    }, EVENT_SETTLE_MS);
+  }
+
+  private onEventListSettled(): void {
+    this.eventSettled = true;
+
+    const allHaveMatchWinner =
+      this.subscribedEvents.size > 0 &&
+      [...this.subscribedEvents].every((eid) => this.eventMatchWinnerFound.has(eid));
+
+    if (allHaveMatchWinner) {
+      this.logger.log(
+        `DexSport Phase 1 complete (immediate): all ${this.subscribedEvents.size} events have Match Winner`,
+      );
+      this.startPhase2();
+    } else {
+      this.logger.log(
+        `DexSport Phase 1: ${this.eventMatchWinnerFound.size}/${this.subscribedEvents.size} events ready, waiting up to ${PHASE1_TIMEOUT_MS / 1000}s`,
+      );
+      if (this.phase1TimeoutTimer) clearTimeout(this.phase1TimeoutTimer);
+      this.phase1TimeoutTimer = setTimeout(() => {
+        this.phase1TimeoutTimer = null;
+        if (!this.phase2Started) {
+          this.logger.warn(
+            `DexSport Phase 1 timeout: ${this.eventMatchWinnerFound.size}/${this.subscribedEvents.size} events have Match Winner, proceeding`,
+          );
+          this.startPhase2();
+        }
+      }, PHASE1_TIMEOUT_MS);
+    }
+  }
+
+  private checkPhase1Complete(): void {
+    if (this.phase2Started) return;
+    if (!this.eventSettled) return;
+
+    const allHaveMatchWinner =
+      this.subscribedEvents.size > 0 &&
+      [...this.subscribedEvents].every((eid) => this.eventMatchWinnerFound.has(eid));
+
+    if (!allHaveMatchWinner) return;
+
+    if (this.phase1TimeoutTimer) { clearTimeout(this.phase1TimeoutTimer); this.phase1TimeoutTimer = null; }
+    this.logger.log(
+      `DexSport Phase 1 complete: all ${this.subscribedEvents.size} events have Match Winner`,
+    );
+    this.startPhase2();
+  }
+
+  /**
+   * Phase 2: TEMPORARILY DISABLED for testing.
+   * Phase 1 (Match Winner) is sufficient for now — fire ready immediately.
+   */
+  private startPhase2(): void {
+    this.phase2Started = true;
+    this.logger.log('DexSport Phase 2: skipped (test mode) — firing ready immediately');
+    this.fireAllMarketsReady();
+  }
+
+  private fireAllMarketsReady(): void {
+    if (this.readyFired) return;
+    this.readyFired = true;
+    if (this.readyDebounceTimer) { clearTimeout(this.readyDebounceTimer); this.readyDebounceTimer = null; }
+    this.logger.log(
+      `DexSport: all markets ready — ${this.eventMatchWinnerFound.size} events confirmed`,
+    );
+    this.onAllMarketsReady?.();
+  }
+
+  resetPhaseState(): void {
+    this.eventMatchWinnerFound.clear();
+    this.phase2Started = false;
+    this.phase2MarketIds.clear();
+    this.phase2Received = 0;
+    this.phase2Total = 0;
+    this.readyFired = false;
+    if (this.phase1TimeoutTimer) { clearTimeout(this.phase1TimeoutTimer); this.phase1TimeoutTimer = null; }
+    if (this.readyDebounceTimer) { clearTimeout(this.readyDebounceTimer); this.readyDebounceTimer = null; }
+
+    for (const [eventId, cached] of this.eventCache) {
+      if (!this.subscribedEvents.has(eventId)) continue;
+      for (const [, market] of cached.markets) {
+        if (this.isMatchWinnerMarket(market.name)) {
+          this.eventMatchWinnerFound.add(eventId);
+          break;
+        }
+      }
+    }
+
+    this.logger.log(
+      `DexSport phase reset: ${this.eventMatchWinnerFound.size}/${this.subscribedEvents.size} events have cached Match Winner`,
+    );
+    this.checkPhase1Complete();
   }
 
 }

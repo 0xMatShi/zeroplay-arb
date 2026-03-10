@@ -3662,6 +3662,53 @@
   min-width: 260px;
 }
 
+.pm-display-toggle {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 34px;
+  border-radius: 40px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  overflow: hidden;
+  user-select: none;
+}
+
+.pm-display-toggle__indicator {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  height: calc(100% - 4px);
+  border-radius: 40px;
+  background: linear-gradient(135deg, #3ED6FF, #F472B6);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pm-display-toggle__indicator--right {
+  transform: translateX(calc(100% + 2px));
+}
+
+.pm-display-toggle__label {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  transition: color 0.3s ease;
+  z-index: 1;
+}
+
+.pm-display-toggle__label--active {
+  color: #000;
+}
+
 .switch-toggle {
   position: relative;
   display: inline-flex;
@@ -3763,6 +3810,86 @@
   flex-direction: column;
   align-items: stretch;
   gap: 12px;
+}
+
+.volume-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.volume-slider-popup {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding-top: 4px;
+  z-index: 100;
+}
+
+.volume-slider-popup-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #111;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  animation: volume-popup-in 0.15s ease forwards;
+}
+
+@keyframes volume-popup-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes volume-popup-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.volume-slider-popup-inner--hiding {
+  animation: volume-popup-out 0.35s ease forwards;
+}
+
+.volume-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 28px;
+}
+
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 90px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(to right, #3ED6FF var(--fill, 30%), rgba(255,255,255,0.15) var(--fill, 30%));
+  outline: none;
+  cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3ED6FF, #F472B6);
+  cursor: pointer;
 }
 
 .settings-icon-button {
@@ -4938,7 +5065,16 @@
 
 .sports-card--pinned-stale {
   border-color: #6b7280 !important;
-  opacity: 0.75;
+}
+
+.sports-card--pinned-stale::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  z-index: 2;
 }
 
 .sports-card--stale {
@@ -4961,12 +5097,19 @@
 .sports-card-info {
   flex: 0 0 670px;
   min-width: 0;
-  padding: 8px 20px 8px 32px;
+  padding: 8px 20px 8px 48px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 6px;
   justify-content: center;
   overflow: hidden;
+}
+
+.sports-start-time {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-top: 0;
 }
 
 .sports-event-title {
@@ -5142,16 +5285,28 @@
 
 .sports-cents {
   font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 800;
   color: #ffffff;
+  transition: font-size 0.3s ease, color 0.3s ease;
 }
 
 .sports-odds {
   font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 800;
   color: #ffffff;
+  transition: font-size 0.3s ease, color 0.3s ease;
+}
+
+.sports-odds--muted {
+  font-size: 18px;
+  color: var(--text-muted);
+}
+
+.sports-cents--muted {
+  font-size: 18px;
+  color: var(--text-muted);
 }
 
 /* Metrics (Spread + Profit) */
@@ -5238,6 +5393,9 @@
   transition: color 0.25s ease, box-shadow 0.25s ease;
   overflow: hidden;
   z-index: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .sports-action-btn::before {
@@ -5269,3 +5427,4 @@
 .sports-action-btn--pin.active::before {
   opacity: 1;
 }
+

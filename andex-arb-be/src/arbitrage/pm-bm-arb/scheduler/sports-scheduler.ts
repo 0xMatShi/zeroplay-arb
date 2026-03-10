@@ -8,20 +8,24 @@ import { SportsMatch, SportsArbitrageOpportunity } from '../interfaces/sports-ar
 import { SportsArbGateway } from '../gateways/sports-arb.gateway';
 
 /**
- * Sports Arbitrage pipeline:
+ * Sports Arbitrage pipeline (phased discovery):
  *
- *  Cron (every 5 min): Re-match Polymarket sports events with DexSport events.
- *  Cron (every 10s):   Fetch PM order books via REST → immediate re-scan.
- *  Reactive:           On any price change from either WS, throttled re-scan (200ms).
+ *  Phase 1 (DEX): Subscribe to disciplines → tournaments → events → mainMarketIds.
+ *                 Wait until every event has a Match Winner market confirmed.
+ *  Phase 2 (DEX): Subscribe to remaining marketIds per event (Totals, Handicap, Map N, ...).
+ *                 Wait until market data received or 15s timeout.
+ *  Match cycle:   Fetch fresh PM events → text+startTime matching → subscribe WS to
+ *                 matched events on both platforms.
+ *  Hourly reset:  Reset DEX phase state → repeat discovery.
  *
- * Both adapters maintain persistent WS connections. Prices are updated
- * in-place on the cached event objects, so the scanner always reads fresh data.
+ *  Cron (every 10s): Refresh PM order books via REST → immediate re-scan.
+ *  Reactive:         On any price change from either WS, throttled re-scan (200ms).
  */
 @Injectable()
 export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SportsScheduler.name);
 
-  /** Current matched pairs — updated by cron, read by reactive scan */
+  /** Current matched pairs — updated by match cycle, read by reactive scan */
   private currentMatches: SportsMatch[] = [];
 
   /** Latest detected opportunities */
@@ -30,12 +34,22 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   /** Tracks when each opportunity was first detected (by stable ID) */
   private firstSeenMap: Map<string, number> = new Map();
 
-  /** Initial delay timer */
-  private initTimer: ReturnType<typeof setTimeout> | null = null;
-
   /** Debounce timer for reactive price-update scans */
   private scanDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly SCAN_DEBOUNCE_MS = 200;
+
+  /** Guard against concurrent match cycles */
+  private matchingInProgress = false;
+
+  /** Guard against concurrent books fetches */
+  private booksFetchInProgress = false;
+
+  /**
+   * PM token IDs for currently matched markets (updated after each match cycle).
+   * Used for WS subscription and REST books — covers ALL matched market types,
+   * not just main ones.
+   */
+  private matchedPmTokenIds: string[] = [];
 
   constructor(
     private readonly polyAdapter: PolymarketSportsAdapter,
@@ -51,49 +65,113 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.polyAdapter.onPriceUpdate = handler;
     this.dexAdapter.onPriceUpdate = handler;
 
-    // Wait for WS adapters to receive initial data, then run first match cycle
-    this.initTimer = setTimeout(() => this.runMatchCycle(), 30_000);
+    // When DEX signals all markets are ready, run a full match cycle
+    this.dexAdapter.onAllMarketsReady = () => this.onDexMarketsReady();
   }
 
   onModuleDestroy(): void {
-    if (this.initTimer) { clearTimeout(this.initTimer); this.initTimer = null; }
     if (this.scanDebounceTimer) { clearTimeout(this.scanDebounceTimer); this.scanDebounceTimer = null; }
     this.polyAdapter.onPriceUpdate = null;
     this.dexAdapter.onPriceUpdate = null;
+    this.dexAdapter.onAllMarketsReady = null;
   }
 
-  // ── Cron: Re-match events every 5 minutes ─────────────────────
+  // ── Cron: hourly discovery reset ──────────────────────────────
 
-  @Cron('0 */5 * * * *')
-  async handleMatchCron(): Promise<void> {
-    await this.runMatchCycle();
+  /**
+   * Every hour: reset DEX phase state to restart market discovery.
+   * DEX will re-check cached data and fire onAllMarketsReady → match cycle runs.
+   */
+  @Cron('0 0 * * * *')
+  async handleHourlyCron(): Promise<void> {
+    this.logger.log('Hourly cycle: resetting DEX discovery phase');
+    this.dexAdapter.resetPhaseState();
+    // resetPhaseState → checkPhase1Complete → startPhase2 → fireAllMarketsReady
+    // → onDexMarketsReady (if cache is hot, this happens synchronously)
   }
 
-  // ── Cron: Refresh PM order books every 10 seconds ─────────────
+  // ── Cron: Refresh PM order books every second ─────────────────
 
-  @Cron('*/10 * * * * *')
+  @Cron('* * * * * *')
   async handleBooksCron(): Promise<void> {
-    if (this.currentMatches.length === 0) return;
-    const allEventIds = [...new Set(this.currentMatches.map((m) => m.pmEvent.id))];
-    const tokenIds = this.polyAdapter.getTokenIdsForEvents(allEventIds);
-    await this.polyAdapter.fetchBooksForTokens(tokenIds);
-    this.runScanNow();
+    if (this.matchedPmTokenIds.length === 0) return;
+    if (this.booksFetchInProgress) return;
+    this.booksFetchInProgress = true;
+    try {
+      await this.polyAdapter.fetchBooksForTokens(this.matchedPmTokenIds);
+      this.runScanNow();
+    } finally {
+      this.booksFetchInProgress = false;
+    }
   }
+
+  // ── DEX ready callback ────────────────────────────────────────
+
+  /**
+   * Called by DexsportAdapter once all events have Match Winner and phase 2 is done.
+   * Fetches fresh PM events and runs a full match cycle.
+   */
+  private async onDexMarketsReady(): Promise<void> {
+    if (this.matchingInProgress) {
+      this.logger.warn('DEX ready signal received but match cycle already in progress, skipping');
+      return;
+    }
+    this.matchingInProgress = true;
+    try {
+      this.logger.log('DEX markets ready — fetching PM events and running match cycle');
+      await this.polyAdapter.forceFetch();
+      await this.runMatchCycle();
+    } catch (err: any) {
+      this.logger.error(`Match cycle failed after DEX ready signal: ${err.message}`);
+    } finally {
+      this.matchingInProgress = false;
+    }
+  }
+
+  // ── Match cycle ───────────────────────────────────────────────
 
   async runMatchCycle(): Promise<void> {
     try {
       this.currentMatches = this.matcher.findMatches();
-      this.logger.log(`Sports match cycle: ${this.currentMatches.length} matched pairs`);
 
-      // Subscribe PM WS to all matched events (live + pre-match)
-      const allEventIds = [...new Set(this.currentMatches.map((m) => m.pmEvent.id))];
       const liveCount = this.currentMatches.filter((m) => m.dexEvent.isLive).length;
-      this.logger.log(`Sports match cycle: ${liveCount} live, ${this.currentMatches.length - liveCount} pre-match`);
-      if (allEventIds.length > 0) {
-        this.polyAdapter.subscribeToMatchedEvents(allEventIds);
-      } else {
-        this.logger.warn('No matched events found — PM WS not subscribed');
+      const totalMarkets = this.currentMatches.reduce((s, m) => s + m.matchedMarkets.length, 0);
+      this.logger.log(
+        `Sports match cycle: ${this.currentMatches.length} pairs (${liveCount} live), ${totalMarkets} matched markets`,
+      );
+
+      // Collect PM token IDs and DEX market IDs for ALL matched market types
+      // (moneyline, totals, handicap, map N — everything the matcher found)
+      const pmTokenSet = new Set<string>();
+      const dexEntries: Array<{ eventId: string; marketId: string }> = [];
+      const dexTracked = new Set<string>();
+
+      for (const m of this.currentMatches) {
+        for (const mp of m.matchedMarkets) {
+          // PM: collect tokens for this specific market (not all event tokens)
+          for (const tokenId of mp.pmMarket.tokenIds) pmTokenSet.add(tokenId);
+          // DEX: collect market entries for explicit post-match subscription
+          dexEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
+          dexTracked.add(mp.dexMarket.marketId);
+        }
       }
+
+      this.matchedPmTokenIds = [...pmTokenSet];
+
+      if (this.matchedPmTokenIds.length > 0) {
+        // Subscribe PM CLOB WS to matched market tokens only
+        this.polyAdapter.subscribeToMatchedTokens(this.matchedPmTokenIds);
+      } else {
+        this.logger.warn('No matched markets found — PM WS not subscribed');
+      }
+
+      if (dexEntries.length > 0) {
+        // Ensure all matched DEX markets are subscribed (safety net for any missed in phase 2)
+        this.dexAdapter.subscribeToMatchedMarkets(dexEntries);
+      }
+
+      // Update DEX tracked market IDs for debug logging
+      this.dexAdapter.trackedMarketIds = dexTracked;
 
       // Immediately scan after fresh match (no debounce — explicit trigger)
       this.runScanNow();
@@ -102,7 +180,9 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Throttle reactive scans: run at most once per SCAN_DEBOUNCE_MS regardless of update frequency */
+  // ── Reactive scanning ─────────────────────────────────────────
+
+  /** Throttle reactive scans: run at most once per SCAN_DEBOUNCE_MS */
   private scheduleScan(): void {
     if (this.scanDebounceTimer) return;
     this.scanDebounceTimer = setTimeout(() => {
@@ -113,12 +193,13 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
 
   private runScanNow(): void {
     if (this.currentMatches.length === 0) return;
+    this.logger.debug(`[SCAN] running, matches=${this.currentMatches.length}`);
 
     try {
       const scanned = this.scanner.scan(this.currentMatches);
+      this.logger.debug(`[SCAN] result: ${scanned.length} opportunities`);
       const matchMap = new Map(this.currentMatches.map((m) => [m.id, m]));
 
-      // Preserve firstDetectedAt for opportunities seen in previous scans
       const now = Date.now();
       const prevById = new Map(this.currentOpportunities.map((o) => [o.id, o]));
       const activeIds = new Set<string>();
@@ -131,19 +212,19 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
 
         if (this.gateway) {
           if (!prevById.has(opp.id)) {
-            // New opportunity — push to all clients
+            this.logger.debug(`[SCAN] emitNew: ${opp.id} profit=${opp.profitPercent.toFixed(2)}%`);
             this.gateway.emitNew(opp, matchMap);
           } else {
-            // Existing — emit update only if profit changed by more than 0.01%
             const prev = prevById.get(opp.id)!;
-            if (Math.abs(prev.profitPercent - opp.profitPercent) > 0.01) {
+            const delta = Math.abs(prev.profitPercent - opp.profitPercent);
+            if (delta > 0.01) {
+              this.logger.debug(`[SCAN] emitUpdated: ${opp.id}`);
               this.gateway.emitUpdated(opp, matchMap);
             }
           }
         }
       }
 
-      // Emit expired for opportunities that disappeared
       if (this.gateway) {
         for (const id of prevById.keys()) {
           if (!activeIds.has(id)) {
@@ -152,7 +233,6 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      // Remove IDs that are no longer active
       for (const id of this.firstSeenMap.keys()) {
         if (!activeIds.has(id)) this.firstSeenMap.delete(id);
       }

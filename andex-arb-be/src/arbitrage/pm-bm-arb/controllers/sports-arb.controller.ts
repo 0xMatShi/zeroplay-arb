@@ -63,6 +63,9 @@ export class SportsArbController {
           tournamentName,
           marketType: opp.marketType,
           dexMarketName: opp.dexMarketName,
+          // pmEvent.startTime is in ms; dexEvent.startTime is in seconds → normalize to ms
+          startTime: match?.pmEvent.startTime
+            ?? (match?.dexEvent.startTime != null ? match.dexEvent.startTime * 1000 : null),
           sportsLegs: opp.legs.map((leg) => ({
             platform: leg.platform,
             outcomeName: leg.outcomeName,

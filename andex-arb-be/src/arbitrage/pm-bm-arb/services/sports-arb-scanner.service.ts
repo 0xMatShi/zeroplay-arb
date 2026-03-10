@@ -157,7 +157,9 @@ export class SportsArbScanner {
         maxProfit,
         detectedAt: Date.now(),
         firstDetectedAt: Date.now(),
-        isLive: match.dexEvent.isLive,
+        isLive: match.dexEvent.isLive ||
+          (match.pmEvent.startTime != null && Date.now() > match.pmEvent.startTime) ||
+          (match.dexEvent.startTime != null && Date.now() > match.dexEvent.startTime * 1000),
       });
     }
 

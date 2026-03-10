@@ -1,8 +1,8 @@
-import { useState, useMemo, useCallback, useRef, Component } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
+import { Calculator, ExternalLink, Pause, Pin, Play, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { Toast } from '../components/Toast'
 import { useOpportunities, useOrderBook, useSubscriptionStatus, useSportsOpportunities, queryKeys } from '../api/hooks'
@@ -12,6 +12,14 @@ import { useSportsArbSocket } from '../hooks/useSportsArbSocket'
 import { ApiError } from '../api/client'
 import { formatRelativeTime } from '../utils/time'
 import type { Opportunity, SportsOpportunity, SportsOpportunityLeg, NewOpportunityEvent, OrderBookAnalysisResponse, ArbitrageTier } from '../api/types'
+
+function useNow(intervalMs = 1000) {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), intervalMs)
+    return () => clearInterval(id)
+  }, [intervalMs])
+}
 
 type SortMode = 'profit' | 'profitUsd' | 'newest'
 type TypeFilter = 'all' | 'binary' | 'multi'
@@ -162,6 +170,7 @@ function OpportunityCard({
   arbMode: ArbMode
 }) {
   const { t } = useTranslation()
+  useNow()
   const [obOpen, setObOpen] = useState(false)
   const isPmPm = arbMode === 'pm-pm'
   const { data: obData, isLoading: obLoading, isError: obError } = useOrderBook(opp.id, isPmPm)
@@ -280,6 +289,10 @@ function formatMarketType(mt: string): string {
   return MARKET_TYPE_LABELS[mt] ?? mt
 }
 
+function effectiveIsLive(opp: SportsOpportunity): boolean {
+  return opp.isLive || (opp.startTime != null && Date.now() > opp.startTime)
+}
+
 // --- Sports Opportunity Card (PM-BM) ---
 
 function SportsOpportunityCard({
@@ -288,6 +301,7 @@ function SportsOpportunityCard({
   perfectAmount,
   isPinned,
   isStale,
+  pmDisplayMode,
   onPin,
   onUnpin,
 }: {
@@ -296,10 +310,12 @@ function SportsOpportunityCard({
   perfectAmount: number
   isPinned: boolean
   isStale: boolean
+  pmDisplayMode: 'shares' | 'odds'
   onPin: (opp: SportsOpportunity) => void
   onUnpin: (id: string) => void
 }) {
-  const { t } = useTranslation()
+  useTranslation()
+  useNow()
   const [expanded, setExpanded] = useState(false)
 
   const pmLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'polymarket')
@@ -318,7 +334,8 @@ function SportsOpportunityCard({
   const pmReal = pmLeg ? pmQty * pmLeg.probability : 0
   const dexReal = dexLeg ? pmQty * dexLeg.probability : 0
   const realTotal = pmQty * totalCost
-  const profitUsd = realTotal > 0 ? realTotal * (profitPct / 100) : 0
+  const effectiveTotal = realTotal > 0 ? Math.min(realTotal, perfectAmount) : 0
+  const profitUsd = effectiveTotal > 0 ? effectiveTotal * (profitPct / 100) : 0
 
   const SPORT_DISPLAY: Record<string, string> = { csgo: 'CS2' }
   const sportKey = opp.sportKey ?? ''
@@ -332,18 +349,32 @@ function SportsOpportunityCard({
   else if (isStale) cardClass += ' sports-card--stale'
 
   return (
-    <div className={cardClass} style={{ animationDelay: `${index * 0.05}s` }}>
+    <div
+      className={cardClass}
+      style={{ animationDelay: `${index * 0.05}s` }}
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+    >
       {/* Main row */}
-      <div className="sports-card-main" onClick={() => setExpanded(prev => !prev)}>
+      <div className="sports-card-main">
 
         {/* Left: event info */}
         <div className="sports-card-info">
           <div className="sports-event-title">
             {opp.matchTitle}{opp.tournamentName ? ` — ${opp.tournamentName}` : ''}
           </div>
+          {opp.startTime != null && (
+            <div className="sports-start-time">
+              {new Date(opp.startTime).toLocaleString('en-GB', {
+                day: '2-digit', month: 'short', year: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+                timeZone: 'UTC', hour12: false,
+              })} (UTC)
+            </div>
+          )}
           <div className="sports-badges">
             {sportLabel && <span className="sports-sport-badge">{sportLabel}</span>}
-            {opp.isLive ? (
+            {effectiveIsLive(opp) ? (
               <span className="sports-live-badge sports-live-badge--live">
                 <span className="sports-live-dot" />
                 LIVE
@@ -372,8 +403,12 @@ function SportsOpportunityCard({
             <div className="sports-price-row">
               {pmLeg ? (
                 <>
-                  <span className="sports-cents">{(pmLeg.probability * 100).toFixed(0)}¢</span>
-                  <span className="sports-odds">{pmLeg.decimalOdds.toFixed(2)}x</span>
+                  <span className={`sports-cents ${pmDisplayMode === 'odds' ? 'sports-cents--muted' : ''}`}>
+                    {(pmLeg.probability * 100).toFixed(0)}¢
+                  </span>
+                  <span className={`sports-odds ${pmDisplayMode === 'shares' ? 'sports-odds--muted' : ''}`}>
+                    {pmLeg.decimalOdds.toFixed(2)}x
+                  </span>
                 </>
               ) : <span className="sports-cents">—</span>}
             </div>
@@ -393,7 +428,7 @@ function SportsOpportunityCard({
             <div className="sports-price-row">
               {dexLeg ? (
                 <>
-                  <span className="sports-cents">{(dexLeg.probability * 100).toFixed(0)}¢</span>
+                  <span className="sports-cents sports-cents--muted">{(dexLeg.probability * 100).toFixed(0)}¢</span>
                   <span className="sports-odds">{dexLeg.decimalOdds.toFixed(2)}x</span>
                 </>
               ) : <span className="sports-cents">—</span>}
@@ -426,13 +461,28 @@ function SportsOpportunityCard({
             else onPin(opp)
           }}
         >
-          {isPinned ? t('scanner.unpin') : t('scanner.pin')}
+          <Pin size={28} />
         </button>
         <button
           className="sports-action-btn sports-action-btn--calc"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            const q = new URLSearchParams({
+              pmOutcome: pmLeg?.outcomeName ?? '',
+              dexOutcome: dexLeg?.outcomeName ?? '',
+              pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
+              dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
+              pmAmount: pmPerfect.toFixed(2),
+              dexAmount: dexPerfect.toFixed(2),
+            })
+            window.open(
+              `/calculator?${q}`,
+              '_blank',
+              'width=480,height=350,left=0,top=0,resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no',
+            )
+          }}
         >
-          {t('scanner.calc')}
+          <Calculator size={28} />
         </button>
         <button
           className="sports-action-btn sports-action-btn--open"
@@ -447,11 +497,25 @@ function SportsOpportunityCard({
             }
             if (pmLeg?.url) openTab(pmLeg.url)
             if (dexLeg?.url) openTab(dexLeg.url)
+            const q = new URLSearchParams({
+              pmOutcome: pmLeg?.outcomeName ?? '',
+              dexOutcome: dexLeg?.outcomeName ?? '',
+              pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
+              dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
+              pmAmount: pmPerfect.toFixed(2),
+              dexAmount: dexPerfect.toFixed(2),
+            })
+            window.open(
+              `/calculator?${q}`,
+              '_blank',
+              'width=480,height=340,left=0,top=0,resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no',
+            )
           }}
         >
-          {t('scanner.open')}
+          <ExternalLink size={28} />
         </button>
       </div>
+
     </div>
   )
 }
@@ -488,12 +552,21 @@ export function Scanner() {
   const [sortMode, setSortMode] = useState<SortMode>('profit')
   const [showPolymarketMin50c, setShowPolymarketMin50c] = useState(true)
   const [soundEnabled, setSoundEnabled] = useState(true)
+  const [volume, setVolume] = useState(0.3)
+  const [volumeHover, setVolumeHover] = useState(false)
+  const [volumeVisible, setVolumeVisible] = useState(false)
+  const volumeHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isPaused, setIsPaused] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
 
   // PM-BM settings
-  const [perfectAmount, setPerfectAmount] = useState(1000)
-  const [realMinAmount, setRealMinAmount] = useState(10)
+  const [pmDisplayMode, setPmDisplayMode] = useState<'shares' | 'odds'>('shares')
+  const [perfectAmountInput, setPerfectAmountInput] = useState('1000')
+  const [realMinAmountInput, setRealMinAmountInput] = useState('10')
+  const [maxDaysInput, setMaxDaysInput] = useState('')
+  const perfectAmount = perfectAmountInput === '' ? 0 : Math.max(0, Number(perfectAmountInput) || 0)
+  const realMinAmount = realMinAmountInput === '' ? 0 : Math.max(0, Number(realMinAmountInput) || 0)
+  const maxDaysUntilStart = maxDaysInput === '' ? null : Math.max(0, Number(maxDaysInput) || 0)
   const [pinnedOpps, setPinnedOpps] = useState<Map<string, SportsOpportunity>>(new Map())
 
   // Toast state
@@ -548,7 +621,7 @@ export function Scanner() {
         oscillator.frequency.setValueAtTime(note.freq, now + note.offset)
 
         gainNode.gain.setValueAtTime(0.0001, now + note.offset)
-        gainNode.gain.exponentialRampToValueAtTime(0.08, now + note.offset + 0.01)
+        gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), now + note.offset + 0.01)
         gainNode.gain.exponentialRampToValueAtTime(0.0001, now + note.offset + note.duration)
 
         oscillator.connect(gainNode)
@@ -560,10 +633,10 @@ export function Scanner() {
     } catch {
       // Ignore if audio playback is blocked by browser policy.
     }
-  }, [])
+  }, [volume])
 
   const handleNewOpportunity = useCallback((data: NewOpportunityEvent) => {
-    if (soundEnabled && data.profitPercentage >= minRoi) {
+    if (soundEnabled && arbMode === 'pm-pm' && data.profitPercentage >= minRoi) {
       playOpportunitySound()
     }
     setToast({
@@ -573,7 +646,7 @@ export function Scanner() {
       }),
       type: 'success',
     })
-  }, [t, playOpportunitySound, minRoi, soundEnabled])
+  }, [t, playOpportunitySound, minRoi, soundEnabled, arbMode])
 
   const { isConnected, authError: wsAuthError } = useArbitrageSocket({
     onNewOpportunity: handleNewOpportunity,
@@ -582,11 +655,13 @@ export function Scanner() {
 
   // PM-BM real-time WebSocket
   const handleNewSportsOpportunity = useCallback((opp: SportsOpportunity) => {
-    if (!soundEnabled || isPaused) return
+    if (!soundEnabled || isPaused || arbMode !== 'pm-bm') return
+    if (liveFilter === 'live' && !opp.isLive) return
+    if (liveFilter === 'pre' && opp.isLive) return
     if (opp.profitPercentage >= minRoi) {
       playOpportunitySound()
     }
-  }, [soundEnabled, isPaused, minRoi, playOpportunitySound])
+  }, [soundEnabled, isPaused, arbMode, liveFilter, minRoi, playOpportunitySound])
 
   const { authError: sportsWsAuthError } = useSportsArbSocket({
     onNewOpportunity: handleNewSportsOpportunity,
@@ -636,8 +711,9 @@ export function Scanner() {
 
       // Live/pre filter (pm-bm only)
       if (arbMode === 'pm-bm') {
-        if (liveFilter === 'live' && !opp.isLive) return false
-        if (liveFilter === 'pre' && opp.isLive) return false
+        const live = effectiveIsLive(opp as SportsOpportunity)
+        if (liveFilter === 'live' && !live) return false
+        if (liveFilter === 'pre' && live) return false
       }
 
       // Platform filter — only for pm-pm mode
@@ -651,7 +727,7 @@ export function Scanner() {
       }
 
       // Polymarket pre-filter — hide low-priced legs (< $0.50) when enabled (pm-bm pre-match only)
-      if (arbMode === 'pm-bm' && showPolymarketMin50c && !opp.isLive) {
+      if (arbMode === 'pm-bm' && showPolymarketMin50c && !effectiveIsLive(opp as SportsOpportunity)) {
         const hasLowPolymarketLeg = opp.legs.some((leg) => {
           const slug = leg.platformSlug.toLowerCase()
           const name = leg.platformName.toLowerCase()
@@ -677,6 +753,15 @@ export function Scanner() {
           const pmLeg = sOpp.sportsLegs.find(l => l.platform === 'polymarket')
           const realTotal = (pmLeg?.pmBestAskQty ?? 0) * opp.totalCost
           if (realTotal < realMinAmount) return false
+        }
+      }
+
+      // DAYS UNTIL START filter — hide pre-match events starting too far in the future
+      if (arbMode === 'pm-bm' && maxDaysUntilStart !== null) {
+        const sOpp = opp as SportsOpportunity
+        if (sOpp.startTime != null) {
+          const daysUntil = (sOpp.startTime - Date.now()) / (1000 * 60 * 60 * 24)
+          if (daysUntil > maxDaysUntilStart) return false
         }
       }
 
@@ -710,7 +795,7 @@ export function Scanner() {
     })
 
     return result
-  }, [pmpmQuery.data, pmbmQuery.data, searchQuery, minRoi, typeFilter, liveFilter, effectivePlatforms, sortMode, showPolymarketMin50c, arbMode, realMinAmount, sportFilter])
+  }, [pmpmQuery.data, pmbmQuery.data, searchQuery, minRoi, typeFilter, liveFilter, effectivePlatforms, sortMode, showPolymarketMin50c, arbMode, realMinAmount, sportFilter, maxDaysUntilStart])
 
   // PM-BM display list: pinned cards first, then non-pinned filtered cards
   const displayPmBmOpps = useMemo(() => {
@@ -760,23 +845,54 @@ export function Scanner() {
         </div>
         <div className="scanner-header-right">
           <div className="settings-toolbar">
-            <button
-              type="button"
-              className={`settings-icon-button ${soundEnabled ? 'active' : ''}`}
-              onClick={() => {
-                if (!soundEnabled) playOpportunitySound()
-                setSoundEnabled((prev) => !prev)
+            <div
+              className="volume-control"
+              onMouseEnter={() => {
+                if (volumeHideTimer.current) clearTimeout(volumeHideTimer.current)
+                setVolumeVisible(true)
+                setVolumeHover(true)
               }}
-              aria-label={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
-              title={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+              onMouseLeave={() => {
+                setVolumeHover(false)
+                volumeHideTimer.current = setTimeout(() => setVolumeVisible(false), 350)
+              }}
             >
-              <span className="settings-icon-content" aria-hidden="true">
-                {soundEnabled
-                  ? <Volume2 size={16} color="#1BBDE8" style={{ stroke: '#1BBDE8' }} />
-                  : <VolumeX size={16} color="#fff" style={{ stroke: '#fff' }} />
-                }
-              </span>
-            </button>
+              <button
+                type="button"
+                className={`settings-icon-button ${soundEnabled ? 'active' : ''}`}
+                onClick={() => {
+                  if (!soundEnabled) playOpportunitySound()
+                  setSoundEnabled((prev) => !prev)
+                }}
+                aria-label={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
+              >
+                <span className="settings-icon-content" aria-hidden="true">
+                  {soundEnabled
+                    ? <Volume2 size={16} color="#1BBDE8" style={{ stroke: '#1BBDE8' }} />
+                    : <VolumeX size={16} color="#fff" style={{ stroke: '#fff' }} />
+                  }
+                </span>
+              </button>
+              {volumeVisible && (
+                <div className="volume-slider-popup">
+                  <div className={`volume-slider-popup-inner ${volumeHover ? '' : 'volume-slider-popup-inner--hiding'}`}>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={volume}
+                      onChange={(e) => setVolume(Number(e.target.value))}
+                      className="volume-slider"
+                      style={{
+                        background: `linear-gradient(to right, #3ED6FF 0%, #F472B6 ${volume * 100}%, rgba(255,255,255,0.15) ${volume * 100}%)`,
+                      }}
+                    />
+                    <span className="volume-label">{Math.round(volume * 100)}%</span>
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className={`settings-icon-button settings-icon-button--pause ${isPaused ? 'active' : ''}`}
@@ -863,8 +979,8 @@ export function Scanner() {
                       type="number"
                       min="0"
                       step="100"
-                      value={perfectAmount}
-                      onChange={(e) => setPerfectAmount(Math.max(0, Number(e.target.value)))}
+                      value={perfectAmountInput}
+                      onChange={(e) => setPerfectAmountInput(e.target.value)}
                       className="settings-number-input"
                     />
                   </div>
@@ -877,8 +993,30 @@ export function Scanner() {
                       type="number"
                       min="0"
                       step="10"
-                      value={realMinAmount}
-                      onChange={(e) => setRealMinAmount(Math.max(0, Number(e.target.value)))}
+                      value={realMinAmountInput}
+                      onChange={(e) => setRealMinAmountInput(e.target.value)}
+                      className="settings-number-input"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {arbMode === 'pm-bm' && (
+                <div className="settings-sliders">
+                  <div className="settings-slider-row">
+                    <div className="settings-slider-head">
+                      <span className="settings-slider-label">MAX DAYS</span>
+                      <span className="settings-slider-value">
+                        {maxDaysUntilStart === null ? '∞' : `${maxDaysUntilStart}d`}
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="∞"
+                      value={maxDaysInput}
+                      onChange={(e) => setMaxDaysInput(e.target.value)}
                       className="settings-number-input"
                     />
                   </div>
@@ -968,6 +1106,14 @@ export function Scanner() {
                       <span className="switch-toggle-thumb" />
                     </span>
                   </button>
+                  <div
+                    className="pm-display-toggle"
+                    onClick={() => setPmDisplayMode(prev => prev === 'shares' ? 'odds' : 'shares')}
+                  >
+                    <div className={`pm-display-toggle__indicator ${pmDisplayMode === 'odds' ? 'pm-display-toggle__indicator--right' : ''}`} />
+                    <span className={`pm-display-toggle__label ${pmDisplayMode === 'shares' ? 'pm-display-toggle__label--active' : ''}`}>SHARES</span>
+                    <span className={`pm-display-toggle__label ${pmDisplayMode === 'odds' ? 'pm-display-toggle__label--active' : ''}`}>ODDS</span>
+                  </div>
                   <div className="filter-group">
                     <label className="filter-label">{t('scanner.type')}</label>
                     <div className="roi-buttons">
@@ -1072,6 +1218,7 @@ export function Scanner() {
                     perfectAmount={perfectAmount}
                     isPinned={pinnedOpps.has(opp.id)}
                     isStale={isStale}
+                    pmDisplayMode={pmDisplayMode}
                     onPin={(o) => setPinnedOpps(prev => new Map(prev).set(o.id, o))}
                     onUnpin={(id) => setPinnedOpps(prev => { const n = new Map(prev); n.delete(id); return n })}
                   />

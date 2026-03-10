@@ -9,7 +9,7 @@ const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_WS = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
 
 const FETCH_INTERVAL_MS = 10 * 60_000;
-const WS_RECONNECT_DELAY_MS = 5_000;
+const WS_RECONNECT_DELAY_MS = 1_000;
 const WS_PING_INTERVAL_MS = 9_000;
 const PM_PAGE = 500;
 
@@ -42,6 +42,11 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
     this.fetchTimer = setInterval(() => this.fetchEvents(), FETCH_INTERVAL_MS);
   }
 
+  /** Force an immediate fetch of PM events (called by scheduler before matching). */
+  async forceFetch(): Promise<void> {
+    await this.fetchEvents();
+  }
+
   onModuleDestroy(): void {
     this.destroyed = true;
     if (this.fetchTimer) clearInterval(this.fetchTimer);
@@ -55,27 +60,18 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Subscribe WS only to tokens belonging to matched event IDs.
-   * Called by scheduler after findMatches().
+   * Subscribe WS to a specific list of token IDs (matched market tokens from the scheduler).
+   * More precise than subscribeToMatchedEvents — only subscribes to actually matched markets.
    */
-  subscribeToMatchedEvents(eventIds: string[]): void {
-    const matchedTokenIds: string[] = [];
-    for (const [tokenId, ref] of this.tokenIndex) {
-      if (eventIds.includes(ref.eventId)) {
-        matchedTokenIds.push(tokenId);
-      }
-    }
-
-    if (matchedTokenIds.length === 0) {
+  subscribeToMatchedTokens(tokenIds: string[]): void {
+    if (tokenIds.length === 0) {
       this.logger.log('PolymarketSports: no matched tokens to subscribe');
       return;
     }
 
-    this.activeTokenIds = new Set(matchedTokenIds);
+    this.activeTokenIds = new Set(tokenIds);
     this.connectWs();
-    this.logger.log(
-      `PolymarketSports: subscribing to ${matchedTokenIds.length} tokens from ${eventIds.length} matched events`,
-    );
+    this.logger.log(`PolymarketSports: subscribing to ${tokenIds.length} matched market tokens`);
   }
 
   // ── Fetch events from Gamma API ──────────────────────────────
@@ -144,12 +140,15 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
 
           if (markets.length === 0) continue;
 
+          const startTime = raw.startTime ? new Date(raw.startTime).getTime() : undefined;
+
           const existing = this.eventCache.get(String(raw.id));
           if (existing) {
             // Update in-place to preserve references held by currentMatches in scheduler
             existing.title = raw.title;
             existing.sportKey = sportKey;
             existing.slug = raw.slug ?? '';
+            if (startTime !== undefined) existing.startTime = startTime;
             existing.markets = this.mergeMarkets(existing.markets, markets);
             existing.updatedAt = Date.now();
           } else {
@@ -158,6 +157,7 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
               title: raw.title,
               sportKey,
               slug: raw.slug ?? '',
+              startTime,
               markets,
               updatedAt: Date.now(),
             };

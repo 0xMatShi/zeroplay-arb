@@ -5,6 +5,7 @@ import { config } from './config/wagmi'
 import { Landing } from './pages/Landing'
 import { Dashboard } from './pages/Dashboard'
 import { Scanner } from './pages/Scanner'
+import { Calculator } from './pages/Calculator'
 import { AppLayout } from './components/AppLayout'
 import './App.css'
 
@@ -21,6 +22,7 @@ function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/scanner" element={<Scanner />} />
             </Route>
+            <Route path="/calculator" element={<Calculator />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

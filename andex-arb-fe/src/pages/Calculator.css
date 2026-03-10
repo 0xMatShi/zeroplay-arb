@@ -1,0 +1,221 @@
+.calc-page {
+  background: #191A21;
+  color: #FFFFFF;
+  font-family: 'Inter', -apple-system, monospace;
+  display: inline-flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 10px;
+}
+
+.calc-boxes {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+/* Platform boxes — same as .sports-platform-box */
+.calc-box {
+  flex: 1;
+  background: #191A21;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 48px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.calc-box--pm {
+  border-color: rgba(0, 240, 255, 0.2);
+}
+
+.calc-box--dex {
+  border-color: rgba(167, 139, 250, 0.2);
+}
+
+/* Labels — same as .sports-platform-label */
+.calc-box-label {
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.calc-box-label--pm {
+  color: #00F0FF;
+}
+
+.calc-box-label--dex {
+  color: #a78bfa;
+}
+
+/* Outcome name — same as .sports-outcome-name */
+.calc-outcome {
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 15px;
+  font-weight: 400;
+  color: #FFFFFF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.calc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.calc-field-label {
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 11px;
+  color: #B0B0B0;
+  letter-spacing: 0.5px;
+  text-align: left;
+}
+
+.calc-input {
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 20px;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 28px;
+  padding: 10px 16px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+  -moz-appearance: textfield;
+  text-align: center;
+}
+
+.calc-input::-webkit-outer-spin-button,
+.calc-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+.calc-qty {
+  position: relative;
+  background: rgba(0, 240, 255, 0.07);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: 28px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: background 0.4s, border-color 0.4s;
+  width: 100%;
+  height: 36px;
+  overflow: hidden;
+}
+
+.calc-qty:hover {
+  background: rgba(0, 240, 255, 0.14);
+  border-color: rgba(0, 240, 255, 0.4);
+}
+
+.calc-qty--copied {
+  background: rgba(74, 222, 128, 0.1);
+  border-color: rgba(74, 222, 128, 0.35);
+}
+
+.calc-qty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity 0.4s ease;
+  padding: 0 16px;
+}
+
+.calc-qty-label {
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #00F0FF;
+  text-transform: uppercase;
+  transition: color 0.3s;
+}
+
+.calc-qty-label--copied {
+  color: #4ade80;
+}
+
+.calc-qty-val {
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.calc-box--pm .calc-input:focus {
+  border-color: rgba(0, 240, 255, 0.5);
+}
+
+.calc-box--dex .calc-input:focus {
+  border-color: rgba(167, 139, 250, 0.5);
+}
+
+/* Result row */
+.calc-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 0;
+}
+
+.calc-result-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.calc-result-label {
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 11px;
+  color: #B0B0B0;
+  letter-spacing: 0.5px;
+}
+
+.calc-result-divider {
+  width: 1px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.calc-result-val {
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 20px;
+  font-weight: 400;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.calc-result-pct {
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 17px;
+  font-weight: 400;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.calc-result-val--pos {
+  color: #3ED6FF;
+  text-shadow: 0 0 10px rgba(62, 214, 255, 0.7), 0 0 20px rgba(62, 214, 255, 0.4);
+}
+
+.calc-result-val--neg {
+  color: #F472B6;
+  text-shadow: 0 0 10px rgba(244, 114, 182, 0.7), 0 0 20px rgba(244, 114, 182, 0.4);
+}

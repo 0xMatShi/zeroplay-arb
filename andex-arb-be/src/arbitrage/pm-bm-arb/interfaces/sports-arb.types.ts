@@ -37,6 +37,8 @@ export interface PmSportsEvent {
   title: string;
   sportKey: string;
   slug: string;
+  /** Unix ms — actual game/event start time (from Polymarket startTime field) */
+  startTime?: number;
   markets: PmMarket[];
   updatedAt: number;
 }

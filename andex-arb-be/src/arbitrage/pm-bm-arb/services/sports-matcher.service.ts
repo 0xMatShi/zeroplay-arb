@@ -323,6 +323,13 @@ export class SportsMatcher {
           if (usedDex.has(dexId)) continue;
 
           const dex = dexList.find((d) => d.eventId === dexId)!;
+
+          // Filter by startTime if both platforms have it (within 3 hours — same match)
+          if (pm.startTime !== undefined && dex.startTime !== undefined && dex.startTime > 0) {
+            const dexMs = dex.startTime * 1000;
+            if (Math.abs(pm.startTime - dexMs) > 3 * 3_600_000) continue;
+          }
+
           const sim = computeSimilarity(pmStripped, dex.name);
 
           if (sim > bestSim) {

@@ -149,6 +149,7 @@ export interface SportsOpportunity extends Opportunity {
   tournamentName: string | null
   marketType: string
   dexMarketName?: string
+  startTime?: number | null
   sportsLegs: SportsOpportunityLeg[]
 }
 
