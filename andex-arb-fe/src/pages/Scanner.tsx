@@ -35,8 +35,8 @@ async function openCalcWindow(params: CalcParams) {
 
       pipWin.addEventListener('pagehide', () => root.unmount())
       return
-    } catch {
-      // fall through to window.open
+    } catch (err) {
+      console.warn('[PiP] documentPictureInPicture failed, falling back to window.open:', err)
     }
   }
 
@@ -524,8 +524,6 @@ function SportsOpportunityCard({
               a.rel = 'noopener noreferrer'
               a.click()
             }
-            if (pmLeg?.url) openTab(pmLeg.url)
-            if (dexLeg?.url) openTab(dexLeg.url)
             void openCalcWindow({
               pmOutcome: pmLeg?.outcomeName ?? '',
               dexOutcome: dexLeg?.outcomeName ?? '',
@@ -534,6 +532,8 @@ function SportsOpportunityCard({
               pmAmount: pmPerfect.toFixed(2),
               dexAmount: dexPerfect.toFixed(2),
             })
+            if (pmLeg?.url) openTab(pmLeg.url)
+            if (dexLeg?.url) openTab(dexLeg.url)
           }}
         >
           <ExternalLink size={28} />
