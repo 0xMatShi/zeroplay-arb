@@ -25,7 +25,7 @@ import {
 export class SportsArbScanner {
   private readonly logger = new Logger(SportsArbScanner.name);
 
-  private readonly MIN_PROFIT_PCT = 0.1;
+  private readonly MIN_PROFIT_PCT = -100;
 
   scan(matches: SportsMatch[]): SportsArbitrageOpportunity[] {
     const opportunities: SportsArbitrageOpportunity[] = [];
@@ -128,9 +128,7 @@ export class SportsArbScanner {
         }
       }
 
-      const profitPercent = totalCost < 1
-        ? ((1 - totalCost) / totalCost) * 100
-        : 0;
+      const profitPercent = totalCost > 0 ? ((1 - totalCost) / totalCost) * 100 : -100;
 
       if (profitPercent < this.MIN_PROFIT_PCT) continue;
 

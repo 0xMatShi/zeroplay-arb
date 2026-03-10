@@ -104,14 +104,21 @@ export function useSportsArbSocket(options?: UseSportsArbSocketOptions) {
             refetchAll()
             return old
           }
+          const prev = old.items[index]
           const updatedItems = [...old.items]
           updatedItems[index] = {
-            ...updatedItems[index],
+            ...prev,
             ...(data.profitPercentage != null && { profitPercentage: data.profitPercentage }),
             ...(data.totalCost != null && { totalCost: data.totalCost }),
             ...(data.legs != null && { legs: data.legs }),
             ...(data.lastValidatedAt != null && { lastValidatedAt: data.lastValidatedAt }),
             ...(data.sportsLegs != null && { sportsLegs: data.sportsLegs }),
+          }
+          // Transition from non-profitable → profitable: treat as new for notifications
+          const wasNonProfit = prev.profitPercentage <= 0
+          const isNowProfit = data.profitPercentage != null && data.profitPercentage > 0
+          if (wasNonProfit && isNowProfit) {
+            onNewOpportunityRef.current?.(updatedItems[index])
           }
           return { ...old, items: updatedItems }
         },

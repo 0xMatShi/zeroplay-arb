@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Calculator, ExternalLink, Pause, Pin, Play, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
-import { Toast } from '../components/Toast'
 import { useOpportunities, useOrderBook, useSubscriptionStatus, useSportsOpportunities, queryKeys } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
@@ -542,7 +541,7 @@ export function Scanner() {
 
   // Filters
   const [searchQuery] = useState('')
-  const [minRoi, setMinRoi] = useState(0.5)
+  const [minRoi, setMinRoi] = useState(0)
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({})
   const [typeFilter] = useState<TypeFilter>('all')
   const [liveFilter, setLiveFilter] = useState<LiveFilter>('all')
@@ -561,16 +560,14 @@ export function Scanner() {
 
   // PM-BM settings
   const [pmDisplayMode, setPmDisplayMode] = useState<'shares' | 'odds'>('shares')
-  const [perfectAmountInput, setPerfectAmountInput] = useState('1000')
-  const [realMinAmountInput, setRealMinAmountInput] = useState('10')
+  const [perfectAmountInput, setPerfectAmountInput] = useState('100')
+  const [realMinAmountInput, setRealMinAmountInput] = useState('0')
   const [maxDaysInput, setMaxDaysInput] = useState('')
   const perfectAmount = perfectAmountInput === '' ? 0 : Math.max(0, Number(perfectAmountInput) || 0)
   const realMinAmount = realMinAmountInput === '' ? 0 : Math.max(0, Number(realMinAmountInput) || 0)
   const maxDaysUntilStart = maxDaysInput === '' ? null : Math.max(0, Number(maxDaysInput) || 0)
   const [pinnedOpps, setPinnedOpps] = useState<Map<string, SportsOpportunity>>(new Map())
 
-  // Toast state
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
   // Subscription gate: check before loading arbitrage data
   const { data: subStatus, isLoading: isSubLoading } = useSubscriptionStatus()
@@ -639,14 +636,7 @@ export function Scanner() {
     if (soundEnabled && arbMode === 'pm-pm' && data.profitPercentage >= minRoi) {
       playOpportunitySound()
     }
-    setToast({
-      message: t('scanner.newOpportunity', {
-        profit: data.profitPercentage.toFixed(2),
-        title: data.matchTitle,
-      }),
-      type: 'success',
-    })
-  }, [t, playOpportunitySound, minRoi, soundEnabled, arbMode])
+  }, [playOpportunitySound, minRoi, soundEnabled, arbMode])
 
   const { isConnected, authError: wsAuthError } = useArbitrageSocket({
     onNewOpportunity: handleNewOpportunity,
@@ -655,12 +645,12 @@ export function Scanner() {
 
   // PM-BM real-time WebSocket
   const handleNewSportsOpportunity = useCallback((opp: SportsOpportunity) => {
-    if (!soundEnabled || isPaused || arbMode !== 'pm-bm') return
+    if (isPaused || arbMode !== 'pm-bm') return
     if (liveFilter === 'live' && !opp.isLive) return
     if (liveFilter === 'pre' && opp.isLive) return
-    if (opp.profitPercentage >= minRoi) {
-      playOpportunitySound()
-    }
+    // Only notify for profitable opportunities
+    if (opp.profitPercentage <= 0 || opp.profitPercentage < minRoi) return
+    if (soundEnabled) playOpportunitySound()
   }, [soundEnabled, isPaused, arbMode, liveFilter, minRoi, playOpportunitySound])
 
   const { authError: sportsWsAuthError } = useSportsArbSocket({
@@ -700,6 +690,8 @@ export function Scanner() {
       const effectiveRoi = arbMode === 'pm-bm'
         ? Number(opp.profitPercentage) || 0
         : Number(opp.weightedAvgProfit ?? opp.profitPercentage) || 0
+      // pm-bm: never show non-profitable arbs in main list (negative/zero arbs are only for pinned cards)
+      if (arbMode === 'pm-bm' && effectiveRoi <= 0) return false
       if (effectiveRoi < minRoi) {
         return false
       }
@@ -802,10 +794,13 @@ export function Scanner() {
     if (arbMode !== 'pm-bm') return []
     const filteredSports = filteredOpportunities.map(o => o as SportsOpportunity)
     const filteredIds = new Set(filteredSports.map(o => o.id))
+    // Full unfiltered list — used for pinned cards so they always get fresh prices
+    // even when the opp is filtered out by minRoi or other frontend filters
+    const allSports = (pmbmQuery.data?.items ?? []) as SportsOpportunity[]
 
     const pinnedList: Array<{ opp: SportsOpportunity; isStale: boolean }> =
       Array.from(pinnedOpps.entries()).map(([id, saved]) => {
-        const latest = filteredSports.find(o => o.id === id)
+        const latest = allSports.find(o => o.id === id)
         return { opp: latest ?? saved, isStale: !filteredIds.has(id) }
       })
 
@@ -814,23 +809,13 @@ export function Scanner() {
       .map(o => ({ opp: o, isStale: false }))
 
     return [...pinnedList, ...nonPinned]
-  }, [arbMode, filteredOpportunities, pinnedOpps])
+  }, [arbMode, filteredOpportunities, pinnedOpps, pmbmQuery.data])
 
 
   const locale = i18n.language === 'ru' ? 'ru' : 'en'
 
   return (
     <div className="scanner-page">
-      {/* Toast */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-          duration={4000}
-        />
-      )}
-
       {/* Header */}
       <div className="scanner-header">
         <div className="scanner-header-left">
@@ -1205,7 +1190,7 @@ export function Scanner() {
                 <p>{t('scanner.errorLoading')}</p>
               </div>
             ) : (arbMode === 'pm-bm' ? displayPmBmOpps.length : filteredOpportunities.length) === 0 ? (
-              <div className="empty-state">
+              <div className={`empty-state${arbMode === 'pm-bm' ? ' empty-state--sports' : ''}`}>
                 <p>{t('scanner.noOpportunities')}</p>
                 <p className="empty-hint">{t('scanner.emptyHint')}</p>
               </div>

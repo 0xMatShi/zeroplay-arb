@@ -20,8 +20,8 @@ function App() {
             <Route path="/" element={<Landing />} />
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/scanner" element={<Scanner />} />
             </Route>
+            <Route path="/scanner" element={<Scanner />} />
             <Route path="/calculator" element={<Calculator />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

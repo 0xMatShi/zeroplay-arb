@@ -2629,8 +2629,8 @@
 
 /* Footer */
 .footer {
-  background: var(--bg-card);
-  border-top: 2px solid var(--primary-color);
+  background: #000000;
+  border-top: 2px solid #3ED6FF;
   padding: 60px 24px 24px;
   margin-top: 100px;
 }
@@ -2665,7 +2665,7 @@
 }
 
 .footer-logo .logo-symbol {
-  color: var(--primary-color);
+  color: #3ED6FF;
 }
 
 .footer-tagline {
@@ -2720,7 +2720,7 @@
 }
 
 .footer-nav li a:hover {
-  color: var(--primary-color);
+  color: #3ED6FF;
   padding-left: 4px;
 }
 
@@ -4603,6 +4603,12 @@
   text-align: center;
 }
 
+.empty-state--sports {
+  background: #191A21;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 60px;
+}
+
 .empty-state p {
   font-family: var(--font-mono);
   font-size: 16px;
@@ -4965,7 +4971,7 @@
   gap: 8px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: #4ade80;
+  color: #3ED6FF;
   letter-spacing: 0.5px;
 }
 
@@ -4973,14 +4979,14 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #4ade80;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+  background: #3ED6FF;
+  box-shadow: 0 0 6px rgba(62, 214, 255, 0.6);
   animation: footer-pulse 2s ease-in-out infinite;
 }
 
 @keyframes footer-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(74, 222, 128, 0.6); }
-  50% { opacity: 0.4; box-shadow: 0 0 2px rgba(74, 222, 128, 0.2); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(62, 214, 255, 0.6); }
+  50% { opacity: 0.4; box-shadow: 0 0 2px rgba(62, 214, 255, 0.2); }
 }
 
 .app-footer-build {
