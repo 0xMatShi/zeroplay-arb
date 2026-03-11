@@ -84,10 +84,8 @@ async def safe_edit_message(callback: CallbackQuery, text: str, **kwargs):
 
 
 MAIN_MENU_TEXT = (
-    "Добро пожаловать! Ты почти участник DAO 😈\n\n"
-    "Выбирай подписку и получай доступ ко всем ресурсам\n"
-    "Личный кабинет даст информацию о подписке\n"
-    "Есть вопрос? Пиши в ЛС\n\n"
+    "Добро пожаловать! \n\n"
+    "Это официальный бот арбитраж-сервиса SubLine\n\n"
     "Выбирай нужное действие 👇🏻"
 )
 
@@ -347,6 +345,9 @@ async def back_to_main(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "subscribe")
 async def show_plans(callback: CallbackQuery) -> None:
+    await callback.answer("В данный момент оплата недоступна", show_alert=True)
+    return
+
     user = callback.from_user
     update_user_profile(user.id, user.username, user.first_name, user.last_name)
     logger.info(f"User {user.id} opened subscription plans")
@@ -419,6 +420,9 @@ async def show_plans(callback: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("plan:"))
 async def show_token_selection(callback: CallbackQuery) -> None:
     """Показывает выбор токена (монеты) после выбора плана."""
+    await callback.answer("В данный момент оплата недоступна", show_alert=True)
+    return
+
     plan_id = callback.data.split(":")[1]  # type: ignore
     plan = SUBSCRIPTION_PLANS.get(plan_id)
     if not plan:
@@ -746,46 +750,15 @@ async def show_profile(callback: CallbackQuery) -> None:
     else:
         status_text = "У вас нет активной подписки."
 
-    # Реферальный баланс
-    balance = get_referral_balance(user_id)
-    balance_text = f"\n\n💰 Реферальный баланс: {balance:.2f}$"
-    if balance >= 10:
-        balance_text += "\n(доступен вывод)"
-    else:
-        balance_text += f"\n(минимум для вывода: 10$)"
-
-    # Личная реферальная ссылка (для всех пользователей, у кого она есть)
-    referral_text = ""
-    own_referral_code = get_user_own_referral_code(user_id)
-    if own_referral_code:
-        bot_info = await callback.bot.get_me()  # type: ignore
-        bot_username = bot_info.username if bot_info and bot_info.username else "PaymentDAOBot"
-        referral_url = f"https://t.me/{bot_username}?start={own_referral_code}"
-        paid_count = get_referral_paid_count(user_id)
-        current_percent = get_referral_percent(paid_count)
-        next_percent_info = ""
-        if paid_count == 0:
-            next_percent_info = " → после 1-го станет 25%"
-        elif paid_count == 1:
-            next_percent_info = " → после 2-го станет 30%"
-        referral_text = (
-            f"\n\n🔗 Ваша реферальная ссылка:\n<code>{referral_url}</code>\n\n"
-            f"👥 Приведено рефералов: {paid_count}\n"
-            f"💹 Ваш процент: {current_percent}%{next_percent_info}\n\n"
-            f"Приглашайте друзей и получайте {current_percent}% от суммы их оплаты ежемесячно!"
-        )
-
     text = (
         f"Личный кабинет\n\n"
         f"ID: {user_id}\n"
         f"{status_text}"
-        f"{balance_text}"
-        f"{referral_text}"
     )
 
-    logger.info(f"User {user_id} opened profile, balance={balance:.2f}$")
+    logger.info(f"User {user_id} opened profile")
     await safe_edit_message(
-        callback, text, reply_markup=profile_kb(balance >= 10), parse_mode=ParseMode.HTML
+        callback, text, reply_markup=profile_kb(False), parse_mode=ParseMode.HTML
     )
     await callback.answer()
 

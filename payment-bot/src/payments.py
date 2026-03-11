@@ -15,9 +15,8 @@ PRIVATE_CHAT_ID = int(os.getenv("PRIVATE_CHAT_ID", "0"))
 PRIVATE_GROUP_ID = int(os.getenv("PRIVATE_GROUP_ID", "0"))  # Используем имя переменной с опечаткой из .env
 
 SUBSCRIPTION_PLANS = {
-    "1month": {"label": "1 месяц", "price": 0.1, "duration_days": 30},
-    "3months": {"label": "3 месяца", "price": 120, "duration_days": 90},
-    "forever": {"label": "Навсегда", "price": 250, "duration_days": None},
+    "1week": {"label": "1 неделя", "price": 29, "duration_days": 7},
+    "1month": {"label": "1 месяц", "price": 99, "duration_days": 30},
 }
 
 SUPPORTED_NETWORKS = {
