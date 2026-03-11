@@ -9,7 +9,6 @@ import { LanguageSwitcher } from '../components/LanguageSwitcher'
 export function Landing() {
   const { t } = useTranslation()
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
-  const [openFaqId, setOpenFaqId] = useState<string | null>(null)
   const { data: user } = useWhoami()
   const navigate = useNavigate()
 

@@ -5,7 +5,6 @@ import { Landing } from './pages/Landing'
 // import { Dashboard } from './pages/Dashboard'
 import { Scanner } from './pages/Scanner'
 import { Calculator } from './pages/Calculator'
-import { AppLayout } from './components/AppLayout'
 import './App.css'
 
 const queryClient = new QueryClient()
