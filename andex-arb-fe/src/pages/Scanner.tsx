@@ -353,7 +353,7 @@ function SportsOpportunityCard({
   const [expanded, setExpanded] = useState(false)
 
   const pmLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'polymarket')
-  const dexLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'dexsport')
+  const dexLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle')
 
   const totalCost = opp.totalCost
   const profitPct = opp.profitPercentage
@@ -448,9 +448,11 @@ function SportsOpportunityCard({
             </div>
           </div>
 
-          {/* DexSport box */}
+          {/* Bookmaker box */}
           <div className="sports-platform-box">
-            <div className="sports-platform-label sports-platform-label--dex">DEXSPORT</div>
+            <div className={`sports-platform-label sports-platform-label--${dexLeg?.platform === 'pinnacle' ? 'pinnacle' : 'dex'}`}>
+              {dexLeg?.platform === 'pinnacle' ? 'PINNACLE' : 'DEXSPORT'}
+            </div>
             <div className="sports-outcome-name">{dexLeg?.outcomeName ?? '—'}</div>
             <div className="sports-amounts-inline">
               <span className="sports-amount-key">A:</span>
@@ -508,6 +510,7 @@ function SportsOpportunityCard({
               dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
               pmAmount: pmPerfect.toFixed(2),
               dexAmount: dexPerfect.toFixed(2),
+              dexPlatform: dexLeg?.platform,
             })
           }}
         >
@@ -531,6 +534,7 @@ function SportsOpportunityCard({
               dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
               pmAmount: pmPerfect.toFixed(2),
               dexAmount: dexPerfect.toFixed(2),
+              dexPlatform: dexLeg?.platform,
             })
             if (pmLeg?.url) openTab(pmLeg.url)
             if (dexLeg?.url) openTab(dexLeg.url)

@@ -9,6 +9,9 @@ import { EventStatus, MatchStatus, MatchMethod, VerificationSource } from '../in
 /** Minimum similarity score to auto-create a match */
 const DEFAULT_MATCH_THRESHOLD = 0.60;
 
+/** Similarity above this threshold → auto-confirm without manual review */
+const AUTO_CONFIRM_THRESHOLD = 0.95;
+
 /** Pre-filter: max days difference in end dates */
 const MAX_END_DATE_DIFF_DAYS = 30;
 
@@ -425,20 +428,30 @@ export class MatchingService {
       try {
         const outcomeMapping = this.buildOutcomeMapping([event1, event2]);
 
+        const autoConfirm = similarity >= AUTO_CONFIRM_THRESHOLD;
+
         const match = this.matchRepo.create({
           title: event1.title,
           matchMethod: MatchMethod.AUTO,
           confidence: similarity,
-          status: MatchStatus.PENDING,
+          status: autoConfirm ? MatchStatus.CONFIRMED : MatchStatus.PENDING,
           events: [event1, event2],
           outcomeMapping,
         });
 
         await this.matchRepo.save(match);
+
+        if (autoConfirm) {
+          await this.verifiedMatchRepo.upsert(
+            { eventMatchId: match.id, verificationSource: VerificationSource.AUTO, confidence: similarity },
+            ['eventMatchId'],
+          );
+        }
+
         created++;
 
         this.logger.log(
-          `NEW Match (${(similarity * 100).toFixed(1)}%): "${event1.title}" <-> "${event2.title}"`,
+          `NEW Match (${(similarity * 100).toFixed(1)}%, ${autoConfirm ? 'AUTO-CONFIRMED' : 'PENDING'}): "${event1.title}" <-> "${event2.title}"`,
         );
       } catch (error) {
         this.logger.warn(
@@ -526,9 +539,9 @@ export class MatchingService {
 
     // Anagram detection: same word set but different original titles.
     // These are likely opposite outcomes of the same event (e.g. "R Senate, D House" vs "D Senate, R House").
-    // Force AI verification by returning a score below the auto-confirm threshold.
+    // Reject them to avoid false matches between opposite outcomes.
     if (jaccard === 1.0 && title1.toLowerCase().trim() !== title2.toLowerCase().trim()) {
-      return 0.89;
+      return 0;
     }
 
     const orderSim = this.wordOrderSimilarity(words1, words2);

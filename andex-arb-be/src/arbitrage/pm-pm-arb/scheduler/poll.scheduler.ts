@@ -2,15 +2,13 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventFetcherService } from '../services/event-fetcher.service';
 import { MatchingService } from '../services/matching.service';
-import { AiVerificationService } from '../services/ai-verification.service';
 
 /**
  * Match pipeline scheduler — runs every hour.
  *
- * Responsible only for data ingestion and match verification:
+ * Responsible for data ingestion and matching:
  * 1. Fetch events from all platforms
- * 2. Match new events across platforms (text similarity → PENDING)
- * 3. AI-verify pending matches (PENDING → CONFIRMED / REJECTED)
+ * 2. Match new events across platforms (text similarity → CONFIRMED)
  *
  * Arbitrage scanning is handled independently by ScanScheduler (every 30s).
  */
@@ -22,7 +20,6 @@ export class PollScheduler implements OnModuleInit {
   constructor(
     private readonly eventFetcher: EventFetcherService,
     private readonly matchingService: MatchingService,
-    private readonly aiVerification: AiVerificationService,
   ) {}
 
   /**
@@ -83,19 +80,13 @@ export class PollScheduler implements OnModuleInit {
         this.logger.debug(`  ${slug}: ${ids.length} events`);
       }
 
-      // Step 2: Match events across platforms (text similarity → PENDING)
-      this.logger.log('Step 2/3: Matching events...');
+      // Step 2: Match events across platforms (text similarity → CONFIRMED)
+      this.logger.log('Step 2/2: Matching events...');
       const newMatches = await this.matchingService.matchNewEvents();
-
-      // Step 3: AI-verify pending matches (PENDING → CONFIRMED / REJECTED → verified_matches)
-      this.logger.log('Step 3/3: AI-verifying matches...');
-      const aiStats = await this.aiVerification.verifyPendingMatches();
 
       const elapsed = Date.now() - startTime;
       this.logger.log(
-        `Match cycle complete in ${elapsed}ms: ${totalFetched} events fetched, ` +
-          `${newMatches} new matches, AI verified ${aiStats.processed} ` +
-          `(${aiStats.confirmed}✓ ${aiStats.rejected}✗)`,
+        `Match cycle complete in ${elapsed}ms: ${totalFetched} events fetched, ${newMatches} new matches`,
       );
     } catch (error) {
       this.logger.error(`Match cycle failed: ${error.message}`, error.stack);

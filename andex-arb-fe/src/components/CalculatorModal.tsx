@@ -9,6 +9,7 @@ export interface CalcParams {
   dexOdds: string
   pmAmount: string
   dexAmount: string
+  dexPlatform?: string
 }
 
 interface Props {
@@ -220,8 +221,10 @@ export function CalculatorModal({ params, onClose }: Props) {
           </div>
 
           {/* DEX box */}
-          <div className="calc-box calc-box--dex" style={{ padding: '8px 12px', gap: 6, borderRadius: 20 }}>
-            <div className="calc-box-label calc-box-label--dex">DEXSPORT</div>
+          <div className={`calc-box calc-box--${params.dexPlatform === 'pinnacle' ? 'pinnacle' : 'dex'}`} style={{ padding: '8px 12px', gap: 6, borderRadius: 20 }}>
+            <div className={`calc-box-label calc-box-label--${params.dexPlatform === 'pinnacle' ? 'pinnacle' : 'dex'}`}>
+              {params.dexPlatform === 'pinnacle' ? 'PINNACLE' : 'DEXSPORT'}
+            </div>
             <div className="calc-outcome" style={{ fontSize: 13 }}>{params.dexOutcome || '—'}</div>
             <div className="calc-field">
               <label className="calc-field-label">Amount ($)</label>

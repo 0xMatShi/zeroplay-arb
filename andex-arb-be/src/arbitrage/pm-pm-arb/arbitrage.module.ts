@@ -24,7 +24,6 @@ import { MatchingService } from './services/matching.service';
 import { ScannerService } from './services/scanner.service';
 import { OpportunityService } from './services/opportunity.service';
 import { OrderBookService } from './services/orderbook.service';
-import { AiVerificationService } from './services/ai-verification.service';
 import { PriceStreamService } from './services/price-stream.service';
 
 // Schedulers
@@ -72,7 +71,6 @@ import { SubscriptionsModule } from '../../subscriptions/subscriptions.module';
     ScannerService,
     OpportunityService,
     OrderBookService,
-    AiVerificationService,
     PriceStreamService,
 
     // Schedulers
@@ -90,7 +88,6 @@ import { SubscriptionsModule } from '../../subscriptions/subscriptions.module';
     ScannerService,
     OpportunityService,
     OrderBookService,
-    AiVerificationService,
   ],
 })
 export class ArbitrageModule {}

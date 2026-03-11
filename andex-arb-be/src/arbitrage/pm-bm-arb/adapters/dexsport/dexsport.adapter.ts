@@ -639,6 +639,23 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     this.onAllMarketsReady?.();
   }
 
+  /**
+   * Clears all event/market caches and reconnects the WebSocket from scratch.
+   * Called by the scheduler before a full rematch cycle.
+   */
+  clearCache(): void {
+    this.logger.log('DexSport: clearing all event/market caches and reconnecting');
+    this.eventCache.clear();
+    this.publicEvents.clear();
+    this.tournamentToSport.clear();
+    this.tournamentToName.clear();
+    this.eventToSport.clear();
+    this.eventToTournament.clear();
+    this.marketToEvent.clear();
+    this.trackedMarketIds.clear();
+    this.reconnect();
+  }
+
   resetPhaseState(): void {
     this.eventMatchWinnerFound.clear();
     this.phase2Started = false;

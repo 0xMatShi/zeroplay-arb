@@ -54,6 +54,9 @@ export interface DexOutcome {
 export interface DexMarket {
   marketId: string;
   name: string;
+  /** Explicit market type (set by adapters that know type from API structure, e.g. Pinnacle).
+   *  When present, matcher uses this directly instead of name-based MARKET_MAP lookup. */
+  marketType?: string;
   outcomes: DexOutcome[];
 }
 
@@ -84,12 +87,13 @@ export interface SportsMatch {
   similarity: number;
   matchedMarkets: MatchedMarketPair[];
   matchedAt: number;
+  bookmakerPlatform: 'dexsport' | 'pinnacle';
 }
 
 // ── Arbitrage ────────────────────────────────────────────────
 
 export interface SportsArbLeg {
-  platform: 'polymarket' | 'dexsport';
+  platform: 'polymarket' | 'dexsport' | 'pinnacle';
   outcomeName: string;
   /** Probability 0..1 (cost per $1 payout) */
   probability: number;

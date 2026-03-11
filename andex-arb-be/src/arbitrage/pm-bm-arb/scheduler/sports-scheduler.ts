@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Optional } from '@ne
 import { Cron } from '@nestjs/schedule';
 import { PolymarketSportsAdapter } from '../adapters/polymarket-sports/polymarket-sports.adapter';
 import { DexsportAdapter } from '../adapters/dexsport/dexsport.adapter';
+import { PinnacleAdapter } from '../adapters/pinnacle/pinnacle.adapter';
 import { SportsMatcher } from '../services/sports-matcher.service';
 import { SportsArbScanner } from '../services/sports-arb-scanner.service';
 import { SportsMatch, SportsArbitrageOpportunity } from '../interfaces/sports-arb.types';
@@ -44,6 +45,10 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   /** Guard against concurrent books fetches */
   private booksFetchInProgress = false;
 
+  /** Track which adapters have completed at least one full fetch */
+  private dexReady = false;
+  private pinnacleReady = false;
+
   /**
    * PM token IDs for currently matched markets (updated after each match cycle).
    * Used for WS subscription and REST books — covers ALL matched market types,
@@ -54,19 +59,29 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly polyAdapter: PolymarketSportsAdapter,
     private readonly dexAdapter: DexsportAdapter,
+    private readonly pinnacleAdapter: PinnacleAdapter,
     private readonly matcher: SportsMatcher,
     private readonly scanner: SportsArbScanner,
     @Optional() private readonly gateway: SportsArbGateway | null = null,
   ) {}
 
   onModuleInit(): void {
-    // Register reactive price change handlers on both adapters (debounced)
-    const handler = () => this.scheduleScan();
-    this.polyAdapter.onPriceUpdate = handler;
-    this.dexAdapter.onPriceUpdate = handler;
+    // Reactive price change handlers — any price update from any source triggers re-scan
+    const priceHandler = () => this.scheduleScan();
+    this.polyAdapter.onPriceUpdate = priceHandler;
+    this.dexAdapter.onPriceUpdate = priceHandler;
+    this.pinnacleAdapter.onPriceUpdate = priceHandler;
 
-    // When DEX signals all markets are ready, run a full match cycle
-    this.dexAdapter.onAllMarketsReady = () => this.onDexMarketsReady();
+    // When a bookmaker adapter signals all markets are ready, run a full match cycle
+    // — but only once BOTH bookmaker adapters have completed their initial fetch
+    this.dexAdapter.onAllMarketsReady = () => {
+      this.dexReady = true;
+      if (this.pinnacleReady) this.onBookmakerMarketsReady('dexsport');
+    };
+    this.pinnacleAdapter.onAllMarketsReady = () => {
+      this.pinnacleReady = true;
+      if (this.dexReady) this.onBookmakerMarketsReady('pinnacle');
+    };
   }
 
   onModuleDestroy(): void {
@@ -74,20 +89,38 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.polyAdapter.onPriceUpdate = null;
     this.dexAdapter.onPriceUpdate = null;
     this.dexAdapter.onAllMarketsReady = null;
+    this.pinnacleAdapter.onPriceUpdate = null;
+    this.pinnacleAdapter.onAllMarketsReady = null;
   }
 
   // ── Cron: hourly discovery reset ──────────────────────────────
 
   /**
-   * Every hour: reset DEX phase state to restart market discovery.
-   * DEX will re-check cached data and fire onAllMarketsReady → match cycle runs.
+   * Every hour: reset both bookmaker adapters to restart market discovery.
+   * Each adapter will re-fetch and fire onAllMarketsReady → match cycle runs
+   * once both are ready again.
    */
-  @Cron('0 0 * * * *')
+  @Cron('0 */10 * * * *')
   async handleHourlyCron(): Promise<void> {
-    this.logger.log('Hourly cycle: resetting DEX discovery phase');
-    this.dexAdapter.resetPhaseState();
-    // resetPhaseState → checkPhase1Complete → startPhase2 → fireAllMarketsReady
-    // → onDexMarketsReady (if cache is hot, this happens synchronously)
+    this.logger.log('10-minute cycle: clearing all caches and restarting full discovery');
+
+    // Reset scheduler state
+    this.currentMatches = [];
+    this.currentOpportunities = [];
+    this.firstSeenMap.clear();
+    this.matchedPmTokenIds = [];
+
+    // Reset readiness flags before adapters start re-fetching
+    this.dexReady = false;
+    this.pinnacleReady = false;
+
+    // Clear all adapter caches (as if just started)
+    this.polyAdapter.clearCache();
+    this.pinnacleAdapter.clearCache();
+    this.dexAdapter.clearCache(); // also triggers WS reconnect → full rediscovery
+
+    // Trigger Pinnacle re-fetch (will fire onAllMarketsReady when done)
+    this.pinnacleAdapter.resetPhaseState();
   }
 
   // ── Cron: Refresh PM order books every second ─────────────────
@@ -108,21 +141,21 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   // ── DEX ready callback ────────────────────────────────────────
 
   /**
-   * Called by DexsportAdapter once all events have Match Winner and phase 2 is done.
+   * Called when both bookmaker adapters have signalled they are ready.
    * Fetches fresh PM events and runs a full match cycle.
    */
-  private async onDexMarketsReady(): Promise<void> {
+  private async onBookmakerMarketsReady(source: string): Promise<void> {
     if (this.matchingInProgress) {
-      this.logger.warn('DEX ready signal received but match cycle already in progress, skipping');
+      this.logger.warn(`${source} ready signal received but match cycle already in progress, skipping`);
       return;
     }
     this.matchingInProgress = true;
     try {
-      this.logger.log('DEX markets ready — fetching PM events and running match cycle');
+      this.logger.log(`Both bookmakers ready (triggered by ${source}) — fetching PM events and running match cycle`);
       await this.polyAdapter.forceFetch();
       await this.runMatchCycle();
     } catch (err: any) {
-      this.logger.error(`Match cycle failed after DEX ready signal: ${err.message}`);
+      this.logger.error(`Match cycle failed after ${source} ready signal: ${err.message}`);
     } finally {
       this.matchingInProgress = false;
     }
@@ -140,19 +173,35 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
         `Sports match cycle: ${this.currentMatches.length} pairs (${liveCount} live), ${totalMarkets} matched markets`,
       );
 
-      // Collect PM token IDs and DEX market IDs for ALL matched market types
+      // Log Pinnacle odds for all matched events
+      for (const m of this.currentMatches.filter((m) => m.bookmakerPlatform === 'pinnacle')) {
+        for (const mp of m.matchedMarkets) {
+          const pin = mp.dexMarket.outcomes.map((o) => `${o.name}=${o.price}`).join(' | ');
+          const pm = mp.pmMarket.outcomePrices
+            .map((p, i) => `${mp.pmMarket.outcomeNames[i]}=${(p * 100).toFixed(1)}¢`)
+            .join(' | ');
+          this.logger.log(`[Pinnacle] ${m.dexEvent.name}: Pin[${pin}] PM[${pm}]`);
+        }
+      }
+
+      // Collect PM token IDs and bookmaker market IDs for ALL matched market types
       // (moneyline, totals, handicap, map N — everything the matcher found)
       const pmTokenSet = new Set<string>();
       const dexEntries: Array<{ eventId: string; marketId: string }> = [];
+      const pinnacleEntries: Array<{ eventId: string; marketId: string }> = [];
       const dexTracked = new Set<string>();
+      const pinnacleTracked = new Set<string>();
 
       for (const m of this.currentMatches) {
         for (const mp of m.matchedMarkets) {
-          // PM: collect tokens for this specific market (not all event tokens)
           for (const tokenId of mp.pmMarket.tokenIds) pmTokenSet.add(tokenId);
-          // DEX: collect market entries for explicit post-match subscription
-          dexEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
-          dexTracked.add(mp.dexMarket.marketId);
+          if (m.bookmakerPlatform === 'dexsport') {
+            dexEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
+            dexTracked.add(mp.dexMarket.marketId);
+          } else {
+            pinnacleEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
+            pinnacleTracked.add(mp.dexMarket.marketId);
+          }
         }
       }
 
@@ -166,12 +215,15 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       }
 
       if (dexEntries.length > 0) {
-        // Ensure all matched DEX markets are subscribed (safety net for any missed in phase 2)
         this.dexAdapter.subscribeToMatchedMarkets(dexEntries);
       }
+      if (pinnacleEntries.length > 0) {
+        this.pinnacleAdapter.subscribeToMatchedMarkets(pinnacleEntries);
+      }
 
-      // Update DEX tracked market IDs for debug logging
+      // Update tracked market IDs for debug logging
       this.dexAdapter.trackedMarketIds = dexTracked;
+      this.pinnacleAdapter.trackedMarketIds = pinnacleTracked;
 
       // Immediately scan after fresh match (no debounce — explicit trigger)
       this.runScanNow();

@@ -14,7 +14,6 @@ import { OpportunityService } from '../services/opportunity.service';
 import { OrderBookService } from '../services/orderbook.service';
 import { MatchingService } from '../services/matching.service';
 import { EventFetcherService } from '../services/event-fetcher.service';
-import { AiVerificationService } from '../services/ai-verification.service';
 import { ArbitrageGateway } from '../gateways/arbitrage.gateway';
 import {
   OpportunityQueryDto,
@@ -34,7 +33,6 @@ export class ArbitrageController {
     private readonly orderBookService: OrderBookService,
     private readonly matchingService: MatchingService,
     private readonly eventFetcher: EventFetcherService,
-    private readonly aiVerification: AiVerificationService,
     private readonly gateway: ArbitrageGateway,
   ) {}
 
@@ -249,33 +247,4 @@ export class ArbitrageController {
     return { message: 'Scan completed', newOpportunities: newIds.length, ids: newIds };
   }
 
-  // ==================== Admin: AI Verification ====================
-
-  @Post('trigger/verify')
-  @UseGuards(AdminGuard)
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Trigger AI verification of pending matches (admin)' })
-  async triggerVerify() {
-    const stats = await this.aiVerification.verifyPendingMatches();
-    return { message: 'AI verification completed', ...stats };
-  }
-
-  @Post('matches/:id/verify')
-  @UseGuards(AdminGuard)
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'AI-verify a specific match (admin)' })
-  async verifyMatch(@Param('id') id: string) {
-    const verdict = await this.aiVerification.verifySingleMatch(id);
-    if (!verdict) {
-      return { message: 'AI verification not available (no API key)' };
-    }
-    return verdict;
-  }
-
-  @Get('verification/stats')
-  @UseGuards(AdminGuard)
-  @ApiOperation({ summary: 'Get AI verification statistics (admin)' })
-  async getVerificationStats() {
-    return this.aiVerification.getStats();
-  }
 }

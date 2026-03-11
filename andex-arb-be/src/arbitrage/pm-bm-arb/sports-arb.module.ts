@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 // Adapters
 import { PolymarketSportsAdapter } from './adapters/polymarket-sports/polymarket-sports.adapter';
 import { DexsportAdapter } from './adapters/dexsport/dexsport.adapter';
+import { PinnacleAdapter } from './adapters/pinnacle/pinnacle.adapter';
 
 // Services
 import { SportsMatcher } from './services/sports-matcher.service';
@@ -40,6 +41,7 @@ import { SubscriptionsModule } from '../../subscriptions/subscriptions.module';
     // Data sources
     PolymarketSportsAdapter,
     DexsportAdapter,
+    PinnacleAdapter,
 
     // Pipeline services
     SportsMatcher,

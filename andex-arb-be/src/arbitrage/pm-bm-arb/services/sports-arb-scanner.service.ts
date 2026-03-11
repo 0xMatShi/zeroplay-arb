@@ -119,7 +119,7 @@ export class SportsArbScanner {
           totalCost += pmOut.probability;
         } else {
           legs.push({
-            platform: 'dexsport',
+            platform: match.bookmakerPlatform,
             outcomeName: dexOut.name,
             probability: dexOut.probability,
             decimalOdds: dexOut.decimalOdds,

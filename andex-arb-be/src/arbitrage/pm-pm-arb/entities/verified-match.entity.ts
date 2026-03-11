@@ -16,7 +16,7 @@ import { EventMatch } from './event-match.entity';
  * ScannerService reads from this table instead of event_matches directly.
  *
  * Populated by:
- * - AiVerificationService: when AI confirms or auto-confirms a match
+ * - MatchingService.createMatches(): when a new match is created (auto-confirmed)
  * - MatchingService.updateMatchStatus(): when a match is manually confirmed
  * - MatchingService.seedVerifiedMatches(): on startup, for existing CONFIRMED matches
  *

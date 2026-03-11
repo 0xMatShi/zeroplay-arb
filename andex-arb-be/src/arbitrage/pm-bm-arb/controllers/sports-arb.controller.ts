@@ -18,20 +18,46 @@ export class SportsArbController {
     const matchMap = new Map(matches.map((m) => [m.id, m]));
 
     const ESPORTS = new Set(['csgo', 'dota2', 'lol', 'valorant', 'call-of-duty']);
+    const PINNACLE_SPORT_PATH: Record<string, string> = {
+      basketball: 'basketball',
+      tennis:     'tennis',
+      hockey:     'ice-hockey',
+      baseball:   'baseball',
+      csgo:       'esports/cs2',
+      dota2:      'esports/dota-2',
+      valorant:   'esports/valorant',
+    };
 
     return {
       items: opps.map((opp) => {
         const match = matchMap.get(opp.matchId);
         const pmSlug = match?.pmEvent.slug ?? '';
-        const dexEventId = match?.dexEvent.eventId ?? '';
-        const dexEventName = match?.dexEvent.name ?? '';
         const dexSportKey = match?.dexEvent.sportKey ?? opp.sportKey;
         const tournamentName = match?.dexEvent.tournamentName ?? null;
         const pmUrl = pmSlug ? `https://polymarket.com/event/${pmSlug}` : undefined;
-        const rawId = dexEventId.includes('.') ? dexEventId.split('.')[1] : dexEventId;
-        const nameSlug = dexEventName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-        const dexCategory = ESPORTS.has(dexSportKey) ? 'esports' : 'sports';
-        const dexUrl = rawId ? `https://dexsport.io/${dexCategory}/${dexSportKey}/${nameSlug}-${rawId}/bets/` : undefined;
+
+        let bookmakerUrl: string | undefined;
+        if (match?.bookmakerPlatform === 'pinnacle') {
+          const sportPath = PINNACLE_SPORT_PATH[dexSportKey];
+          if (sportPath && match.dexEvent.tournamentName && match.dexEvent.name) {
+            const leagueSlug = match.dexEvent.tournamentName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            const matchSlug = match.dexEvent.name.replace(/\s+/g, '-');
+            bookmakerUrl = `https://www.pinnacle888.com/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${match.dexEvent.eventId}/`;
+          } else {
+            bookmakerUrl = `https://www.pinnacle888.com/en/standard/${PINNACLE_SPORT_PATH[dexSportKey] ?? 'sports'}`;
+          }
+        } else if (match) {
+          const rawId = match.dexEvent.eventId.includes('.') ? match.dexEvent.eventId.split('.')[1] : match.dexEvent.eventId;
+          const nameSlug = match.dexEvent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const dexCategory = ESPORTS.has(dexSportKey) ? 'esports' : 'sports';
+          bookmakerUrl = rawId ? `https://dexsport.io/${dexCategory}/${dexSportKey}/${nameSlug}-${rawId}/bets/` : undefined;
+        }
+
+        const platformName = (platform: string) => {
+          if (platform === 'polymarket') return 'Polymarket';
+          if (platform === 'pinnacle') return 'Pinnacle';
+          return 'DexSport';
+        };
 
         return {
           // Standard Opportunity fields (used by existing filter/sort logic)
@@ -44,13 +70,13 @@ export class SportsArbController {
           guaranteedPayout: 1.0,
           legs: opp.legs.map((leg) => ({
             platformSlug: leg.platform,
-            platformName: leg.platform === 'polymarket' ? 'Polymarket' : 'DexSport',
+            platformName: platformName(leg.platform),
             eventExternalId: opp.matchId,
             eventTitle: opp.eventName,
             outcomeExternalId: '',
             outcomeName: leg.outcomeName,
             price: leg.probability,
-            url: leg.platform === 'polymarket' ? pmUrl : dexUrl,
+            url: leg.platform === 'polymarket' ? pmUrl : bookmakerUrl,
           })),
           isLive: opp.isLive,
           status: 'active' as const,
@@ -72,7 +98,7 @@ export class SportsArbController {
             probability: leg.probability,
             decimalOdds: leg.decimalOdds,
             pmBestAskQty: leg.pmBestAskQty ?? 0,
-            url: leg.platform === 'polymarket' ? pmUrl : dexUrl,
+            url: leg.platform === 'polymarket' ? pmUrl : bookmakerUrl,
           })),
         };
       }),

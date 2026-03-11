@@ -36,6 +36,10 @@
   border-color: rgba(167, 139, 250, 0.2);
 }
 
+.calc-box--pinnacle {
+  border-color: rgba(234, 88, 12, 0.2);
+}
+
 /* Labels — same as .sports-platform-label */
 .calc-box-label {
   font-family: 'Inter', -apple-system, monospace;
@@ -51,6 +55,10 @@
 
 .calc-box-label--dex {
   color: #a78bfa;
+}
+
+.calc-box-label--pinnacle {
+  color: #ea580c;
 }
 
 /* Outcome name — same as .sports-outcome-name */
@@ -184,6 +192,10 @@
 
 .calc-box--dex .calc-input:focus {
   border-color: rgba(167, 139, 250, 0.5);
+}
+
+.calc-box--pinnacle .calc-input:focus {
+  border-color: rgba(234, 88, 12, 0.5);
 }
 
 /* Result row */

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { PolymarketSportsAdapter } from '../adapters/polymarket-sports/polymarket-sports.adapter';
 import { DexsportAdapter } from '../adapters/dexsport/dexsport.adapter';
+import { PinnacleAdapter } from '../adapters/pinnacle/pinnacle.adapter';
 import {
   SportsMatch,
   MatchedMarketPair,
@@ -165,9 +166,23 @@ function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): D
   const type = pm.sportsMarketType;
   if (!type) return null;
 
+  // ── Fast path: adapter knows exact market type (e.g. Pinnacle) ──────────
+  const explicitMarkets = dexMarkets.filter((d) => d.marketType !== undefined);
+  if (explicitMarkets.length > 0) {
+    if (type === 'child_moneyline') {
+      const numMatch = pm.question.match(/(?:Map|Game)\s+(\d+)/i);
+      if (!numMatch) return null;
+      const n = numMatch[1];
+      return explicitMarkets.find(
+        (d) => d.marketType === 'child_moneyline' && d.name === `child_moneyline_map${n}`,
+      ) ?? null;
+    }
+    return explicitMarkets.find((d) => d.marketType === type) ?? null;
+  }
+
+  // ── Name-based path: DexSport (market names come from API) ──────────────
   const sportMap = MARKET_MAP[sportKey] ?? {};
-  let candidates: string[] = sportMap[type] ?? [];
-  let isDynamic = false;
+  const candidates: string[] = sportMap[type] ?? [];
 
   if (type === 'child_moneyline') {
     const numMatch = pm.question.match(/(?:Map|Game)\s+(\d+)/i);
@@ -259,92 +274,109 @@ export class SportsMatcher {
   constructor(
     private readonly polyAdapter: PolymarketSportsAdapter,
     private readonly dexAdapter: DexsportAdapter,
+    private readonly pinnacleAdapter: PinnacleAdapter,
   ) {}
 
   findMatches(): SportsMatch[] {
     const pmEvents = this.polyAdapter.getEvents();
-    const dexEvents = this.dexAdapter.getEvents();
 
-    // Resolve DEX sport slugs to our canonical sport keys
-    const dexMapped = dexEvents.map((e) => ({
+    const dexMatches = this.matchBookmakerEvents(
+      this.dexAdapter.getEvents(), pmEvents, 'dexsport',
+    );
+    const pinnacleMatches = this.matchBookmakerEvents(
+      this.pinnacleAdapter.getEvents(), pmEvents, 'pinnacle',
+    );
+
+    const all = [...dexMatches, ...pinnacleMatches];
+    const totalMarkets = all.reduce((s, p) => s + p.matchedMarkets.length, 0);
+    this.logger.log(
+      `SportsMatcher: ${pmEvents.length} PM | dexsport=${dexMatches.length} pinnacle=${pinnacleMatches.length}` +
+      ` → ${all.length} matched events, ${totalMarkets} matched markets`,
+    );
+    return all;
+  }
+
+  private matchBookmakerEvents(
+    bmEvents: DexSportsEvent[],
+    pmEvents: PmSportsEvent[],
+    platform: 'dexsport' | 'pinnacle',
+  ): SportsMatch[] {
+    // Resolve dexsport sport slugs to canonical sport keys (no-op for Pinnacle)
+    const bmMapped = bmEvents.map((e) => ({
       ...e,
       sportKey: DEX_SLUG_TO_SPORT.get(e.sportKey) ?? e.sportKey,
     }));
 
     const pairs: SportsMatch[] = [];
 
-    // Group by sport
     const pmBySport = new Map<string, PmSportsEvent[]>();
-    const dexBySport = new Map<string, DexSportsEvent[]>();
+    const bmBySport = new Map<string, DexSportsEvent[]>();
 
     for (const e of pmEvents) {
       if (!pmBySport.has(e.sportKey)) pmBySport.set(e.sportKey, []);
       pmBySport.get(e.sportKey)!.push(e);
     }
-    for (const e of dexMapped) {
-      if (!dexBySport.has(e.sportKey)) dexBySport.set(e.sportKey, []);
-      dexBySport.get(e.sportKey)!.push(e);
+    for (const e of bmMapped) {
+      if (!bmBySport.has(e.sportKey)) bmBySport.set(e.sportKey, []);
+      bmBySport.get(e.sportKey)!.push(e);
     }
 
     for (const sportKey of Object.keys(SPORTS)) {
       const pmList = pmBySport.get(sportKey) ?? [];
-      const dexList = dexBySport.get(sportKey) ?? [];
+      const bmList = bmBySport.get(sportKey) ?? [];
 
-      if (pmList.length === 0 || dexList.length === 0) continue;
+      if (pmList.length === 0 || bmList.length === 0) continue;
 
-      // Build inverted index over dex events for quick candidate lookup
+      // Build inverted index over bm events for quick candidate lookup
       const invertedIndex = new Map<string, DexSportsEvent[]>();
-      for (const dex of dexList) {
-        for (const word of normalizeText(dex.name)) {
+      for (const bm of bmList) {
+        for (const word of normalizeText(bm.name)) {
           if (!invertedIndex.has(word)) invertedIndex.set(word, []);
-          invertedIndex.get(word)!.push(dex);
+          invertedIndex.get(word)!.push(bm);
         }
       }
 
-      const usedDex = new Set<string>();
+      const usedBm = new Set<string>();
 
       for (const pm of pmList) {
         const pmStripped = stripPmTitle(pm.title);
         const pmWords = normalizeText(pmStripped);
 
-        // Find candidate dex events sharing >= MIN_SHARED_WORDS words
+        // Find candidate bm events sharing >= MIN_SHARED_WORDS words
         const sharedCount = new Map<string, number>();
         for (const word of pmWords) {
-          for (const dex of invertedIndex.get(word) ?? []) {
-            sharedCount.set(dex.eventId, (sharedCount.get(dex.eventId) ?? 0) + 1);
+          for (const bm of invertedIndex.get(word) ?? []) {
+            sharedCount.set(bm.eventId, (sharedCount.get(bm.eventId) ?? 0) + 1);
           }
         }
 
         let bestSim = MATCH_THRESHOLD;
-        let bestDex: DexSportsEvent | null = null;
+        let bestBm: DexSportsEvent | null = null;
 
-        for (const [dexId, count] of sharedCount) {
+        for (const [bmId, count] of sharedCount) {
           if (count < MIN_SHARED_WORDS) continue;
-          if (usedDex.has(dexId)) continue;
+          if (usedBm.has(bmId)) continue;
 
-          const dex = dexList.find((d) => d.eventId === dexId)!;
+          const bm = bmList.find((d) => d.eventId === bmId)!;
 
           // Filter by startTime if both platforms have it (within 3 hours — same match)
-          if (pm.startTime !== undefined && dex.startTime !== undefined && dex.startTime > 0) {
-            const dexMs = dex.startTime * 1000;
-            if (Math.abs(pm.startTime - dexMs) > 3 * 3_600_000) continue;
+          if (pm.startTime !== undefined && bm.startTime !== undefined && bm.startTime > 0) {
+            const bmMs = bm.startTime * 1000;
+            if (Math.abs(pm.startTime - bmMs) > 3 * 3_600_000) continue;
           }
 
-          const sim = computeSimilarity(pmStripped, dex.name);
-
+          const sim = computeSimilarity(pmStripped, bm.name);
           if (sim > bestSim) {
             bestSim = sim;
-            bestDex = dex;
+            bestBm = bm;
           }
         }
 
-        if (bestDex) {
-          usedDex.add(bestDex.eventId);
-
-          const matchedMarkets = matchMarketsForPair(pm, bestDex, sportKey);
-
+        if (bestBm) {
+          usedBm.add(bestBm.eventId);
+          const matchedMarkets = matchMarketsForPair(pm, bestBm, sportKey);
           const id = createHash('sha256')
-            .update(`${pm.id}:${bestDex.eventId}`)
+            .update(`${platform}:${pm.id}:${bestBm.eventId}`)
             .digest('hex')
             .slice(0, 16);
 
@@ -352,19 +384,15 @@ export class SportsMatcher {
             id,
             sportKey,
             pmEvent: pm,
-            dexEvent: bestDex,
+            dexEvent: bestBm,
             similarity: bestSim,
             matchedMarkets,
             matchedAt: Date.now(),
+            bookmakerPlatform: platform,
           });
         }
       }
     }
-
-    this.logger.log(
-      `SportsMatcher: ${pmEvents.length} PM + ${dexEvents.length} DEX → ${pairs.length} matched events, ` +
-      `${pairs.reduce((sum, p) => sum + p.matchedMarkets.length, 0)} matched markets`,
-    );
 
     return pairs;
   }

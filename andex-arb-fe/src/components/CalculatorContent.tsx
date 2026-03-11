@@ -9,6 +9,7 @@ export interface CalcParams {
   dexOdds: string
   pmAmount: string
   dexAmount: string
+  dexPlatform?: string
 }
 
 export function CalculatorContent({
@@ -18,6 +19,7 @@ export function CalculatorContent({
   dexOdds: initDexOdds,
   pmAmount: initPmAmount,
   dexAmount: initDexAmount,
+  dexPlatform,
 }: CalcParams) {
   const [pmPrice, setPmPrice] = useState(initPmPrice)
   const [dexOddsVal, setDexOddsVal] = useState(initDexOdds)
@@ -110,8 +112,10 @@ export function CalculatorContent({
         </div>
 
         {/* DEX box */}
-        <div className="calc-box calc-box--dex">
-          <div className="calc-box-label calc-box-label--dex">DEXSPORT</div>
+        <div className={`calc-box calc-box--${dexPlatform === 'pinnacle' ? 'pinnacle' : 'dex'}`}>
+          <div className={`calc-box-label calc-box-label--${dexPlatform === 'pinnacle' ? 'pinnacle' : 'dex'}`}>
+            {dexPlatform === 'pinnacle' ? 'PINNACLE' : 'DEXSPORT'}
+          </div>
           <div className="calc-outcome">{dexOutcome || '—'}</div>
           <div className="calc-field">
             <div className="calc-input-wrap">

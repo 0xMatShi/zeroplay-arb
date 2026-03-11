@@ -82,20 +82,60 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
 
   private static readonly ESPORTS = new Set(['csgo', 'dota2', 'lol', 'valorant', 'call-of-duty']);
 
+  /** Map sportKey → Pinnacle888 URL path segment */
+  private static readonly PINNACLE_SPORT_PATH: Record<string, string> = {
+    basketball: 'basketball',
+    tennis:     'tennis',
+    hockey:     'ice-hockey',
+    baseball:   'baseball',
+    csgo:       'esports/cs2',
+    dota2:      'esports/dota-2',
+    valorant:   'esports/valorant',
+  };
+
+  private buildBookmakerUrl(match: SportsMatch | undefined): string | undefined {
+    if (!match) return undefined;
+    const { bookmakerPlatform, dexEvent } = match;
+
+    if (bookmakerPlatform === 'pinnacle') {
+      const sportPath = SportsArbGateway.PINNACLE_SPORT_PATH[dexEvent.sportKey];
+      if (!sportPath) return 'https://www.pinnacle888.com/en/standard/sports';
+
+      // URL format: /en/standard/{sport}/{league-slug}/{Home-vs-Away}/{eventId}/
+      const leagueSlug = (dexEvent.tournamentName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      // event name is "{Home} vs {Away}" — replace spaces with hyphens preserving case
+      const matchSlug = dexEvent.name.replace(/\s+/g, '-');
+      const eventId = dexEvent.eventId;
+
+      return leagueSlug && matchSlug && eventId
+        ? `https://www.pinnacle888.com/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${eventId}/`
+        : `https://www.pinnacle888.com/en/standard/${sportPath}`;
+    }
+
+    // DexSport URL: https://dexsport.io/{esports|sports}/{sport}/{name-slug}-{id}/bets/
+    const rawId = dexEvent.eventId.includes('.')
+      ? dexEvent.eventId.split('.')[1]
+      : dexEvent.eventId;
+    const nameSlug = dexEvent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const dexCategory = SportsArbGateway.ESPORTS.has(dexEvent.sportKey) ? 'esports' : 'sports';
+    return rawId
+      ? `https://dexsport.io/${dexCategory}/${dexEvent.sportKey}/${nameSlug}-${rawId}/bets/`
+      : undefined;
+  }
+
   private mapOpportunity(opp: SportsArbitrageOpportunity, matchMap: Map<string, SportsMatch>) {
     const match = matchMap.get(opp.matchId);
     const pmSlug = match?.pmEvent.slug ?? '';
-    const dexEventId = match?.dexEvent.eventId ?? '';
-    const dexEventName = match?.dexEvent.name ?? '';
     const dexSportKey = match?.dexEvent.sportKey ?? opp.sportKey;
     const tournamentName = match?.dexEvent.tournamentName ?? null;
     const pmUrl = pmSlug ? `https://polymarket.com/event/${pmSlug}` : undefined;
+    const bookmakerUrl = this.buildBookmakerUrl(match);
 
-    // Build DexSport URL: https://dexsport.io/{esports|sports}/{sport}/{name-slug}-{id}/bets/
-    const rawId = dexEventId.includes('.') ? dexEventId.split('.')[1] : dexEventId;
-    const nameSlug = dexEventName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const dexCategory = SportsArbGateway.ESPORTS.has(dexSportKey) ? 'esports' : 'sports';
-    const dexUrl = rawId ? `https://dexsport.io/${dexCategory}/${dexSportKey}/${nameSlug}-${rawId}/bets/` : undefined;
+    const platformName = (platform: string) => {
+      if (platform === 'polymarket') return 'Polymarket';
+      if (platform === 'pinnacle') return 'Pinnacle';
+      return 'DexSport';
+    };
 
     return {
       id: opp.id,
@@ -107,13 +147,13 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       guaranteedPayout: 1.0,
       legs: opp.legs.map((leg) => ({
         platformSlug: leg.platform,
-        platformName: leg.platform === 'polymarket' ? 'Polymarket' : 'DexSport',
+        platformName: platformName(leg.platform),
         eventExternalId: opp.matchId,
         eventTitle: opp.eventName,
         outcomeExternalId: '',
         outcomeName: leg.outcomeName,
         price: leg.probability,
-        url: leg.platform === 'polymarket' ? pmUrl : dexUrl,
+        url: leg.platform === 'polymarket' ? pmUrl : bookmakerUrl,
       })),
       isLive: opp.isLive,
       maxInvestment: opp.maxInvestment,
@@ -123,7 +163,7 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       lastValidatedAt: new Date(opp.detectedAt).toISOString(),
       expiredAt: null,
       matchTitle: opp.eventName,
-      sportKey: opp.sportKey,
+      sportKey: dexSportKey,
       tournamentName,
       marketType: opp.marketType,
       dexMarketName: opp.dexMarketName,
@@ -133,7 +173,7 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
         probability: leg.probability,
         decimalOdds: leg.decimalOdds,
         pmBestAskQty: leg.pmBestAskQty ?? 0,
-        url: leg.platform === 'polymarket' ? pmUrl : dexUrl,
+        url: leg.platform === 'polymarket' ? pmUrl : bookmakerUrl,
       })),
     };
   }

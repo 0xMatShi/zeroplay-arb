@@ -60,6 +60,19 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Clears all event/token caches. The WS connection stays open but stale subscriptions
+   * become inert (tokenIndex is cleared, so incoming messages match nothing).
+   * Called by the scheduler before a full rematch cycle; forceFetch() + subscribeToMatchedTokens()
+   * will repopulate everything on the next match cycle.
+   */
+  clearCache(): void {
+    this.logger.log('PolymarketSports: clearing event and token caches');
+    this.eventCache.clear();
+    this.tokenIndex.clear();
+    this.activeTokenIds.clear();
+  }
+
+  /**
    * Subscribe WS to a specific list of token IDs (matched market tokens from the scheduler).
    * More precise than subscribeToMatchedEvents — only subscribes to actually matched markets.
    */
