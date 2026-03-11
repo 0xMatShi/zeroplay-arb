@@ -620,13 +620,52 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Phase 2: TEMPORARILY DISABLED for testing.
-   * Phase 1 (Match Winner) is sufficient for now — fire ready immediately.
+   * Phase 2: subscribe to ALL remaining market IDs collected during phase 1.
+   * Waits until all respond (or PHASE2_TIMEOUT_MS) before firing onAllMarketsReady.
    */
   private startPhase2(): void {
     this.phase2Started = true;
-    this.logger.log('DexSport Phase 2: skipped (test mode) — firing ready immediately');
-    this.fireAllMarketsReady();
+
+    // Collect all market IDs not yet subscribed
+    const newIds: string[] = [];
+    for (const [eventId, marketIds] of this.eventAllMarketIds) {
+      if (!this.subscribedEvents.has(eventId)) continue;
+      for (const mid of marketIds) {
+        if (!this.subscribedMarkets.has(mid)) {
+          this.subscribedMarkets.add(mid);
+          this.marketToEvent.set(mid, eventId);
+          this.phase2MarketIds.add(mid);
+          newIds.push(mid);
+        }
+      }
+    }
+
+    this.phase2Total = this.phase2MarketIds.size;
+    this.phase2Received = 0;
+
+    if (newIds.length === 0) {
+      this.logger.log('DexSport Phase 2: no new markets to subscribe — firing ready immediately');
+      this.fireAllMarketsReady();
+      return;
+    }
+
+    this.logger.log(`DexSport Phase 2: subscribing to ${newIds.length} additional markets`);
+    // Send in batches of 50 to avoid huge single messages
+    for (let i = 0; i < newIds.length; i += 50) {
+      this.send(['join', 'market', newIds.slice(i, i + 50)]);
+    }
+
+    // Fallback timeout — fire ready even if not all markets responded
+    if (this.readyDebounceTimer) clearTimeout(this.readyDebounceTimer);
+    this.readyDebounceTimer = setTimeout(() => {
+      this.readyDebounceTimer = null;
+      if (!this.readyFired) {
+        this.logger.warn(
+          `DexSport Phase 2 timeout: ${this.phase2Received}/${this.phase2Total} markets received, firing ready`,
+        );
+        this.fireAllMarketsReady();
+      }
+    }, PHASE2_TIMEOUT_MS);
   }
 
   private fireAllMarketsReady(): void {
