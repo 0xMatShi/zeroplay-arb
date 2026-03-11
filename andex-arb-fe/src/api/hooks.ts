@@ -2,45 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   versionApi,
   authApi,
-  plansApi,
-  paymentsApi,
   subscriptionsApi,
   arbitrageApi,
   sportsArbApi,
 } from './client'
-import type {
-  RequestSiweDto,
-  VerifySignatureDto,
-  CreatePaymentRequestDto,
-  PlanDto,
-} from './types'
-
-const MOCK_PLANS: PlanDto[] = [
-  {
-    id: 'mock-free',
-    name: 'Basic',
-    description: 'Basic access to the scanner',
-    price: '19.9',
-    durationDays: 7,
-    isActive: true,
-  },
-  {
-    id: 'mock-pro',
-    name: 'Medium',
-    description: 'Extended access with more opportunities',
-    price: '99.9',
-    durationDays: 30,
-    isActive: true,
-  },
-  {
-    id: 'mock-enterprise',
-    name: 'Pro',
-    description: 'Maximum access for active trading',
-    price: '199.9',
-    durationDays: 30,
-    isActive: true,
-  },
-]
 
 /**
  * Query keys для кеширования
@@ -48,9 +13,6 @@ const MOCK_PLANS: PlanDto[] = [
 export const queryKeys = {
   version: ['version'] as const,
   whoami: ['auth', 'whoami'] as const,
-  plans: ['plans'] as const,
-  plan: (id: string) => ['plans', id] as const,
-  paymentRequests: ['payments', 'requests'] as const,
   subscriptionStatus: ['subscriptions', 'status'] as const,
   activeSubscription: ['subscriptions', 'active'] as const,
   subscriptionHistory: ['subscriptions', 'history'] as const,
@@ -75,21 +37,15 @@ export const useVersion = () => {
 /**
  * Auth hooks
  */
-export const useRequestSiwe = () => {
-  return useMutation({
-    mutationFn: (data: RequestSiweDto) => authApi.requestSiwe(data),
-  })
-}
-
-export const useVerifySignature = () => {
+export const useLoginWithApiKey = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: VerifySignatureDto) => authApi.verifySignature(data),
-    onSuccess: (data) => {
-      // Сохраняем API ключ в localStorage
-      localStorage.setItem('apiKey', data.apiKey)
-      // Инвалидируем whoami запрос
+    mutationFn: async (apiKey: string) => {
+      localStorage.setItem('apiKey', apiKey)
+      return apiKey
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.whoami })
     },
   })
@@ -99,72 +55,8 @@ export const useWhoami = () => {
   return useQuery({
     queryKey: queryKeys.whoami,
     queryFn: authApi.whoami,
-    enabled: !!localStorage.getItem('apiKey'), // Запрос выполняется только если есть API ключ
-    retry: false, // Не повторяем запрос при ошибке 401
-  })
-}
-
-/**
- * Plans hooks
- */
-export const usePlans = () => {
-  return useQuery({
-    queryKey: queryKeys.plans,
-    queryFn: async () => {
-      try {
-        const data = await plansApi.findAll()
-        if (data && data.length > 0) return data
-        return MOCK_PLANS
-      } catch {
-        return MOCK_PLANS
-      }
-    },
-  })
-}
-
-export const usePlan = (id: string) => {
-  return useQuery({
-    queryKey: queryKeys.plan(id),
-    queryFn: () => plansApi.findOne(id),
-    enabled: !!id, // Запрос выполняется только если есть id
-  })
-}
-
-/**
- * Payments hooks
- */
-export const useCreatePaymentRequest = () => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (data: CreatePaymentRequestDto) => paymentsApi.createPaymentRequest(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests })
-      queryClient.invalidateQueries({ queryKey: queryKeys.subscriptionStatus })
-      queryClient.invalidateQueries({ queryKey: queryKeys.activeSubscription })
-    },
-  })
-}
-
-export const useMyPaymentRequests = (polling = false) => {
-  return useQuery({
-    queryKey: queryKeys.paymentRequests,
-    queryFn: paymentsApi.getMyPaymentRequests,
     enabled: !!localStorage.getItem('apiKey'),
-    refetchInterval: polling ? 5_000 : false,
-  })
-}
-
-export const useCancelPaymentRequest = () => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (id: string) => paymentsApi.cancelPaymentRequest(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests })
-      queryClient.invalidateQueries({ queryKey: queryKeys.subscriptionStatus })
-      queryClient.invalidateQueries({ queryKey: queryKeys.activeSubscription })
-    },
+    retry: false,
   })
 }
 
@@ -209,7 +101,7 @@ export const useArbitrageStats = () => {
   return useQuery({
     queryKey: queryKeys.arbitrageStats,
     queryFn: arbitrageApi.getStats,
-    refetchInterval: 30_000, // обновляем статистику раз в 30 сек
+    refetchInterval: 30_000,
   })
 }
 
@@ -224,7 +116,6 @@ export const useSportsOpportunities = () => {
   return useQuery({
     queryKey: queryKeys.sportsOpportunities,
     queryFn: sportsArbApi.getOpportunities,
-    // No polling — real-time updates come via useSportsArbSocket WebSocket
   })
 }
 
@@ -241,7 +132,7 @@ export const useOrderBook = (opportunityId: string, enabled = false) => {
     queryKey: queryKeys.orderBook(opportunityId),
     queryFn: () => arbitrageApi.getOrderBook(opportunityId),
     enabled: enabled && !!opportunityId,
-    staleTime: 30_000, // не рефетчим чаще чем раз в 30 сек (особенно важно при enabled:true на всех карточках)
-    gcTime: 60_000, // держим в кеше 60 сек после размонтирования
+    staleTime: 30_000,
+    gcTime: 60_000,
   })
 }

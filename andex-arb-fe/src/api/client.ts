@@ -1,13 +1,6 @@
 import type {
   VersionDto,
-  RequestSiweDto,
-  RequestSiweResponseDto,
-  VerifySignatureDto,
-  VerifySignatureResponseDto,
   WhoamiResponse,
-  PlanDto,
-  CreatePaymentRequestDto,
-  PaymentRequestResponseDto,
   SubscriptionStatusDto,
   ActiveSubscriptionDto,
   SubscriptionHistoryItemDto,
@@ -33,6 +26,12 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
   if (response.status === 401 || response.status === 403) {
     const body = await response.json().catch(() => ({}))
+    const hadSession = !!localStorage.getItem('sessionToken')
+    if (hadSession) {
+      localStorage.removeItem('apiKey')
+      localStorage.removeItem('sessionToken')
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'))
+    }
     throw new ApiError(body.message ?? response.statusText, response.status)
   }
 
@@ -43,10 +42,8 @@ const getBackendUrl = () => {
   return import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 }
 
-const getApiKey = () => {
-  // Получаем API ключ из localStorage или другого места
-  return localStorage.getItem('apiKey') || ''
-}
+const getApiKey = () => localStorage.getItem('apiKey') || ''
+const getSessionToken = () => localStorage.getItem('sessionToken') || ''
 
 const createHeaders = (includeAuth = false): HeadersInit => {
   const headers: HeadersInit = {
@@ -55,9 +52,9 @@ const createHeaders = (includeAuth = false): HeadersInit => {
 
   if (includeAuth) {
     const apiKey = getApiKey()
-    if (apiKey) {
-      headers['Authorization'] = `Bearer ${apiKey}`
-    }
+    const sessionToken = getSessionToken()
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
+    if (sessionToken) headers['X-Session-Token'] = sessionToken
   }
 
   return headers
@@ -85,31 +82,17 @@ export const versionApi = {
  * Auth API
  */
 export const authApi = {
-  requestSiwe: async (data: RequestSiweDto): Promise<RequestSiweResponseDto> => {
-    const response = await fetch(`${getBackendUrl()}/auth/siwe/request`, {
+  createSession: async (apiKey: string): Promise<{ sessionToken: string }> => {
+    const response = await fetch(`${getBackendUrl()}/auth/siwe/session`, {
       method: 'POST',
-      headers: createHeaders(),
-      body: JSON.stringify(data),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
     })
-
     if (!response.ok) {
-      throw new Error(`Failed to request SIWE: ${response.statusText}`)
+      throw new ApiError('Invalid API key', response.status)
     }
-
-    return response.json()
-  },
-
-  verifySignature: async (data: VerifySignatureDto): Promise<VerifySignatureResponseDto> => {
-    const response = await fetch(`${getBackendUrl()}/auth/siwe/verify`, {
-      method: 'POST',
-      headers: createHeaders(),
-      body: JSON.stringify(data),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to verify signature: ${response.statusText}`)
-    }
-
     return response.json()
   },
 
@@ -121,82 +104,6 @@ export const authApi = {
 
     if (!response.ok) {
       throw new Error(`Failed to get user info: ${response.statusText}`)
-    }
-
-    return response.json()
-  },
-}
-
-/**
- * Plans API
- */
-export const plansApi = {
-  findAll: async (): Promise<PlanDto[]> => {
-    const response = await fetch(`${getBackendUrl()}/plans`, {
-      method: 'GET',
-      headers: createHeaders(),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to get plans: ${response.statusText}`)
-    }
-
-    return response.json()
-  },
-
-  findOne: async (id: string): Promise<PlanDto> => {
-    const response = await fetch(`${getBackendUrl()}/plans/${id}`, {
-      method: 'GET',
-      headers: createHeaders(),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to get plan: ${response.statusText}`)
-    }
-
-    return response.json()
-  },
-}
-
-/**
- * Payments API
- */
-export const paymentsApi = {
-  createPaymentRequest: async (data: CreatePaymentRequestDto): Promise<PaymentRequestResponseDto> => {
-    const response = await fetch(`${getBackendUrl()}/payments/request`, {
-      method: 'POST',
-      headers: createHeaders(true),
-      body: JSON.stringify(data),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to create payment request: ${response.statusText}`)
-    }
-
-    return response.json()
-  },
-
-  getMyPaymentRequests: async (): Promise<PaymentRequestResponseDto[]> => {
-    const response = await fetch(`${getBackendUrl()}/payments/my-requests`, {
-      method: 'GET',
-      headers: createHeaders(true),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to get payment requests: ${response.statusText}`)
-    }
-
-    return response.json()
-  },
-
-  cancelPaymentRequest: async (id: string): Promise<PaymentRequestResponseDto> => {
-    const response = await fetch(`${getBackendUrl()}/payments/request/${id}`, {
-      method: 'DELETE',
-      headers: createHeaders(true),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to cancel payment request: ${response.statusText}`)
     }
 
     return response.json()

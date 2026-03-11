@@ -6,13 +6,13 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { UsersService } from '../../users/users.service';
-import { PaymentsService } from '../../subscriptions/payments.service';
+import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
 
 @Injectable()
 export class SubscriptionGuard implements CanActivate {
   constructor(
     private readonly usersService: UsersService,
-    private readonly paymentsService: PaymentsService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -29,9 +29,7 @@ export class SubscriptionGuard implements CanActivate {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    const hasSubscription = await this.paymentsService.hasActiveSubscription(
-      user.id,
-    );
+    const hasSubscription = await this.subscriptionsService.hasActiveSubscription(user.id);
 
     if (!hasSubscription) {
       throw new ForbiddenException('Active subscription required');

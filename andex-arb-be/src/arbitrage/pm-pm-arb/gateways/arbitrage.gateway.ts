@@ -9,7 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { ArbitrageOpportunity } from '../entities/arbitrage-opportunity.entity';
 import { UsersService } from '../../../users/users.service';
-import { PaymentsService } from '../../../subscriptions/payments.service';
+import { SubscriptionsService } from '../../../subscriptions/subscriptions.service';
 
 /**
  * WebSocket gateway for real-time arbitrage opportunity notifications.
@@ -36,7 +36,7 @@ export class ArbitrageGateway implements OnGatewayConnection, OnGatewayDisconnec
 
   constructor(
     private readonly usersService: UsersService,
-    private readonly paymentsService: PaymentsService,
+    private readonly subscriptionsService: SubscriptionsService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -65,9 +65,7 @@ export class ArbitrageGateway implements OnGatewayConnection, OnGatewayDisconnec
       return;
     }
 
-    const hasSubscription = await this.paymentsService.hasActiveSubscription(
-      user.id,
-    );
+    const hasSubscription = await this.subscriptionsService.hasActiveSubscription(user.id);
 
     if (!hasSubscription) {
       client.emit('error', { message: 'Active subscription required' });

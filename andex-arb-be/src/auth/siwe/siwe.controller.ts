@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Headers, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { SiweService } from './siwe.service';
 import { RequestSiweDto, RequestSiweResponseDto } from './dto/request-siwe.dto';
@@ -6,11 +6,15 @@ import { VerifySignatureDto, VerifySignatureResponseDto } from './dto/verify-sig
 import { ApiKeyGuard } from '../guards/api-key.guard';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { User } from '../../users/entities/user.entity';
+import { UsersService } from '../../users/users.service';
 
 @ApiTags('auth')
 @Controller('auth/siwe')
 export class SiweController {
-  constructor(private readonly siweService: SiweService) {}
+  constructor(
+    private readonly siweService: SiweService,
+    private readonly usersService: UsersService,
+  ) {}
 
   @Post('request')
   @ApiOperation({ summary: 'Request SIWE message for address' })
@@ -38,6 +42,20 @@ export class SiweController {
   @ApiResponse({ status: 404, description: 'SIWE request not found' })
   async verifySignature(@Body() dto: VerifySignatureDto): Promise<VerifySignatureResponseDto> {
     return this.siweService.verifySignature(dto.address, dto.message, dto.signature);
+  }
+
+  @Post('session')
+  @ApiOperation({ summary: 'Create a new session token (invalidates previous sessions for this API key)' })
+  @ApiResponse({ status: 201, description: 'Returns session token' })
+  @ApiResponse({ status: 401, description: 'Invalid API key' })
+  async createSession(@Headers('authorization') authHeader: string): Promise<{ sessionToken: string }> {
+    const apiKey = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+    if (!apiKey) throw new UnauthorizedException('API key is required');
+
+    const result = await this.usersService.createSession(apiKey);
+    if (!result) throw new UnauthorizedException('Invalid API key');
+
+    return { sessionToken: result.sessionToken };
   }
 
   @Get('whoami')

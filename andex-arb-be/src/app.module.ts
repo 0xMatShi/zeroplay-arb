@@ -9,6 +9,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { SportsArbModule } from './arbitrage/pm-bm-arb/sports-arb.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { DatabaseConfig } from './config/database.config';
+import { BotModule } from './bot/bot.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { DatabaseConfig } from './config/database.config';
     AuthModule,
     BlockchainModule,
     SubscriptionsModule,
+    BotModule,
 
     // ArbitrageModule,
     SportsArbModule,

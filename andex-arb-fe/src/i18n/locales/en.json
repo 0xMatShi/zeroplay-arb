@@ -23,18 +23,18 @@
   },
   "problemSolution": {
     "title": "STOP SWITCHING TABS",
-    "manualTitle": "[ MANUAL RESEARCH ]",
+    "manualTitle": "MANUAL RESEARCH",
     "manualItems": {
       "tabs": "10+ open browser tabs",
       "oddsChange": "Odds change while calculating",
       "timeWasted": "Time wasted on manual checks",
       "missOpportunities": "Miss opportunities overnight"
     },
-    "nexusTitle": "[ ZEROPLAY AGGREGATION ]",
+    "nexusTitle": "SUBLINE AGGREGATION",
     "nexusItems": {
       "oneTable": "All markets in one table",
       "highlights": "System highlights arbitrage",
-      "telegramAlerts": "Telegram instant alerts",
+      "telegramAlerts": "Instant alerts",
       "monitoring": "24/7 monitoring coverage"
     }
   },
@@ -45,7 +45,7 @@
     "step1Desc": "Our system continuously scans all prediction markets for price discrepancies and arbitrage opportunities.",
     "step2Label": "STEP 02 :: ALERT",
     "step2Title": "Get Notified",
-    "step2Desc": "Receive instant Telegram alerts when spreads exceed 2% threshold with full opportunity details.",
+    "step2Desc": "Receive instant alerts with full opportunity details.",
     "step3Label": "STEP 03 :: TRADE",
     "step3Title": "Execute & Profit",
     "step3Desc": "You manually place bets on both sides and lock in guaranteed profit regardless of outcome."
@@ -72,15 +72,27 @@
   },
   "pricing": {
     "title": "SELECT ACCESS LEVEL",
-    "subtitle": "Select a subscription plan that fits your trading needs",
-    "loading": "Loading plans...",
-    "subscribe": "Subscribe",
-    "perDays": "/ {{days}} days"
+    "subtitle": "Select a subscription plan that fits your trading needs. Purchase via Telegram bot.",
+    "subscribe": "Enter API Key",
+    "buy": "Buy",
+    "perDays": "/ {{days}} days",
+    "basicDesc": "Basic access to the scanner",
+    "mediumDesc": "Extended access with more opportunities",
+    "proDesc": "Maximum access for active trading"
+  },
+  "apiKey": {
+    "title": "Enter API Key",
+    "prompt": "Enter the API key you received from the Telegram bot after purchase.",
+    "placeholder": "arb_...",
+    "submit": "Sign In",
+    "loading": "Signing in...",
+    "errorEmpty": "Please enter your API key",
+    "errorInvalid": "Invalid API key"
   },
   "faq": {
     "title": "SYSTEM FAQs",
     "q1": "Do I need to provide API keys?",
-    "a1": "No API keys required. ZeroPlay is a read-only scanner that displays opportunities. You manually execute trades on prediction market platforms. We never access your accounts or funds.",
+    "a1": "No API keys required. SubLine is a read-only scanner that displays opportunities. You manually execute trades on prediction market platforms. We never access your accounts or funds.",
     "q2": "Which prediction markets are tracked?",
     "a2": "We currently aggregate real-time data from Polymarket, Opinion, and Probable. More platforms are added based on demand and liquidity.",
     "q3": "How do I get alerts for new opportunities?",
@@ -96,12 +108,12 @@
     "terms": "Terms of Service",
     "privacy": "Privacy Policy",
     "riskDisclaimer": "Risk Disclaimer",
-    "copyright": "© {{year}} ZeroPlay. ALL SYSTEMS OPERATIONAL."
+    "copyright": "© {{year}} SubLine. ALL SYSTEMS OPERATIONAL."
   },
   "dashboard": {
     "title": "ACCESS CONTROL",
     "openScanner": "OPEN SCANNER",
-    "logout": "[ LOGOUT ]",
+    "logout": "LOGOUT",
     "loading": "Loading...",
     "pendingPayment": "Pending Payment",
     "pending": "Pending",
@@ -151,7 +163,8 @@
     "noTransactions": "NO TRANSACTIONS RECORDED",
     "statusNoSub": "Current status: No active subscription",
     "statusActive": "Current status: {{plan}} — Active",
-    "popular": "POPULAR"
+    "popular": "POPULAR",
+    "noSubInfo": "No active subscription. Purchase a plan via the Telegram bot to get your API key."
   },
   "invoice": {
     "networkWarning": "Warning: Send tokens ONLY on {{network}}. Using a different network will result in loss of funds.",
@@ -170,7 +183,7 @@
     "checkStatus": "I HAVE PAID / CHECK STATUS"
   },
   "scanner": {
-    "title": "ZeroPlay",
+    "title": "SubLine",
     "systemLabel": "SYSTEM:",
     "scanning": "SCANNING...",
     "backToDashboard": "BACK TO DASHBOARD",
@@ -248,7 +261,7 @@
     "subscriptionRequired": "Subscription Required",
     "subscriptionRequiredDesc": "You need an active subscription to access the live scanner. Choose a plan to get started.",
     "loginRequired": "Authentication Required",
-    "loginRequiredDesc": "Please sign in with your wallet to access the scanner.",
+    "loginRequiredDesc": "Please enter your API key to access the scanner.",
     "goToPayment": "GET SUBSCRIPTION",
     "goToLogin": "SIGN IN",
     "pmBmConfig": "PM-BM CONFIG",

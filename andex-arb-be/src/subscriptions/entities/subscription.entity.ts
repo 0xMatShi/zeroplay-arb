@@ -8,8 +8,6 @@ import {
   Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { Plan } from './plan.entity';
-import { PaymentRequest } from './payment-request.entity';
 
 export enum SubscriptionStatus {
   ACTIVE = 'active',
@@ -30,25 +28,14 @@ export class Subscription {
   @Index()
   userId: string;
 
-  @ManyToOne(() => Plan)
-  @JoinColumn({ name: 'plan_id' })
-  plan: Plan;
-
-  @Column({ name: 'plan_id' })
-  planId: string;
-
-  @ManyToOne(() => PaymentRequest)
-  @JoinColumn({ name: 'payment_request_id' })
-  paymentRequest: PaymentRequest;
-
-  @Column({ name: 'payment_request_id' })
-  paymentRequestId: string;
+  @Column({ name: 'plan_slug', type: 'varchar', length: 50, nullable: true })
+  planSlug: string | null;
 
   @Column({ type: 'timestamp' })
   startsAt: Date;
 
-  @Column({ type: 'timestamp' })
-  expiresAt: Date;
+  @Column({ type: 'timestamp', nullable: true })
+  expiresAt: Date | null;
 
   @Column({
     type: 'enum',

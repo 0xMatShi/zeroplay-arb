@@ -6,70 +6,11 @@ export interface VersionDto {
 }
 
 // Auth
-export interface RequestSiweDto {
-  address: string
-}
-
-export interface RequestSiweResponseDto {
-  message: string
-  nonce: string
-}
-
-export interface VerifySignatureDto {
-  address: string
-  message: string
-  signature: string
-}
-
-export interface VerifySignatureResponseDto {
-  apiKey: string
-  user: {
-    id: string
-    address: string
-  }
-}
-
 export interface WhoamiResponse {
   id: string
-  address: string
+  address: string | null
   createdAt: string
   updatedAt: string
-}
-
-// Plans
-export interface PlanDto {
-  id: string
-  name: string
-  description: string | null
-  price: string
-  durationDays: number
-  isActive: boolean
-}
-
-// Payments
-export type ChainId = 'ethereum' | 'bsc' | 'arbitrum' | 'base'
-
-export interface SupportedToken {
-  symbol: string
-  address: string
-}
-
-export interface CreatePaymentRequestDto {
-  planId: string
-  chainId: ChainId
-}
-
-export interface PaymentRequestResponseDto {
-  id: string
-  planId: string
-  amount: string
-  chainId: ChainId
-  status: string
-  walletAddress: string
-  tokenSymbol: string | null
-  supportedTokens: SupportedToken[]
-  expiresAt: string
-  createdAt: string
 }
 
 // Subscriptions
@@ -79,20 +20,19 @@ export interface SubscriptionStatusDto {
 
 export interface ActiveSubscriptionDto {
   id: string
-  planId: string
-  planName: string
+  planSlug: string | null
   status: string
   startsAt: string
-  expiresAt: string
+  expiresAt: string | null
   createdAt: string
 }
 
 export interface SubscriptionHistoryItemDto {
   id: string
-  planName: string
+  planSlug: string | null
   status: string
   startsAt: string
-  expiresAt: string
+  expiresAt: string | null
   createdAt: string
 }
 

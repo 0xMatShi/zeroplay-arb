@@ -3,7 +3,7 @@
   --primary-color: #009501;
   --secondary-color: #00F0FF;
   --bg-dark: #000000;
-  --bg-card: #0A0F1A;
+  --bg-card: #191A21;
   --text-main: #FFFFFF;
   --text-muted: #B0B0B0;
   --border-color: #1F2937;
@@ -80,13 +80,14 @@ button:focus-visible {
 }
 
 .primary-button {
-  background: var(--primary-color);
+  background: linear-gradient(135deg, #3ED6FF 0%, #F472B6 100%);
   color: #000000;
   border: none;
   padding: 12px 28px;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 900;
   font-family: var(--font-mono);
+  -webkit-text-stroke: 0.5px #000000;
   border-radius: 40px;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -96,7 +97,8 @@ button:focus-visible {
 
 .primary-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 0 20px var(--primary-color), 0 0 40px rgba(0, 149, 1, 0.5);
+  box-shadow: 0 0 14px rgba(62, 214, 255, 0.4), 0 0 14px rgba(244, 114, 182, 0.4);
+  opacity: 0.9;
 }
 
 .primary-button:disabled {

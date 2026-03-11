@@ -18,10 +18,15 @@ export class ApiKeyGuard implements CanActivate {
       throw new UnauthorizedException('API key is required');
     }
 
-    const user = await this.usersService.findByApiKey(apiKey);
+    const sessionToken = request.headers['x-session-token'] as string | undefined;
 
+    if (!sessionToken) {
+      throw new UnauthorizedException('Session token required');
+    }
+
+    const user = await this.usersService.findByApiKeyAndSession(apiKey, sessionToken);
     if (!user) {
-      throw new UnauthorizedException('Invalid API key');
+      throw new UnauthorizedException('Session expired or invalid');
     }
 
     request.user = user;
@@ -30,16 +35,8 @@ export class ApiKeyGuard implements CanActivate {
 
   private extractApiKeyFromHeader(request: any): string | null {
     const authHeader = request.headers.authorization;
-
-    if (!authHeader) {
-      return null;
-    }
-
-    // Support both "Bearer <key>" and direct API key
-    if (authHeader.startsWith('Bearer ')) {
-      return authHeader.substring(7);
-    }
-
+    if (!authHeader) return null;
+    if (authHeader.startsWith('Bearer ')) return authHeader.substring(7);
     return authHeader;
   }
 }

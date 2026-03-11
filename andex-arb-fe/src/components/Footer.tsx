@@ -13,8 +13,7 @@ export function Footer() {
           {/* Brand & Copyright */}
           <div className="app-footer-brand">
             <div className="app-footer-logo">
-              <span className="app-footer-logo-symbol">ZP</span>
-              <span>ZeroPlay</span>
+              <span>SubLine</span>
             </div>
             <p className="app-footer-copyright">
               © {year}. {t('appFooter.allRights')}

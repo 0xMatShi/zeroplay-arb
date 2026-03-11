@@ -923,9 +923,9 @@ export function Scanner() {
             </button>
           </div>
           <LanguageSwitcher />
-          <button className="scanner-back-button" onClick={() => navigate('/dashboard')}>
+          {/* <button className="scanner-back-button" onClick={() => navigate('/dashboard')}>
             {t('scanner.backToDashboard')}
-          </button>
+          </button> */}
         </div>
       </div>
 
@@ -933,7 +933,6 @@ export function Scanner() {
       {effectiveBlockedReason && (
         <div className="access-wall">
           <div className="access-wall-content">
-            <span className="access-wall-icon">🔒</span>
             <h2>{effectiveBlockedReason === 'subscription_required'
               ? t('scanner.subscriptionRequired')
               : t('scanner.loginRequired')

@@ -1,48 +1,26 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { usePlans } from '../api'
-import { WalletConnectModal } from '../components/WalletConnectModal'
 import { useWhoami } from '../api'
+import { ApiKeyModal } from '../components/ApiKeyModal'
 import { formatUsd } from '../utils/formatPrice'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 
 export function Landing() {
   const { t } = useTranslation()
-  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
-  const [isModalOpen, setIsModalOpen] = useState(false)
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [openFaqId, setOpenFaqId] = useState<string | null>(null)
-  const { data: plans, isLoading } = usePlans()
   const { data: user } = useWhoami()
   const navigate = useNavigate()
 
-  const handlePlanClick = (planId: string) => {
-    if (user) {
-      navigate('/dashboard', { state: { planId } })
-    } else {
-      setSelectedPlanId(planId)
-      setIsModalOpen(true)
-    }
-  }
-
-  const handleAuthSuccess = () => {
-    setIsModalOpen(false)
-    if (selectedPlanId) {
-      navigate('/dashboard', { state: { planId: selectedPlanId } })
-    } else {
-      navigate('/dashboard')
-    }
-  }
-
   const handleLoginSuccess = () => {
     setIsLoginModalOpen(false)
-    navigate('/dashboard')
+    navigate('/scanner')
   }
 
   const handleLoginClick = () => {
     if (user) {
-      navigate('/dashboard')
+      navigate('/scanner')
     } else {
       setIsLoginModalOpen(true)
     }
@@ -53,16 +31,14 @@ export function Landing() {
       {/* Header */}
       <header className="header">
         <div className="header-content">
-          <a href="/" className="logo">
-            <span className="logo-symbol">ZP</span>
-            <span>ZeroPlay</span>
+          <a href="/" className="logo" data-text="SubLine">
+            <span>SubLine</span>
           </a>
           <nav className="header-nav">
             <div className="nav-links">
-              <button onClick={() => navigate('/scanner')} className="nav-link nav-link-button">{t('header.scanner')}</button>
-              <a href="#alerts" className="nav-link">{t('header.alerts')}</a>
-              <a href="#pricing" className="nav-link">{t('header.pricing')}</a>
-              <a href="#faq" className="nav-link">{t('header.faq')}</a>
+              <button onClick={() => navigate('/scanner')} className="nav-link nav-link-button" data-text={t('header.scanner')}>{t('header.scanner')}</button>
+              <a href="#alerts" className="nav-link" data-text={t('header.alerts')}>{t('header.alerts')}</a>
+              <a href="#pricing" className="nav-link" data-text={t('header.pricing')}>{t('header.pricing')}</a>
             </div>
             <div className="header-actions">
               <LanguageSwitcher />
@@ -90,13 +66,18 @@ export function Landing() {
         <div className="hero-container">
           <div className="hero-content">
             <h1 className="hero-title">
-              <span className="hero-title-symbol">•</span> {t('hero.title')}
+              {t('hero.title')}
             </h1>
             <p className="hero-subtitle">
               {t('hero.subtitle')}
             </p>
             <div className="hero-actions">
-              <button className="primary-button" onClick={() => navigate('/scanner')}>
+              <button className="primary-button" onClick={() => {
+                const pricingSection = document.getElementById('pricing');
+                if (pricingSection) {
+                  pricingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}>
                 {t('hero.openScanner')}
               </button>
               {/* <button className="secondary-button" onClick={() => window.open('https://t.me/oddsnexus', '_blank')}>
@@ -131,21 +112,9 @@ export function Landing() {
               </div>
               
               <button className="arb-result-button">
-                {t('hero.arbDetected')}
+                <span>{t('hero.arbDetected')}</span>
               </button>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Data Sources Section */}
-      <section className="data-sources">
-        <div className="container">
-          <h3 className="data-sources-title">{t('dataSources.title')}</h3>
-          <div className="sources-grid">
-            <div className="source-logo">POLYMARKET</div>
-            <div className="source-logo">OPINION</div>
-            <div className="source-logo">PROBABLE</div>
           </div>
         </div>
       </section>
@@ -254,93 +223,31 @@ export function Landing() {
           <h2 className="section-title">{t('pricing.title')}</h2>
           <p className="section-subtitle">{t('pricing.subtitle')}</p>
           
-          {isLoading ? (
-            <div className="loading">{t('pricing.loading')}</div>
-          ) : (
-            <div className="plans-grid">
-              {plans?.filter(plan => plan.isActive).map((plan) => (
-                <div key={plan.id} className="plan-card">
-                  <div className="plan-header">
-                    <h3 className="plan-name">{plan.name}</h3>
-                    {plan.description && (
-                      <p className="plan-description">{plan.description}</p>
-                    )}
-                  </div>
-                  
-                  <div className="plan-price">
-                    <span className="price-amount">{formatUsd(plan.price)}</span>
-                    <span className="price-period">{t('pricing.perDays', { days: plan.durationDays })}</span>
-                  </div>
-                  
-                  <button
-                    className="plan-button plan-button--primary"
-                    onClick={() => handlePlanClick(plan.id)}
-                  >
-                    {t('pricing.subscribe')}
-                  </button>
+          <div className="plans-grid">
+            {[
+              { id: 'basic', name: 'Basic', description: t('pricing.basicDesc'), price: '19.9', durationDays: 7 },
+              { id: 'medium', name: 'Medium', description: t('pricing.mediumDesc'), price: '99.9', durationDays: 30 },
+              { id: 'pro', name: 'Pro', description: t('pricing.proDesc'), price: '199.9', durationDays: 30 },
+            ].map((plan) => (
+              <div key={plan.id} className="plan-card">
+                <div className="plan-header">
+                  <h3 className="plan-name">{plan.name}</h3>
+                  <p className="plan-description">{plan.description}</p>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
 
-      {/* FAQ Section */}
-      <section id="faq" className="faq-section">
-        <div className="container">
-          <h2 className="section-title">{t('faq.title')}</h2>
-          <div className="faq-list">
-            <div className="faq-item">
-              <button 
-                className={`faq-question ${openFaqId === 'faq1' ? 'active' : ''}`}
-                onClick={() => setOpenFaqId(openFaqId === 'faq1' ? null : 'faq1')}
-              >
-                <span>{t('faq.q1')}</span>
-                <span className="faq-icon">{openFaqId === 'faq1' ? '−' : '+'}</span>
-              </button>
-              {openFaqId === 'faq1' && (
-                <div className="faq-answer">{t('faq.a1')}</div>
-              )}
-            </div>
+                <div className="plan-price">
+                  <span className="price-amount">{formatUsd(plan.price)}</span>
+                  <span className="price-period">{t('pricing.perDays', { days: plan.durationDays })}</span>
+                </div>
 
-            <div className="faq-item">
-              <button 
-                className={`faq-question ${openFaqId === 'faq2' ? 'active' : ''}`}
-                onClick={() => setOpenFaqId(openFaqId === 'faq2' ? null : 'faq2')}
-              >
-                <span>{t('faq.q2')}</span>
-                <span className="faq-icon">{openFaqId === 'faq2' ? '−' : '+'}</span>
-              </button>
-              {openFaqId === 'faq2' && (
-                <div className="faq-answer">{t('faq.a2')}</div>
-              )}
-            </div>
-
-            <div className="faq-item">
-              <button 
-                className={`faq-question ${openFaqId === 'faq3' ? 'active' : ''}`}
-                onClick={() => setOpenFaqId(openFaqId === 'faq3' ? null : 'faq3')}
-              >
-                <span>{t('faq.q3')}</span>
-                <span className="faq-icon">{openFaqId === 'faq3' ? '−' : '+'}</span>
-              </button>
-              {openFaqId === 'faq3' && (
-                <div className="faq-answer">{t('faq.a3')}</div>
-              )}
-            </div>
-
-            <div className="faq-item">
-              <button 
-                className={`faq-question ${openFaqId === 'faq4' ? 'active' : ''}`}
-                onClick={() => setOpenFaqId(openFaqId === 'faq4' ? null : 'faq4')}
-              >
-                <span>{t('faq.q4')}</span>
-                <span className="faq-icon">{openFaqId === 'faq4' ? '−' : '+'}</span>
-              </button>
-              {openFaqId === 'faq4' && (
-                <div className="faq-answer">{t('faq.a4')}</div>
-              )}
-            </div>
+                <button
+                  className="plan-button plan-button--primary"
+                  onClick={() => window.open(import.meta.env.VITE_TELEGRAM_BOT_URL || 'https://t.me/your_bot', '_blank')}
+                >
+                  {t('pricing.buy')}
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -351,8 +258,7 @@ export function Landing() {
           <div className="footer-main">
             <div className="footer-brand">
               <div className="footer-logo">
-                <span className="logo-symbol">ZP</span>
-                <span>ZeroPlay</span>
+                <span>SubLine</span>
               </div>
               <p className="footer-tagline">{t('footer.tagline')}</p>
               <p className="footer-disclaimer">⚠️ {t('footer.disclaimer')}</p>
@@ -364,7 +270,6 @@ export function Landing() {
                   <li><a href="#scanner">{t('header.scanner')}</a></li>
                   <li><a href="#alerts">{t('header.alerts')}</a></li>
                   <li><a href="#pricing">{t('header.pricing')}</a></li>
-                  <li><a href="#faq">{t('header.faq')}</a></li>
                 </ul>
               </div>
               <div className="footer-column">
@@ -383,19 +288,7 @@ export function Landing() {
         </div>
       </footer>
 
-      {/* Wallet Connect Modal for Pricing */}
-      <WalletConnectModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false)
-          setSelectedPlanId(null)
-        }}
-        onSuccess={handleAuthSuccess}
-        planId={selectedPlanId || undefined}
-      />
-
-      {/* Wallet Connect Modal for Login */}
-      <WalletConnectModal
+      <ApiKeyModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
         onSuccess={handleLoginSuccess}
