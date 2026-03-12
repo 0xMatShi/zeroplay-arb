@@ -10,6 +10,7 @@ export interface CalcParams {
   pmAmount: string
   dexAmount: string
   dexPlatform?: string
+  marketType?: string
 }
 
 export function CalculatorContent({
@@ -20,6 +21,7 @@ export function CalculatorContent({
   pmAmount: initPmAmount,
   dexAmount: initDexAmount,
   dexPlatform,
+  marketType,
 }: CalcParams) {
   const [pmPrice, setPmPrice] = useState(initPmPrice)
   const [dexOddsVal, setDexOddsVal] = useState(initDexOdds)
@@ -133,6 +135,11 @@ export function CalculatorContent({
           </div>
         </div>
       </div>
+
+      {/* Market type */}
+      {marketType && (
+        <div className="calc-market-type">{marketType}</div>
+      )}
 
       {/* Result row */}
       <div className="calc-result">

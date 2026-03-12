@@ -198,6 +198,17 @@
   border-color: rgba(234, 88, 12, 0.5);
 }
 
+/* Market type */
+.calc-market-type {
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 1);
+  text-align: center;
+}
+
 /* Result row */
 .calc-result {
   display: flex;

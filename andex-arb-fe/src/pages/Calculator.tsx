@@ -31,6 +31,8 @@ export function Calculator() {
         dexOdds={params.get('dexOdds') ?? '2.00'}
         pmAmount={params.get('pmAmount') ?? ''}
         dexAmount={initDexAmount}
+        dexPlatform={params.get('dexPlatform') ?? undefined}
+        marketType={params.get('marketType') ?? undefined}
       />
     </div>
   )

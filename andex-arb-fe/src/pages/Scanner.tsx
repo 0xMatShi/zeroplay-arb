@@ -443,10 +443,10 @@ function SportsOpportunityCard({
             <div className="sports-platform-label sports-platform-label--pm">POLYMARKET</div>
             <div className="sports-outcome-name">{pmLeg?.outcomeName ?? '—'}</div>
             <div className="sports-amounts-inline">
-              <span className="sports-amount-key">A:</span>
+              <span className="sports-amount-key">B:</span>
               <span className="sports-amount-val">${pmPerfect.toFixed(0)}</span>
               <span className="sports-amounts-sep">|</span>
-              <span className="sports-amount-key">R:</span>
+              <span className="sports-amount-key">L:</span>
               <span className="sports-amount-val">${pmReal.toFixed(0)}</span>
             </div>
             <div className="sports-price-row">
@@ -470,10 +470,10 @@ function SportsOpportunityCard({
             </div>
             <div className="sports-outcome-name">{dexLeg?.outcomeName ?? '—'}</div>
             <div className="sports-amounts-inline">
-              <span className="sports-amount-key">A:</span>
+              <span className="sports-amount-key">B:</span>
               <span className="sports-amount-val">${dexPerfect.toFixed(0)}</span>
               <span className="sports-amounts-sep">|</span>
-              <span className="sports-amount-key">R:</span>
+              <span className="sports-amount-key">L:</span>
               <span className="sports-amount-val">${dexReal.toFixed(0)}</span>
             </div>
             <div className="sports-price-row">
@@ -526,6 +526,7 @@ function SportsOpportunityCard({
               pmAmount: pmPerfect.toFixed(2),
               dexAmount: dexPerfect.toFixed(2),
               dexPlatform: dexLeg?.platform,
+              marketType: displayMarketType,
             })
           }}
         >
@@ -550,6 +551,7 @@ function SportsOpportunityCard({
               pmAmount: pmPerfect.toFixed(2),
               dexAmount: dexPerfect.toFixed(2),
               dexPlatform: dexLeg?.platform,
+              marketType: displayMarketType,
             })
             if (pmLeg?.url) openTab(pmLeg.url)
             if (dexLeg?.url) openTab(dexLeg.url)
@@ -597,9 +599,19 @@ export function Scanner() {
   })
   const [platformsOpen, setPlatformsOpen] = useState(false)
   const [sportsOpen, setSportsOpen] = useState(false)
+  const [pairsOpen, setPairsOpen] = useState(false)
+  const [platformPairFilter, setPlatformPairFilter] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('scanner:platformPairFilter')
+      return stored ? new Set<string>(JSON.parse(stored) as string[]) : new Set()
+    } catch { return new Set() }
+  })
   const [sortMode, setSortMode] = useLocalStorage<SortMode>('scanner:sortMode', 'profit')
   const [showPolymarketMin50c, setShowPolymarketMin50c] = useLocalStorage('scanner:showPolymarketMin50c', true)
-  const [soundEnabled, setSoundEnabled] = useLocalStorage('scanner:soundEnabled', true)
+  const [soundEnabledPmPm, setSoundEnabledPmPm] = useLocalStorage('scanner:soundEnabledPmPm', true)
+  const [soundEnabledPmBm, setSoundEnabledPmBm] = useLocalStorage('scanner:soundEnabledPmBm', true)
+  const soundEnabled = arbMode === 'pm-bm' ? soundEnabledPmBm : soundEnabledPmPm
+  const setSoundEnabled = arbMode === 'pm-bm' ? setSoundEnabledPmBm : setSoundEnabledPmPm
   const [volume, setVolume] = useLocalStorage('scanner:volume', 0.3)
   const [volumeHover, setVolumeHover] = useState(false)
   const [volumeVisible, setVolumeVisible] = useState(false)
@@ -615,6 +627,9 @@ export function Scanner() {
   useEffect(() => {
     try { localStorage.setItem('scanner:sportFilter', JSON.stringify([...sportFilter])) } catch { /* ignore */ }
   }, [sportFilter])
+  useEffect(() => {
+    try { localStorage.setItem('scanner:platformPairFilter', JSON.stringify([...platformPairFilter])) } catch { /* ignore */ }
+  }, [platformPairFilter])
 
   const perfectAmount = perfectAmountInput === '' ? 0 : Math.max(0, Number(perfectAmountInput) || 0)
   const realMinAmount = realMinAmountInput === '' ? 0 : Math.max(0, Number(realMinAmountInput) || 0)
@@ -658,38 +673,66 @@ export function Scanner() {
       }
 
       const now = audioCtx.currentTime
-      const notes: Array<{ freq: number; offset: number; duration: number; type: OscillatorType }> = [
-        { freq: 880, offset: 0, duration: 0.08, type: 'triangle' },
-        { freq: 1320, offset: 0.1, duration: 0.11, type: 'sine' },
+
+      // Две ноты до → до (октава выше), каждая с обертонами как у пианино
+      const keys: Array<{ baseFreq: number; offset: number }> = [
+        { baseFreq: 523.25,  offset: 0 },
+        { baseFreq: 1046.50, offset: 0.08 },
       ]
 
-      notes.forEach((note) => {
-        const oscillator = audioCtx.createOscillator()
-        const gainNode = audioCtx.createGain()
+      // Обертоны: [множитель частоты, относительная громкость, длительность затухания]
+      const harmonics: Array<[number, number, number]> = [
+        [1, 1.0,  0.8],  // фундаментал
+        [2, 0.5,  0.5],  // 2-я гармоника
+        [3, 0.25, 0.3],  // 3-я гармоника
+        [4, 0.1,  0.2],  // 4-я гармоника
+      ]
 
-        oscillator.type = note.type
-        oscillator.frequency.setValueAtTime(note.freq, now + note.offset)
+      const filter = audioCtx.createBiquadFilter()
+      filter.type = 'lowpass'
+      filter.frequency.setValueAtTime(300, now)
+      filter.Q.setValueAtTime(0.5, now)
+      filter.connect(audioCtx.destination)
 
-        gainNode.gain.setValueAtTime(0.0001, now + note.offset)
-        gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), now + note.offset + 0.01)
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + note.offset + note.duration)
+      keys.forEach(({ baseFreq, offset }) => {
+        harmonics.forEach(([mult, gainScale, decay]) => {
+          const oscillator = audioCtx.createOscillator()
+          const gainNode = audioCtx.createGain()
 
-        oscillator.connect(gainNode)
-        gainNode.connect(audioCtx.destination)
+          oscillator.type = 'sine'
+          oscillator.frequency.setValueAtTime(baseFreq * mult, now + offset)
 
-        oscillator.start(now + note.offset)
-        oscillator.stop(now + note.offset + note.duration)
+          gainNode.gain.setValueAtTime(0.0001, now + offset)
+          gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume * gainScale), now + offset + 0.08)
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + offset + decay)
+
+          oscillator.connect(gainNode)
+          gainNode.connect(filter)
+
+          oscillator.start(now + offset)
+          oscillator.stop(now + offset + decay)
+        })
       })
     } catch {
       // Ignore if audio playback is blocked by browser policy.
     }
   }, [volume])
 
+  const playBmSound = useCallback(() => {
+    try {
+      const audio = new Audio('/sounds/dragon-studio-new-notification-3-398649 (1).mp3')
+      audio.volume = volume
+      void audio.play()
+    } catch {
+      // Ignore if audio playback is blocked by browser policy.
+    }
+  }, [volume])
+
   const handleNewOpportunity = useCallback((data: NewOpportunityEvent) => {
-    if (soundEnabled && arbMode === 'pm-pm' && data.profitPercentage >= minRoi) {
+    if (soundEnabledPmPm && data.profitPercentage >= minRoi) {
       playOpportunitySound()
     }
-  }, [playOpportunitySound, minRoi, soundEnabled, arbMode])
+  }, [playOpportunitySound, minRoi, soundEnabledPmPm])
 
   const { isConnected, authError: wsAuthError } = useArbitrageSocket({
     onNewOpportunity: handleNewOpportunity,
@@ -697,14 +740,9 @@ export function Scanner() {
   })
 
   // PM-BM real-time WebSocket
-  const handleNewSportsOpportunity = useCallback((opp: SportsOpportunity) => {
-    if (isPaused || arbMode !== 'pm-bm') return
-    if (liveFilter === 'live' && !opp.isLive) return
-    if (liveFilter === 'pre' && opp.isLive) return
-    // Only notify for profitable opportunities
-    if (opp.profitPercentage <= 0 || opp.profitPercentage < minRoi) return
-    if (soundEnabled) playOpportunitySound()
-  }, [soundEnabled, isPaused, arbMode, liveFilter, minRoi, playOpportunitySound])
+  const handleNewSportsOpportunity = useCallback((_opp: SportsOpportunity) => {
+    // Sound is handled via useEffect watching filteredOpportunities
+  }, [])
 
   const { authError: sportsWsAuthError } = useSportsArbSocket({
     onNewOpportunity: handleNewSportsOpportunity,
@@ -785,6 +823,13 @@ export function Scanner() {
         }
       }
 
+      // Platform pair filter
+      if (arbMode === 'pm-bm' && platformPairFilter.size > 0) {
+        const sOpp = opp as SportsOpportunity
+        const dexLeg = sOpp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle')
+        if (!dexLeg || !platformPairFilter.has(dexLeg.platform)) return false
+      }
+
       // Sport filter
       if (arbMode === 'pm-bm' && sportFilter.size > 0) {
         const sOpp = opp as SportsOpportunity
@@ -840,7 +885,7 @@ export function Scanner() {
     })
 
     return result
-  }, [pmpmQuery.data, pmbmQuery.data, searchQuery, minRoi, typeFilter, liveFilter, effectivePlatforms, sortMode, showPolymarketMin50c, arbMode, realMinAmount, sportFilter, maxDaysUntilStart])
+  }, [pmpmQuery.data, pmbmQuery.data, searchQuery, minRoi, typeFilter, liveFilter, effectivePlatforms, sortMode, showPolymarketMin50c, arbMode, realMinAmount, sportFilter, maxDaysUntilStart, platformPairFilter])
 
   // PM-BM display list: pinned cards first, then non-pinned filtered cards
   const displayPmBmOpps = useMemo(() => {
@@ -864,6 +909,16 @@ export function Scanner() {
     return [...pinnedList, ...nonPinned]
   }, [arbMode, filteredOpportunities, pinnedOpps, pmbmQuery.data])
 
+
+  // Play sound when a pm-bm card appears in the filtered list (wasn't visible before)
+  const visiblePmBmIdsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (arbMode !== 'pm-bm' || !soundEnabledPmBm || isPaused) return
+    const currentIds = new Set(filteredOpportunities.map(o => o.id))
+    const newIds = [...currentIds].filter(id => !visiblePmBmIdsRef.current.has(id))
+    if (newIds.length > 0) playBmSound()
+    visiblePmBmIdsRef.current = currentIds
+  }, [filteredOpportunities, arbMode, soundEnabledPmBm, isPaused, playBmSound])
 
   const locale = i18n.language === 'ru' ? 'ru' : 'en'
 
@@ -899,7 +954,7 @@ export function Scanner() {
                 type="button"
                 className={`settings-icon-button ${soundEnabled ? 'active' : ''}`}
                 onClick={() => {
-                  if (!soundEnabled) playOpportunitySound()
+                  if (!soundEnabled) arbMode === 'pm-bm' ? playBmSound() : playOpportunitySound()
                   setSoundEnabled((prev) => !prev)
                 }}
                 aria-label={soundEnabled ? t('scanner.soundOn') : t('scanner.soundOff')}
@@ -1009,7 +1064,7 @@ export function Scanner() {
                 <div className="settings-sliders">
                   <div className="settings-slider-row">
                     <div className="settings-slider-head">
-                      <span className="settings-slider-label">ABSOLUTE ($)</span>
+                      <span className="settings-slider-label">BANK ($)</span>
                       <span className="settings-slider-value">${perfectAmount}</span>
                     </div>
                     <input
@@ -1023,7 +1078,7 @@ export function Scanner() {
                   </div>
                   <div className="settings-slider-row">
                     <div className="settings-slider-head">
-                      <span className="settings-slider-label">REAL MIN ($)</span>
+                      <span className="settings-slider-label">LIQUIDITY ($)</span>
                       <span className="settings-slider-value">${realMinAmount}</span>
                     </div>
                     <input
@@ -1177,6 +1232,36 @@ export function Scanner() {
                           {t(`scanner.sort${value.charAt(0).toUpperCase() + value.slice(1)}`)}
                         </button>
                       ))}
+                    </div>
+                  </div>
+                  <div className="filter-group">
+                    <button className="collapsible-label" onClick={() => setPairsOpen(p => !p)}>
+                      <span>Pairs</span>
+                      <span className={`collapsible-arrow ${pairsOpen ? 'open' : ''}`}>▾</span>
+                    </button>
+                    <div className={`collapsible-body ${pairsOpen ? 'collapsible-body--open' : ''}`}>
+                      <div className="platform-buttons">
+                        {([
+                          { key: 'dexsport', label: 'Polymarket → Dexsport' },
+                          { key: 'pinnacle', label: 'Polymarket → Pinnacle' },
+                        ]).map(({ key, label }) => {
+                          const isActive = platformPairFilter.size === 0 || platformPairFilter.has(key)
+                          return (
+                            <button
+                              key={key}
+                              className={`sidebar-mode-button ${isActive ? 'active' : ''}`}
+                              onClick={() => setPlatformPairFilter((prev) => {
+                                const next = new Set(prev.size === 0 ? ['dexsport', 'pinnacle'] : prev)
+                                if (next.has(key)) next.delete(key); else next.add(key)
+                                if (next.size === 2) return new Set()
+                                return next
+                              })}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
                   </div>
                   <div className="filter-group">
