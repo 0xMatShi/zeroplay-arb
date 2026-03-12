@@ -72,9 +72,26 @@ export function CalculatorContent({
   const dexWinProfit = dexAmt > 0 && dexO > 0 && totalCost > 0 ? dexAmt * dexO - totalCost : 0
 
   const handleCopyQty = () => {
-    navigator.clipboard.writeText(String(pmQty))
+    const text = String(pmQty)
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => fallbackCopy(text))
+    } else {
+      fallbackCopy(text)
+    }
     setQtyCopied(true)
     setTimeout(() => setQtyCopied(false), 1500)
+  }
+
+  const fallbackCopy = (text: string) => {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
   }
 
   return (
