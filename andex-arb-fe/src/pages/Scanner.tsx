@@ -747,13 +747,13 @@ export function Scanner() {
         }
       }
 
-      // Polymarket pre-filter — hide low-priced legs (< $0.50) when enabled (pm-bm pre-match only)
+      // Polymarket pre-filter — hide high-priced legs (>= $0.50) when enabled (pm-bm pre-match only)
       if (arbMode === 'pm-bm' && showPolymarketMin50c && !effectiveIsLive(opp as SportsOpportunity)) {
         const hasLowPolymarketLeg = opp.legs.some((leg) => {
           const slug = leg.platformSlug.toLowerCase()
           const name = leg.platformName.toLowerCase()
           const isPolymarket = slug === 'polymarket' || name.includes('polymarket')
-          return isPolymarket && leg.price < POLYMARKET_MIN_PRICE
+          return isPolymarket && leg.price >= POLYMARKET_MIN_PRICE
         })
 
         if (hasLowPolymarketLeg) {

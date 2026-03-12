@@ -148,6 +148,20 @@ function extractPmValue(question: string): number | null {
   return null;
 }
 
+/**
+ * Extracts the team name with the NEGATIVE handicap from a PM spread/handicap question.
+ *
+ * Handles two PM question formats:
+ *   - spreads:      "Spread: Iowa Hawkeyes (-1.5)"
+ *   - map_handicap: "Map Handicap: UNiTY (-1.5) vs LPH Gaming (+1.5)"
+ *
+ * In both cases the negative team appears right after the colon and before `(-X.X)`.
+ */
+function extractPmNegativeTeam(question: string): string | null {
+  const m = question.match(/:\s*(.+?)\s*\(-[\d.]+\)/i);
+  return m ? m[1].trim() : null;
+}
+
 function extractDexValue(outcomes: Array<{ name: string; price: number }>): number | null {
   for (const o of outcomes) {
     const match = o.name.match(/([\d.]+)/);
@@ -214,24 +228,51 @@ function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): D
         return Math.abs(pmValue - dexValue) < 0.01;
       });
       if (valueMatches.length === 0) return null;
-      if (valueMatches.length === 1) return valueMatches[0];
 
-      // DEX sometimes lists two spread markets with the same name and value but opposite signs
-      // (e.g. two "Maps Handicap" markets: one with TeamA -1.5, another with TeamA +1.5).
-      // PM outcomeNames[0] is always the team with the NEGATIVE handicap — use it to pick
-      // the DEX market where that same team also has a negative-sign outcome.
-      if (SPREAD_TYPES.has(type) && pm.outcomeNames.length >= 1) {
+      // For spread/handicap markets, verify that both platforms agree on WHICH team is the
+      // favourite (i.e. has the negative sign). PM encodes this explicitly in the question:
+      //   spreads:      "Spread: Iowa Hawkeyes (-1.5)"
+      //   map_handicap: "Map Handicap: UNiTY (-1.5) vs LPH Gaming (+1.5)"
+      // DEX encodes it in the outcome names: "Iowa Hawkeyes -1.5" / "Iowa Hawkeyes +1.5".
+      if (SPREAD_TYPES.has(type)) {
         const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const pmNegNorm = norm(pm.outcomeNames[0]);
-        const directionMatch = valueMatches.find((dex) =>
-          dex.outcomes.some((o) => {
-            if (!o.name.includes('-')) return false;
-            const teamName = o.name.replace(/\s*[+-][\d.]+$/, '').trim();
-            const teamNorm = norm(teamName);
-            return teamNorm.includes(pmNegNorm) || pmNegNorm.includes(teamNorm);
-          }),
-        );
-        if (directionMatch) return directionMatch;
+        // Build a set of candidate norms for the PM negative team.
+        // The question uses the abbreviated name (e.g. "NAVI") while outcomeNames[0] uses the
+        // full name ("Natus Vincere") — we need both so DEX name matching works regardless of
+        // which form DexSport uses in its outcome labels.
+        const pmNegNorms = [extractPmNegativeTeam(pm.question), pm.outcomeNames[0] ?? '']
+          .filter(Boolean)
+          .map((s) => norm(s!))
+          .filter((n) => n.length > 0);
+
+        const matchesNegTeam = (teamNorm: string) =>
+          pmNegNorms.some((n) => teamNorm.includes(n) || n.includes(teamNorm));
+
+        if (pmNegNorms.length > 0) {
+          // Find DEX market where PM's negative team also carries a NEGATIVE sign.
+          const directionMatch = valueMatches.find((dex) =>
+            dex.outcomes.some((o) => {
+              if (!o.name.includes('-')) return false;
+              const teamNorm = norm(o.name.replace(/\s*[+-][\d.]+$/, '').trim());
+              return matchesNegTeam(teamNorm);
+            }),
+          );
+          if (directionMatch) return directionMatch;
+
+          // If PM's negative team appears with a POSITIVE sign on DEX the spread direction is
+          // inverted — the platforms disagree on who the favourite is. Matching them would
+          // produce false arb opportunities where both legs can lose simultaneously
+          // (e.g. PM Iowa -1.5 at 45¢ + DEX Ohio State -1.5 at 53¢ = 98¢ looks profitable,
+          // but both lose when Iowa wins by exactly 1 point).
+          const invertedDirection = valueMatches.some((dex) =>
+            dex.outcomes.some((o) => {
+              if (!o.name.includes('+')) return false;
+              const teamNorm = norm(o.name.replace(/\s*[+-][\d.]+$/, '').trim());
+              return matchesNegTeam(teamNorm);
+            }),
+          );
+          if (invertedDirection) return null;
+        }
       }
 
       return valueMatches[0];
