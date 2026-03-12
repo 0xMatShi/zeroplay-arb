@@ -61,6 +61,21 @@ type LiveFilter = 'all' | 'live' | 'pre'
 type ArbMode = 'pm-pm' | 'pm-bm'
 const POLYMARKET_MIN_PRICE = 0.5
 
+function useLocalStorage<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = localStorage.getItem(key)
+      return stored !== null ? (JSON.parse(stored) as T) : defaultValue
+    } catch {
+      return defaultValue
+    }
+  })
+  useEffect(() => {
+    try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
+  }, [key, value])
+  return [value, setValue]
+}
+
 // --- Error Boundary ---
 
 class CardErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -555,7 +570,7 @@ export function Scanner() {
   const navigate = useNavigate()
 
   // Arb mode
-  const [arbMode, setArbMode] = useState<ArbMode>('pm-pm')
+  const [arbMode, setArbMode] = useLocalStorage<ArbMode>('scanner:arbMode', 'pm-bm')
   const queryClient = useQueryClient()
 
   const handleModeSwitch = useCallback((mode: ArbMode) => {
@@ -570,17 +585,22 @@ export function Scanner() {
 
   // Filters
   const [searchQuery] = useState('')
-  const [minRoi, setMinRoi] = useState(0)
+  const [minRoi, setMinRoi] = useLocalStorage('scanner:minRoi', 0)
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({})
   const [typeFilter] = useState<TypeFilter>('all')
-  const [liveFilter, setLiveFilter] = useState<LiveFilter>('all')
-  const [sportFilter, setSportFilter] = useState<Set<string>>(new Set())
+  const [liveFilter, setLiveFilter] = useLocalStorage<LiveFilter>('scanner:liveFilter', 'all')
+  const [sportFilter, setSportFilter] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('scanner:sportFilter')
+      return stored ? new Set<string>(JSON.parse(stored) as string[]) : new Set()
+    } catch { return new Set() }
+  })
   const [platformsOpen, setPlatformsOpen] = useState(false)
   const [sportsOpen, setSportsOpen] = useState(false)
-  const [sortMode, setSortMode] = useState<SortMode>('profit')
-  const [showPolymarketMin50c, setShowPolymarketMin50c] = useState(true)
-  const [soundEnabled, setSoundEnabled] = useState(true)
-  const [volume, setVolume] = useState(0.3)
+  const [sortMode, setSortMode] = useLocalStorage<SortMode>('scanner:sortMode', 'profit')
+  const [showPolymarketMin50c, setShowPolymarketMin50c] = useLocalStorage('scanner:showPolymarketMin50c', true)
+  const [soundEnabled, setSoundEnabled] = useLocalStorage('scanner:soundEnabled', true)
+  const [volume, setVolume] = useLocalStorage('scanner:volume', 0.3)
   const [volumeHover, setVolumeHover] = useState(false)
   const [volumeVisible, setVolumeVisible] = useState(false)
   const volumeHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -588,10 +608,14 @@ export function Scanner() {
   const audioContextRef = useRef<AudioContext | null>(null)
 
   // PM-BM settings
-  const [pmDisplayMode, setPmDisplayMode] = useState<'shares' | 'odds'>('shares')
-  const [perfectAmountInput, setPerfectAmountInput] = useState('100')
-  const [realMinAmountInput, setRealMinAmountInput] = useState('0')
-  const [maxDaysInput, setMaxDaysInput] = useState('')
+  const [pmDisplayMode, setPmDisplayMode] = useLocalStorage<'shares' | 'odds'>('scanner:pmDisplayMode', 'shares')
+  const [perfectAmountInput, setPerfectAmountInput] = useLocalStorage('scanner:perfectAmountInput', '100')
+  const [realMinAmountInput, setRealMinAmountInput] = useLocalStorage('scanner:realMinAmountInput', '0')
+  const [maxDaysInput, setMaxDaysInput] = useLocalStorage('scanner:maxDaysInput', '')
+  useEffect(() => {
+    try { localStorage.setItem('scanner:sportFilter', JSON.stringify([...sportFilter])) } catch { /* ignore */ }
+  }, [sportFilter])
+
   const perfectAmount = perfectAmountInput === '' ? 0 : Math.max(0, Number(perfectAmountInput) || 0)
   const realMinAmount = realMinAmountInput === '' ? 0 : Math.max(0, Number(realMinAmountInput) || 0)
   const maxDaysUntilStart = maxDaysInput === '' ? null : Math.max(0, Number(maxDaysInput) || 0)
@@ -963,16 +987,16 @@ export function Scanner() {
             <label className="sidebar-section-label">{t('scanner.arbMode')}</label>
             <div className="sidebar-mode-buttons">
               <button
-                className={`sidebar-mode-button ${arbMode === 'pm-pm' ? 'active' : ''}`}
-                onClick={() => handleModeSwitch('pm-pm')}
-              >
-                PM — PM
-              </button>
-              <button
                 className={`sidebar-mode-button ${arbMode === 'pm-bm' ? 'active' : ''}`}
                 onClick={() => handleModeSwitch('pm-bm')}
               >
                 PM — BK
+              </button>
+              <button
+                className={`sidebar-mode-button ${arbMode === 'pm-pm' ? 'active' : ''}`}
+                onClick={() => handleModeSwitch('pm-pm')}
+              >
+                PM — PM
               </button>
             </div>
           </div>

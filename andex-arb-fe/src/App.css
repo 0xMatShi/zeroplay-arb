@@ -5304,7 +5304,7 @@
 
 /* Left info section */
 .sports-card-info {
-  flex: 0 0 670px;
+  flex: 1 1 0;
   min-width: 0;
   padding: 8px 20px 8px 48px;
   display: flex;
@@ -5413,7 +5413,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .sports-platform-box {
@@ -5530,6 +5530,7 @@
   padding: 20px 24px 20px 6px;
   justify-content: center;
   min-width: 120px;
+  flex-shrink: 0;
 }
 
 .sports-metric-box {
