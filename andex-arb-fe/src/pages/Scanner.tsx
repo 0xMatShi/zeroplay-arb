@@ -12,7 +12,7 @@ import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
 import { useSportsArbSocket } from '../hooks/useSportsArbSocket'
 import { ApiError } from '../api/client'
 import { formatRelativeTime } from '../utils/time'
-import type { Opportunity, SportsOpportunity, SportsOpportunityLeg, NewOpportunityEvent, OrderBookAnalysisResponse, ArbitrageTier } from '../api/types'
+import type { Opportunity, SportsOpportunity, SportsOpportunityLeg, NewOpportunityEvent, OrderBookAnalysisResponse } from '../api/types'
 
 async function openCalcWindow(params: CalcParams) {
   const q = new URLSearchParams(params as unknown as Record<string, string>)
@@ -93,116 +93,6 @@ class CardErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
     if (this.state.hasError) return null
     return this.props.children
   }
-}
-
-// --- OrderBook Panel (per-card) ---
-
-function OrderBookPanel({ data, isLoading, isError, isOpen, locale }: {
-  data: OrderBookAnalysisResponse | undefined
-  isLoading: boolean
-  isError: boolean
-  isOpen: boolean
-  locale: string
-}) {
-  const { t } = useTranslation()
-
-  const ob = data
-  const tiersSummary = ob?.tiers
-  const hasTiers = (tiersSummary?.tiers.length ?? 0) > 0
-
-  const summaryRow = ob && tiersSummary ? (
-    <div className="ob-summary">
-      <div className="ob-summary-item">
-        <span className="ob-summary-label">{t('scanner.tiersTotalContracts')}</span>
-        <span className={`ob-summary-value ${!hasTiers ? 'ob-summary-value--warn' : ''}`}>
-          {hasTiers ? tiersSummary.totalQuantity.toFixed(0) : t('scanner.noTiers')}
-        </span>
-      </div>
-      <div className="ob-summary-item">
-        <span className="ob-summary-label">{t('scanner.tiersTotalInvestment')}</span>
-        <span className="ob-summary-value">${tiersSummary.totalInvestment.toFixed(2)}</span>
-      </div>
-    </div>
-  ) : null
-
-  if (!isOpen) {
-    if (!summaryRow) return null
-    return <div className="ob-panel ob-panel--summary-only">{summaryRow}</div>
-  }
-
-  if (isLoading && !ob) {
-    return (
-      <div className="ob-panel">
-        <div className="ob-loading">{t('scanner.loadingOrderbook')}</div>
-      </div>
-    )
-  }
-
-  if (isError || !ob) {
-    return (
-      <div className="ob-panel">
-        <div className="ob-error">{t('scanner.orderbookError')}</div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="ob-panel">
-      {summaryRow}
-
-      {!hasTiers && (
-        <div className="ob-no-liquidity-hint">{t('scanner.noTiersHint')}</div>
-      )}
-
-      {/* Tiers table */}
-      {hasTiers && tiersSummary && (
-        <div className="ob-tiers-table-wrapper">
-          <table className="ob-tiers-table">
-            <thead>
-              <tr>
-                <th>{t('scanner.tiersTableQty')}</th>
-                {tiersSummary.tiers[0].legPrices.map((lp, i) => (
-                  <th key={i}>{lp.platformName} ({lp.outcomeName})</th>
-                ))}
-                <th>{t('scanner.tiersTableCost')}</th>
-                <th>{t('scanner.tiersTableProfit')}</th>
-                <th>{t('scanner.tiersTableInvestment')}</th>
-                <th>{t('scanner.tiersTableGross')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tiersSummary.tiers.map((tier: ArbitrageTier, i: number) => (
-                <tr key={i} className={i === 0 ? 'ob-tier-row--best' : ''}>
-                  <td>{tier.quantity}</td>
-                  {tier.legPrices.map((lp, j) => (
-                    <td key={j}>
-                      ${lp.price.toFixed(2)}
-                      {lp.url && (
-                        <a href={lp.url} target="_blank" rel="noopener noreferrer" className="ob-tier-link" title={lp.platformName}>
-                          &#8599;
-                        </a>
-                      )}
-                    </td>
-                  ))}
-                  <td>${tier.totalCostPerContract.toFixed(2)}</td>
-                  <td className="ob-tier-profit">+{tier.profitPercentage.toFixed(2)}%</td>
-                  <td>${tier.investmentAmount.toFixed(2)}</td>
-                  <td className="ob-tier-gross">${tier.grossProfit.toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-
-
-      {/* Analyzed at */}
-      <div className="ob-analyzed-at">
-        {t('scanner.analyzedAt', { time: formatRelativeTime(ob.analyzedAt, locale) })}
-      </div>
-    </div>
-  )
 }
 
 // --- Opportunity Card ---
