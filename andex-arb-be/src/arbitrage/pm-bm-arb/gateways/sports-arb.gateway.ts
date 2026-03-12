@@ -88,9 +88,9 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
     tennis:     'tennis',
     hockey:     'ice-hockey',
     baseball:   'baseball',
-    csgo:       'esports/cs2',
-    dota2:      'esports/dota-2',
-    valorant:   'esports/valorant',
+    csgo:       'esports/games/cs2',
+    dota2:      'esports/games/dota-2',
+    valorant:   'esports/games/valorant',
   };
 
   private buildBookmakerUrl(match: SportsMatch | undefined): string | undefined {
@@ -101,14 +101,20 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       const sportPath = SportsArbGateway.PINNACLE_SPORT_PATH[dexEvent.sportKey];
       if (!sportPath) return 'https://www.pinnacle888.com/en/standard/sports';
 
-      // URL format: /en/standard/{sport}/{league-slug}/{Home-vs-Away}/{eventId}/
-      const leagueSlug = (dexEvent.tournamentName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      // event name is "{Home} vs {Away}" — replace spaces with hyphens preserving case
-      const matchSlug = dexEvent.name.replace(/\s+/g, '-');
+      // URL format: /en/standard/{sportPath}/{league-slug}/{home-vs-away}/{eventId}#all
+      let leagueSlug = (dexEvent.tournamentName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      // Esports tournament names from Pinnacle include the game name prefix (e.g. "Dota 2 PGL Wallachia"
+      // → "dota-2-pgl-wallachia"), but the URL only needs the league part ("pgl-wallachia").
+      if (sportPath.startsWith('esports/games/')) {
+        const gameSlug = sportPath.split('/').pop() ?? '';
+        if (leagueSlug.startsWith(gameSlug + '-')) leagueSlug = leagueSlug.slice(gameSlug.length + 1);
+      }
+      // Team names must be lowercased in the URL
+      const matchSlug = dexEvent.name.toLowerCase().replace(/\s+/g, '-');
       const eventId = dexEvent.eventId;
 
       return leagueSlug && matchSlug && eventId
-        ? `https://www.pinnacle888.com/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${eventId}/`
+        ? `https://www.pinnacle888.com/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${eventId}#all`
         : `https://www.pinnacle888.com/en/standard/${sportPath}`;
     }
 

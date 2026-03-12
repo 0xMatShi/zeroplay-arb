@@ -23,9 +23,9 @@ export class SportsArbController {
       tennis:     'tennis',
       hockey:     'ice-hockey',
       baseball:   'baseball',
-      csgo:       'esports/cs2',
-      dota2:      'esports/dota-2',
-      valorant:   'esports/valorant',
+      csgo:       'esports/games/cs2',
+      dota2:      'esports/games/dota-2',
+      valorant:   'esports/games/valorant',
     };
 
     return {
@@ -40,9 +40,13 @@ export class SportsArbController {
         if (match?.bookmakerPlatform === 'pinnacle') {
           const sportPath = PINNACLE_SPORT_PATH[dexSportKey];
           if (sportPath && match.dexEvent.tournamentName && match.dexEvent.name) {
-            const leagueSlug = match.dexEvent.tournamentName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-            const matchSlug = match.dexEvent.name.replace(/\s+/g, '-');
-            bookmakerUrl = `https://www.pinnacle888.com/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${match.dexEvent.eventId}/`;
+            let leagueSlug = match.dexEvent.tournamentName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            if (sportPath.startsWith('esports/games/')) {
+              const gameSlug = sportPath.split('/').pop() ?? '';
+              if (leagueSlug.startsWith(gameSlug + '-')) leagueSlug = leagueSlug.slice(gameSlug.length + 1);
+            }
+            const matchSlug = match.dexEvent.name.toLowerCase().replace(/\s+/g, '-');
+            bookmakerUrl = `https://www.pinnacle888.com/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${match.dexEvent.eventId}#all`;
           } else {
             bookmakerUrl = `https://www.pinnacle888.com/en/standard/${PINNACLE_SPORT_PATH[dexSportKey] ?? 'sports'}`;
           }
