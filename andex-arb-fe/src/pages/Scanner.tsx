@@ -220,16 +220,14 @@ function OpportunityCard({
 }) {
   const { t } = useTranslation()
   useNow()
-  const [obOpen, setObOpen] = useState(false)
   const isPmPm = arbMode === 'pm-pm'
-  const { data: obData, isLoading: obLoading, isError: obError } = useOrderBook(opp.id, isPmPm)
+  const { data: obData } = useOrderBook(opp.id, isPmPm)
   const ob = obData as OrderBookAnalysisResponse | undefined
 
   return (
     <div
-      className={`opportunity-card opportunity-card--clickable ${obOpen ? 'opportunity-card--expanded' : ''}`}
-      style={{ animationDelay: `${index * 0.05}s`, cursor: 'pointer' }}
-      onClick={() => setObOpen((prev) => !prev)}
+      className="opportunity-card"
+      style={{ animationDelay: `${index * 0.05}s` }}
     >
       {/* Card Header */}
       <div className="opp-header">
@@ -293,11 +291,6 @@ function OpportunityCard({
         })}
       </div>
 
-      {/* OrderBook Panel — only for PM-PM */}
-      {isPmPm && (
-        <OrderBookPanel data={ob} isLoading={obLoading} isError={obError} isOpen={obOpen} locale={locale} />
-      )}
-
       {/* Card Footer */}
       <div className="opp-footer">
         <div className="opp-timestamps">
@@ -308,18 +301,6 @@ function OpportunityCard({
             {t('scanner.validatedAt', { time: formatRelativeTime(opp.lastValidatedAt, locale) })}
           </span>
         </div>
-        {isPmPm && (
-          <button
-            className={`ob-toggle-button ${obOpen ? 'ob-toggle-button--active' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation()
-              if (obOpen) setObOpen(false)
-              else setObOpen(true)
-            }}
-          >
-            {obOpen ? t('scanner.hideDepth') : t('scanner.viewDepth')}
-          </button>
-        )}
       </div>
     </div>
   )
