@@ -105,6 +105,14 @@ export function useArbitrageSocket(options?: UseArbitrageSocketOptions) {
             totalGrossProfit: null,
           }
 
+          // Deduplicate: if already in cache treat as update to avoid duplicate keys
+          if (old.items.some((item) => item.id === data.id)) {
+            return {
+              ...old,
+              items: old.items.map((item) => (item.id === data.id ? newOpportunity : item)),
+            }
+          }
+
           return {
             ...old,
             items: [newOpportunity, ...old.items],

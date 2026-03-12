@@ -66,6 +66,24 @@ export class SportsArbScanner {
     // the market is already settled (e.g. completed CS:GO map) — not a real arb.
     if (Math.min(...pmMarket.outcomePrices) < 0.02) return [];
 
+    // For child_moneyline (individual map/game markets in a series):
+    // Only show map N if all preceding maps have been resolved on PM.
+    // A resolved PM map has one outcome price near 0 (<5¢ — settled by oracle).
+    // This prevents fake arbs for maps that may never be played (e.g. map 4 in a 3-0 Bo5).
+    if (mp.pmType === 'child_moneyline') {
+      const numMatch = mp.pmMarket.question.match(/(?:Map|Game)\s+(\d+)/i);
+      const mapNum = numMatch ? parseInt(numMatch[1], 10) : 1;
+      if (mapNum > 1) {
+        const prevMapMarket = match.pmEvent.markets.find((m) => {
+          if (m.sportsMarketType !== 'child_moneyline') return false;
+          const q = m.question.match(/(?:Map|Game)\s+(\d+)/i);
+          return q != null && parseInt(q[1], 10) === mapNum - 1;
+        });
+        // Previous map not found or not yet settled → this map hasn't been reached yet
+        if (!prevMapMarket || Math.min(...prevMapMarket.outcomePrices) >= 0.01) return [];
+      }
+    }
+
     // PM outcomes: names + best-ask probabilities + best-ask qty + full ask levels
     const pmOutcomes = pmMarket.outcomeNames.map((name, i) => ({
       name,

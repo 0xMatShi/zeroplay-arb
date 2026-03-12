@@ -5,6 +5,7 @@ import { useWhoami } from '../api'
 import { ApiKeyModal } from '../components/ApiKeyModal'
 import { formatUsd } from '../utils/formatPrice'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
+import { SmokeCanvas } from '../components/SmokeCanvas'
 
 export function Landing() {
   const { t } = useTranslation()
@@ -27,6 +28,7 @@ export function Landing() {
 
   return (
     <div className="landing">
+      <SmokeCanvas />
       {/* Header */}
       <header className="header">
         <div className="header-content">

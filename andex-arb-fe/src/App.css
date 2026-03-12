@@ -2,6 +2,8 @@
 .landing {
   width: 100%;
   min-height: 100vh;
+  position: relative;
+  z-index: 1;
 }
 
 /* Header / Navigation */
@@ -248,9 +250,9 @@
 /* Hero Section */
 .hero {
   padding: 65px 24px 100px;
-  background: var(--bg-dark);
+  background: transparent;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .hero::before {
@@ -260,7 +262,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: radial-gradient(circle at 50% 0%, rgba(0, 149, 1, 0.08) 0%, transparent 60%);
+  background: none;
   pointer-events: none;
 }
 
@@ -508,7 +510,7 @@
 /* Data Sources Section */
 .data-sources {
   padding: 60px 24px;
-  background: var(--bg-dark);
+  background: transparent;
   border-top: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
 }
@@ -555,7 +557,7 @@
 /* Problem/Solution Section */
 .problem-solution-section {
   padding: 100px 24px;
-  background: var(--bg-dark);
+  background: transparent;
 }
 
 .comparison-grid {
@@ -566,7 +568,8 @@
 }
 
 .comparison-card {
-  background: var(--bg-card);
+  background: rgba(25, 26, 33, 0.45);
+  backdrop-filter: blur(12px);
   border-radius: 48px;
   padding: 32px;
   transition: all 0.3s ease;
@@ -659,7 +662,7 @@
 /* How It Works Section */
 .how-it-works-section {
   padding: 100px 24px;
-  background: var(--bg-dark);
+  background: transparent;
 }
 
 .steps-grid {
@@ -672,7 +675,8 @@
 }
 
 .step-card {
-  background: var(--bg-card);
+  background: rgba(25, 26, 33, 0.45);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
   border-radius: 48px;
   padding: 32px;
@@ -755,7 +759,7 @@
 /* Plans Section */
 .plans-section {
   padding: 100px 24px;
-  background: var(--bg-dark);
+  background: transparent;
 }
 
 .section-title {
@@ -816,13 +820,13 @@
 }
 
 .plan-card {
-  background: var(--bg-card);
+  background: rgba(25, 26, 33, 0.45);
   border: 1px solid var(--border-color);
   border-radius: 60px;
   padding: 32px;
   transition: box-shadow 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94),
               transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -1049,7 +1053,7 @@
 /* Features Section */
 .features-section {
   padding: 100px 24px;
-  background: var(--bg-dark);
+  background: transparent;
 }
 
 .features-grid {
@@ -1061,7 +1065,8 @@
 
 .feature-card {
   padding: 32px;
-  background: var(--bg-card);
+  background: rgba(25, 26, 33, 0.45);
+  backdrop-filter: blur(12px);
   border-radius: 48px;
   border: 1px solid var(--border-color);
   transition: all 0.3s ease;
@@ -2816,7 +2821,7 @@
 
 /* Footer */
 .footer {
-  background: #000000;
+  background: transparent;
   border-top: none;
   padding: 60px 24px 24px;
   margin-top: 100px;

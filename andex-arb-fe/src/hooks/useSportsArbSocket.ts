@@ -86,6 +86,10 @@ export function useSportsArbSocket(options?: UseSportsArbSocketOptions) {
         queryKeys.sportsOpportunities,
         (old) => {
           if (!old) return old
+          // Deduplicate: if already in cache treat as update to avoid duplicate keys
+          if (old.items.some((item) => item.id === data.id)) {
+            return { ...old, items: old.items.map((item) => (item.id === data.id ? data : item)) }
+          }
           return { ...old, items: [data, ...old.items], total: old.total + 1 }
         },
       )

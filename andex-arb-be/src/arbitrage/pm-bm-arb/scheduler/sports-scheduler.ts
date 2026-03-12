@@ -104,6 +104,13 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   async handleHourlyCron(): Promise<void> {
     this.logger.log('10-minute cycle: clearing all caches and restarting full discovery');
 
+    // Expire all current opportunities on the frontend before resetting state
+    if (this.gateway) {
+      for (const opp of this.currentOpportunities) {
+        this.gateway.emitExpired(opp.id);
+      }
+    }
+
     // Reset scheduler state
     this.currentMatches = [];
     this.currentOpportunities = [];

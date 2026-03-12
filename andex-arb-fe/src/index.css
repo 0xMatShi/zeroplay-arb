@@ -38,21 +38,6 @@ body {
   position: relative;
 }
 
-/* Subtle tech grid background pattern */
-body::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image: 
-    linear-gradient(rgba(0, 149, 1, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 149, 1, 0.03) 1px, transparent 1px);
-  background-size: 50px 50px;
-  pointer-events: none;
-  z-index: 0;
-}
 
 #root {
   width: 100%;
