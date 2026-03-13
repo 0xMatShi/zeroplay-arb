@@ -135,7 +135,7 @@ export function Landing() {
                   <div className="sports-market-type">Match Winner</div>
                 </div>
                 <div className="sports-card-platforms">
-                  <div className="sports-platform-box">
+                  <div className="sports-platform-box" style={{ background: 'rgba(25, 26, 33, 0.45)', backdropFilter: 'blur(12px)' }}>
                     <div className="sports-platform-label sports-platform-label--pm">POLYMARKET</div>
                     <div className="sports-outcome-name">Gaimin Gladiators</div>
                     <div className="sports-amounts-inline">
@@ -150,7 +150,7 @@ export function Landing() {
                       <span className="sports-odds">2.78x</span>
                     </div>
                   </div>
-                  <div className="sports-platform-box">
+                  <div className="sports-platform-box" style={{ background: 'rgba(25, 26, 33, 0.45)', backdropFilter: 'blur(12px)' }}>
                     <div className="sports-platform-label sports-platform-label--dex">
                       <BlurredText text="DEXSPORT" color="#a78bfa" fontSize={13} />
                     </div>
@@ -198,7 +198,7 @@ export function Landing() {
                 </div>
               </div>
               <div className="opp-legs">
-                <div className="arb-leg">
+                <div className="arb-leg" style={{ background: 'rgba(25, 26, 33, 0.45)', backdropFilter: 'blur(12px)' }}>
                   <div className="leg-platform">POLYMARKET</div>
                   <div className="leg-outcome">
                     <span className="leg-outcome-label">Buy:</span>
@@ -345,7 +345,7 @@ export function Landing() {
 
                 <button
                   className="plan-button plan-button--primary"
-                  onClick={() => window.open(import.meta.env.VITE_TELEGRAM_BOT_URL || 'https://t.me/your_bot', '_blank')}
+                  onClick={() => window.location.href = '/pricing'}
                 >
                   {t('pricing.buy')}
                 </button>
