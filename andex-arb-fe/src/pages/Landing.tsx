@@ -328,9 +328,9 @@ export function Landing() {
           
           <div className="plans-grid">
             {[
-              { id: 'basic', name: 'Basic', description: t('pricing.basicDesc'), price: '19.9', durationDays: 7 },
-              { id: 'medium', name: 'Medium', description: t('pricing.mediumDesc'), price: '99.9', durationDays: 30 },
-              { id: 'pro', name: 'Pro', description: t('pricing.proDesc'), price: '199.9', durationDays: 30 },
+              { id: 'basic', name: 'TEST', description: t('pricing.basicDesc'), price: '30', durationDays: 7 },
+              { id: 'medium', name: 'Medium', description: t('pricing.mediumDesc'), price: '100', durationDays: 30 },
+              { id: 'pro', name: 'Pro', description: t('pricing.proDesc'), price: '150', durationDays: 30 },
             ].map((plan) => (
               <div key={plan.id} className="plan-card">
                 <div className="plan-header">

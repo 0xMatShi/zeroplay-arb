@@ -11,9 +11,11 @@ import {
 // ── Constants ────────────────────────────────────────────────
 
 const BASE_URL = 'https://www.pinnacle888.com';
-const POLL_INTERVAL_MS = 15_000;
+const POLL_INTERVAL_MS = 5_000;
 /** Remove event from cache if not seen for this long */
 const EVENT_TTL_MS = 1 * 60_000;
+/** Re-login every 2 hours to keep session alive */
+const SESSION_REFRESH_INTERVAL_MS = 2 * 60 * 60_000;
 
 /** Sports to track: sportId → sportKey (for regular sports) */
 const REGULAR_SPORTS: Array<{ sportId: number; sportKey: string }> = [
@@ -61,8 +63,10 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
   private readonly eventLastSeen = new Map<string, number>();
 
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private sessionTimer: ReturnType<typeof setInterval> | null = null;
   private destroyed = false;
   private initialFetchDone = false;
+  private sessionCookie: string | null = null;
 
   constructor() {
     this.client = axios.create({
@@ -78,12 +82,15 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  onModuleInit(): void {
-    this.fetchAll().then(() => {
-      if (!this.destroyed) {
-        this.pollTimer = setInterval(() => this.fetchAll(), POLL_INTERVAL_MS);
-      }
-    });
+  async onModuleInit(): Promise<void> {
+    await this.login();
+    if (!this.destroyed) {
+      this.sessionTimer = setInterval(() => this.login(), SESSION_REFRESH_INTERVAL_MS);
+    }
+    await this.fetchAll();
+    if (!this.destroyed) {
+      this.pollTimer = setInterval(() => this.fetchAll(), POLL_INTERVAL_MS);
+    }
   }
 
   onModuleDestroy(): void {
@@ -91,6 +98,10 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
+    }
+    if (this.sessionTimer) {
+      clearInterval(this.sessionTimer);
+      this.sessionTimer = null;
     }
   }
 
@@ -118,6 +129,39 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
   resetPhaseState(): void {
     this.logger.log('Pinnacle: resetPhaseState — triggering full re-fetch');
     this.fetchAll();
+  }
+
+  // ── Auth ─────────────────────────────────────────────────────
+
+  private async login(): Promise<void> {
+    const username = process.env.PINNACLE_USERNAME;
+    const password = process.env.PINNACLE_PASSWORD;
+
+    if (!username || !password) {
+      this.logger.warn('Pinnacle: PINNACLE_USERNAME/PINNACLE_PASSWORD not set — fetching as guest (delayed odds)');
+      return;
+    }
+
+    try {
+      const res = await this.client.post(
+        '/member-service/v2/login',
+        { username, password },
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+
+      const setCookieHeader = res.headers['set-cookie'];
+      if (setCookieHeader && setCookieHeader.length > 0) {
+        this.sessionCookie = setCookieHeader
+          .map((c: string) => c.split(';')[0])
+          .join('; ');
+        this.client.defaults.headers.common['Cookie'] = this.sessionCookie;
+        this.logger.log('Pinnacle: logged in successfully, session cookie set');
+      } else {
+        this.logger.warn(`Pinnacle: login returned status ${res.status} but no Set-Cookie header`);
+      }
+    } catch (err: any) {
+      this.logger.error(`Pinnacle: login failed — ${err.message}`);
+    }
   }
 
   // ── Polling ──────────────────────────────────────────────────
@@ -188,6 +232,20 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       );
       return res.data;
     } catch (err: any) {
+      // Session expired — re-login once and retry
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        this.logger.warn('Pinnacle: session expired, re-logging in');
+        await this.login();
+        try {
+          const retry = await this.client.get<PinnacleOddsResponse>(
+            `/sports-service/sv/euro/odds?${params}`,
+          );
+          return retry.data;
+        } catch (retryErr: any) {
+          this.logger.warn(`Pinnacle fetchOdds retry failed sportId=${sportId}: ${retryErr.message}`);
+          return null;
+        }
+      }
       this.logger.warn(`Pinnacle fetchOdds sportId=${sportId} isLive=${isLive}: ${err.message}`);
       return null;
     }

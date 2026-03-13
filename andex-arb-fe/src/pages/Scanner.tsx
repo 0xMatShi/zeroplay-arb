@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { CalculatorContent, type CalcParams } from '../components/CalculatorContent'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Calculator, ExternalLink, Pause, Pin, Play, Volume2, VolumeX } from 'lucide-react'
+import { Calculator, ExternalLink, Pause, Pin, Play, User, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { useOpportunities, useOrderBook, useSubscriptionStatus, useSportsOpportunities, queryKeys } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
@@ -489,6 +489,7 @@ export function Scanner() {
   const volumeHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isPaused, setIsPaused] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
 
   // PM-BM settings
   const [pmDisplayMode, setPmDisplayMode] = useLocalStorage<'shares' | 'odds'>('scanner:pmDisplayMode', 'shares')
@@ -873,6 +874,16 @@ export function Scanner() {
             </button>
           </div>
           <LanguageSwitcher />
+          <button
+            type="button"
+            className={`settings-icon-button profile-icon-button ${isProfileOpen ? 'active' : ''}`}
+            onClick={() => setIsProfileOpen(true)}
+            aria-label="Profile"
+          >
+            <span className="settings-icon-content" aria-hidden="true">
+              <User size={16} />
+            </span>
+          </button>
           {/* <button className="scanner-back-button" onClick={() => navigate('/dashboard')}>
             {t('scanner.backToDashboard')}
           </button> */}
@@ -1234,6 +1245,35 @@ export function Scanner() {
         </div>
       </div>
       </>}
+
+      {/* Profile panel overlay */}
+      <div
+        className={`profile-overlay ${isProfileOpen ? 'profile-overlay--open' : ''}`}
+        onClick={() => setIsProfileOpen(false)}
+      />
+
+      {/* Profile sliding panel */}
+      <div className={`profile-panel ${isProfileOpen ? 'profile-panel--open' : ''}`}>
+        <div className="profile-panel-inner">
+          <div className="profile-panel-avatar">
+            <User size={32} />
+          </div>
+          <div className="profile-panel-section">
+            <div className="profile-panel-label">{t('scanner.currentPlan') || 'Current Plan'}</div>
+            <div className="profile-plan-badge">1 Month</div>
+          </div>
+          <div className="profile-panel-section">
+            <a
+              href={import.meta.env.VITE_TELEGRAM_BOT_URL as string}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="profile-panel-bot-link"
+            >
+              {t('scanner.paymentBot') || 'Payment Bot'} →
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

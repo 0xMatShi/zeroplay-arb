@@ -195,7 +195,7 @@ function getSections(t: TFunc): Section[] {
 
 const PLANS: Record<Period, { left?: { name: string; price: string; oldPrice?: string }; right?: { name: string; price: string; oldPrice?: string } }> = {
   week: {
-    left: { name: 'TEST', price: '$40' },
+    left: { name: 'TEST', price: '$30' },
   },
   month: {
     left: { name: 'MEDIUM', price: '$100' },
@@ -282,7 +282,7 @@ export function Pricing() {
             <div className="nav-links">
               <button onClick={() => navigate('/scanner')} className="nav-link nav-link-button" data-text={t('header.scanner')}>{t('header.scanner')}</button>
               <a href="/#alerts" className="nav-link" data-text={t('header.alerts')}>{t('header.alerts')}</a>
-              <a href="/pricing" className="nav-link nav-link-active" data-text={t('header.pricing')}>{t('header.pricing')}</a>
+              <a href="/pricing" className="nav-link" data-text={t('header.pricing')}>{t('header.pricing')}</a>
             </div>
             <div className="header-actions">
               <LanguageSwitcher />
@@ -454,6 +454,13 @@ export function Pricing() {
               </div>
             )
           })}
+          {/* Empty footer row */}
+          <div className={`pricing-table-footer pricing-cols ${twoColumns ? 'pricing-cols--two' : 'pricing-cols--one'}`} style={{ gridColumn: '1 / -1' }}>
+            <div className="pricing-table-footer-cell" />
+            <div className="pricing-table-footer-cell" />
+            {twoColumns && <div className="pricing-table-footer-cell" />}
+          </div>
+
           </div>{/* end pricing-table */}
           </div>{/* end pricing-table-wrap */}
         </div>

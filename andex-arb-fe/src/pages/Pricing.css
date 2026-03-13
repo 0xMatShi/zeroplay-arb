@@ -46,7 +46,7 @@
 
 .pricing-tab {
   background: transparent;
-  border: 1px solid var(--border-color);
+  border: 1px solid #374151;
   color: var(--text-muted);
   padding: 10px 28px;
   font-size: 14px;
@@ -77,8 +77,9 @@
 
 /* Table wrapper */
 .pricing-table {
+  --border-color: #374151;
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 60px;
   overflow: hidden;
 }
 
@@ -266,6 +267,16 @@
   border-left: none;
 }
 
+.pricing-table-footer {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pricing-table-footer-cell {
+  height: 46px;
+}
+
 /* Sections — inside pricing-table, no outer border/radius */
 .pricing-section {
   border-top: 1px solid var(--border-color);
@@ -294,7 +305,7 @@
 .pricing-section-name {
   font-size: 13px;
   font-weight: 700;
-  color: var(--text-muted);
+  color: #ffffff;
   text-transform: uppercase;
   letter-spacing: 0.8px;
 }
@@ -415,7 +426,7 @@
 }
 
 .pricing-feature-expand-content {
-  padding: 12px 20px 12px 34px;
+  padding: 0 20px 12px 34px;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.75);
   line-height: 1.6;
