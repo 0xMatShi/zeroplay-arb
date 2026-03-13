@@ -18,6 +18,9 @@
     "eventName": "US strikes Iran by...?",
     "arbDetected": "АРБИТРАЖ НАЙДЕН: ROI +11.1%"
   },
+  "preview": {
+    "title": "ПРЕДОСМОТР"
+  },
   "dataSources": {
     "title": "ИСТОЧНИКИ ДАННЫХ"
   },

@@ -109,7 +109,7 @@ export function Landing() {
       {/* Preview Section */}
       <section className="preview-section">
         <div className="container">
-          <h2 className="section-title">PREVIEW</h2>
+          <h2 className="section-title">{t('preview.title')}</h2>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
             <div className="preview-toggle">
               <button className={`preview-tab${previewMode === 'bk' ? ' preview-tab--active' : ''}`} onClick={() => setPreviewMode('bk')}>PM - BK</button>
