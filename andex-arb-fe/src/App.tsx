@@ -5,6 +5,7 @@ import { Landing } from './pages/Landing'
 // import { Dashboard } from './pages/Dashboard'
 import { Scanner } from './pages/Scanner'
 import { Calculator } from './pages/Calculator'
+import { Pricing } from './pages/Pricing'
 import './App.css'
 
 const queryClient = new QueryClient()
@@ -34,6 +35,7 @@ function App() {
           <Route path="/dashboard" element={<Navigate to="/scanner" replace />} />
           <Route path="/scanner" element={<Scanner />} />
           <Route path="/calculator" element={<Calculator />} />
+          <Route path="/pricing" element={<Pricing />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

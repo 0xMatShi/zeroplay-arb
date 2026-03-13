@@ -2,6 +2,7 @@
 .env
 andex-arb-be/.env
 andex-arb-fe/.env
+.claude/
 
 # Dependencies
 node_modules/

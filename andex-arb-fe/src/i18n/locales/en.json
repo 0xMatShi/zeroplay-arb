@@ -283,6 +283,44 @@
     "walletNotConnected": "Wallet not connected",
     "failedSignIn": "Failed to sign in"
   },
+  "pricingPage": {
+    "title": "Plans & Pricing",
+    "subtitle": "Choose the plan that fits your trading strategy",
+    "getAccess": "Get Access",
+    "mostPopular": "Most Popular",
+    "tab": { "week": "1 week", "month": "1 month", "3month": "3 months" },
+    "instant": "instant update interval",
+    "sections": {
+      "oddsScanner": {
+        "name": "Odds Scanner",
+        "desc": "Real-time arbitrage opportunity detection between prediction markets and bookmaker platforms. Scans bookmaker lines and compares odds. Instant market data updates and arbitrage recalculation.",
+        "pmBookmakers": { "name": "PredictionMarkets <> Bookmakers" },
+        "marketMatching": { "name": "Market Matching", "expand": "The system automatically matches identical events between platforms. After matching, bookmaker lines are compared to identify odds discrepancies." },
+        "marketsBetTypes": { "name": "Markets & Bet Types", "expand": "Allows you to select match categories, event type (Live or Pre-Match) and bet types. The service scans events from multiple sports categories and finds opportunities across various markets: Match Winner, Handicap, Total, etc." },
+        "positionCalculator": { "name": "Position Calculator", "expand": "Calculates the optimal stake distribution for the found spread. Shows maximum profit taking into account available liquidity on each platform and selected odds." },
+        "autoBetSetup": { "name": "AutoBetSetup", "expand": "A pop-up tool for quick entry on a found spread. Automatically calculates bet amounts for your specified deposit and shows the required odds on each platform. Helps you enter a trade even if lines start moving." },
+        "liquidityFilter": { "name": "Liquidity Filter", "expand": "Allows you to set a minimum liquidity threshold for displaying opportunities." },
+        "profitRoiFilter": { "name": "Profit & ROI Filter", "expand": "Allows you to set minimum profit and yield percentage for displaying opportunities." },
+        "arbAlerts": { "name": "Arbitrage Alerts", "expand": "Receive notifications when new opportunities appear. The system monitors matches and notifies you when it detects profitable spreads between platforms." },
+        "cancelProtection": { "name": "Cancel Protection (<50c)", "expand": "Displays only positions priced below 50c on Polymarket. If an event is cancelled, the market settles at 50c, so entering at this price avoids a loss or yields a profit." }
+      },
+      "arbitrage": {
+        "name": "Arbitrage",
+        "desc": "Real-time arbitrage opportunity detection between prediction markets. Scans markets and compares contract prices. Instant market data updates and arbitrage recalculation.",
+        "pmPm": { "name": "PredictionMarkets <> PredictionMarkets", "expand": "The service finds arbitrage opportunities between all supported Prediction Markets. Each platform is matched with others, allowing arbitrage opportunities to be found between any combination of markets." },
+        "arbDetection": { "name": "Arbitrage Detection", "expand": "An AI-powered event matching system that compares markets across platforms. Identifies price discrepancies and helps find spreads." },
+        "arbCalculator": { "name": "Arbitrage Calculator", "expand": "Calculates the optimal position distribution for the found opportunity between platforms. Shows potential profit accounting for fees and slippage." },
+        "telegramAlerts": { "name": "Telegram Alerts Bot", "expand": "Receive real-time Telegram notifications when new arbitrage opportunities are detected. Notifications are fully customisable to your parameters and filters." }
+      },
+      "support": {
+        "name": "Support",
+        "desc": "Access to a private Telegram group for support and discussion. Guides, tips, and additional materials are published in the group.",
+        "community": { "name": "Community", "expand": "Access to the closed user community. We run live streams and trade together." },
+        "help": { "name": "Help", "expand": "Get answers and assistance with the service directly in the group with round-the-clock support." },
+        "knowledge": { "name": "Knowledge", "expand": "Access to guides, instructions, and useful materials. Strategies, tips, and additional features are published in the group." }
+      }
+    }
+  },
   "appFooter": {
     "allRights": "All rights reserved.",
     "support": "SUPPORT",
