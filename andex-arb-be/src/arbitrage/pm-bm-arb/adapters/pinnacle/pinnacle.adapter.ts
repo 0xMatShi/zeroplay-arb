@@ -178,12 +178,13 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    this.logger.log('Pinnacle: launching headless Chrome for login...');
+    const chromePath = process.env.CHROME_PATH ?? DEFAULT_CHROME_PATH;
+    this.logger.log(`Pinnacle: launching headless Chrome (${chromePath})...`);
     let browser: Browser | null = null;
 
     try {
       browser = await puppeteer.launch({
-        executablePath: CHROME_PATH,
+        executablePath: chromePath,
         headless: true,
         args: [
           '--no-sandbox',
