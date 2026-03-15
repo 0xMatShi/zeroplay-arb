@@ -37,22 +37,6 @@ export class SportsArbScanner {
       }
     }
 
-    if (opportunities.length > 0) {
-      this.logger.log(
-        `SportsArbScanner: ${opportunities.length} opportunities found`,
-      );
-      for (const opp of opportunities) {
-        const legsStr = opp.legs
-          .map((l) => `${l.platform}:${l.outcomeName}@${(l.probability * 100).toFixed(1)}¢`)
-          .join(' + ');
-        this.logger.log(
-          `  ARB ${opp.sportKey.toUpperCase()} [${opp.marketType}] "${opp.eventName}": ` +
-          `profit=${opp.profitPercent.toFixed(2)}% totalCost=${(opp.totalCost * 100).toFixed(1)}% ` +
-          `maxInvest=$${opp.maxInvestment.toFixed(0)} | ${legsStr}`,
-        );
-      }
-    }
-
     return opportunities;
   }
 

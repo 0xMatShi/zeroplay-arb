@@ -126,6 +126,9 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.pinnacleAdapter.clearCache();
     this.dexAdapter.clearCache(); // also triggers WS reconnect → full rediscovery
 
+    // Re-login before re-fetch to get fresh session cookies
+    await this.pinnacleAdapter.login();
+
     // Trigger Pinnacle re-fetch (will fire onAllMarketsReady when done)
     this.pinnacleAdapter.resetPhaseState();
   }
@@ -179,17 +182,6 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       this.logger.log(
         `Sports match cycle: ${this.currentMatches.length} pairs (${liveCount} live), ${totalMarkets} matched markets`,
       );
-
-      // Log Pinnacle odds for all matched events
-      for (const m of this.currentMatches.filter((m) => m.bookmakerPlatform === 'pinnacle')) {
-        for (const mp of m.matchedMarkets) {
-          const pin = mp.dexMarket.outcomes.map((o) => `${o.name}=${o.price}`).join(' | ');
-          const pm = mp.pmMarket.outcomePrices
-            .map((p, i) => `${mp.pmMarket.outcomeNames[i]}=${(p * 100).toFixed(1)}¢`)
-            .join(' | ');
-          this.logger.log(`[Pinnacle] ${m.dexEvent.name}: Pin[${pin}] PM[${pm}]`);
-        }
-      }
 
       // Collect PM token IDs and bookmaker market IDs for ALL matched market types
       // (moneyline, totals, handicap, map N — everything the matcher found)
@@ -252,11 +244,9 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
 
   private runScanNow(): void {
     if (this.currentMatches.length === 0) return;
-    this.logger.debug(`[SCAN] running, matches=${this.currentMatches.length}`);
 
     try {
       const scanned = this.scanner.scan(this.currentMatches);
-      this.logger.debug(`[SCAN] result: ${scanned.length} opportunities`);
       const matchMap = new Map(this.currentMatches.map((m) => [m.id, m]));
 
       const now = Date.now();
@@ -271,13 +261,11 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
 
         if (this.gateway) {
           if (!prevById.has(opp.id)) {
-            this.logger.debug(`[SCAN] emitNew: ${opp.id} profit=${opp.profitPercent.toFixed(2)}%`);
             this.gateway.emitNew(opp, matchMap);
           } else {
             const prev = prevById.get(opp.id)!;
             const delta = Math.abs(prev.profitPercent - opp.profitPercent);
             if (delta > 0.01) {
-              this.logger.debug(`[SCAN] emitUpdated: ${opp.id}`);
               this.gateway.emitUpdated(opp, matchMap);
             }
           }

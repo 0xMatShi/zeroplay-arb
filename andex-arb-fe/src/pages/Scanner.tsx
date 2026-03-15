@@ -162,7 +162,7 @@ function OpportunityCard({
               <span className="leg-outcome-name">{leg.outcomeName}</span>
             </div>
             <div className="leg-price">
-              ${(obLeg ? obLeg.effectivePrice : leg.price).toFixed(2)}
+              {(() => { const p = obLeg ? obLeg.effectivePrice : leg.price; return p < 1 ? `${Math.round(p * 100)}¢` : `$${p.toFixed(2)}`; })()}
               {legInvestment > 0 && <span className="leg-investment"> | ${legInvestment.toFixed(2)}</span>}
             </div>
             {leg.url && (

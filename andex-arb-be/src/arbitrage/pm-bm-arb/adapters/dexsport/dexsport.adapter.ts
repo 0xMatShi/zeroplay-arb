@@ -516,7 +516,6 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
         // All outcomes frozen — betting closed, remove market from public event
         if (pubMarket) {
           pub.markets = pub.markets.filter((m) => m.marketId !== marketId);
-          this.logger.log(`[DEX] Market "${marketName}" for "${pub.name}" frozen/closed, removed`);
         }
       } else if (pubMarket) {
         if (data.name) pubMarket.name = data.name;
@@ -527,11 +526,6 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
 
       pub.updatedAt = Date.now();
 
-      if (pubMarket && !allFrozen && this.trackedMarketIds.has(marketId)) {
-        this.logger.debug(
-          `[DEX PRICE] ${pub.name} / ${pubMarket.name}: ${pubMarket.outcomes.map((o) => `${o.name}=${o.price}`).join(', ')}`,
-        );
-      }
       this.onPriceUpdate?.();
     }
 
@@ -540,9 +534,6 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
       const marketName = data.name ?? existingMarket?.name ?? '';
       if (this.isMatchWinnerMarket(marketName)) {
         this.eventMatchWinnerFound.add(eventId);
-        this.logger.debug(
-          `DexSport Phase 1: Match Winner found for event ${eventId}: "${marketName}"`,
-        );
         this.checkPhase1Complete();
       }
     }

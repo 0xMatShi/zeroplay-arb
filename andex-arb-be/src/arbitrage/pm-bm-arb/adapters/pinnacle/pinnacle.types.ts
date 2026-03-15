@@ -49,7 +49,8 @@ export interface PinnacleEvent {
   id: number;
   parentId: number;
   time: number; // Unix ms
-  participants: PinnacleParticipant[];
+  /** Present in FULL_ODDS; may be absent in UPDATE_ODDS partial events */
+  participants?: PinnacleParticipant[];
   moreBet: number;
   /** Key = period number (0=full match, 3=map3, 4=map4, ...) */
   periods: Record<string, PinnaclePeriod>;
@@ -58,7 +59,14 @@ export interface PinnacleEvent {
   awayTeamType: number;
   parlayRestriction: number;
   rotNum: string;
-  resultingUnit: string;
+  /**
+   * Betting unit for this event variant.
+   * Tennis has two events per match: "Sets" (moneyline = match winner) and "Games" (no moneyline).
+   * We strip "(Sets)"/"(Games)" etc. from participant names when building the event name.
+   */
+  resultingUnit?: string;
+  /** "Live Now" | "Pre Match" etc. */
+  runningState?: string;
   hasLiveStream: boolean;
   hasScoreboard: boolean;
 }

@@ -194,7 +194,7 @@ export function Landing() {
                   </h3>
                 </div>
                 <div className="opp-header-right">
-                  <span className="opp-profit">+4.82% | +$5.44</span>
+                  <span className="opp-profit">+4.82% | +$54.40</span>
                 </div>
               </div>
               <div className="opp-legs">
@@ -204,7 +204,7 @@ export function Landing() {
                     <span className="leg-outcome-label">Buy:</span>
                     <span className="leg-outcome-name">No</span>
                   </div>
-                  <div className="leg-price">$0.67<span className="leg-investment"> | $79.30</span></div>
+                  <div className="leg-price">67¢<span className="leg-investment"> | $793.00</span></div>
                   <span className="leg-open-link">OPEN</span>
                 </div>
                 <div className="arb-leg">
@@ -213,7 +213,7 @@ export function Landing() {
                     <span className="leg-outcome-label">Buy:</span>
                     <span className="leg-outcome-name">YES</span>
                   </div>
-                  <div className="leg-price">$0.28<span className="leg-investment"> | $33.61</span></div>
+                  <div className="leg-price">28¢<span className="leg-investment"> | $336.10</span></div>
                   <span className="leg-open-link">OPEN</span>
                 </div>
               </div>

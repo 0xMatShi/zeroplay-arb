@@ -411,7 +411,6 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    this.logger.log(`PolymarketSports: REST books fetched for ${updated}/${tokenIds.length} tokens`);
   }
 
   private safeParse<T>(value: string | undefined, fallback: T): T {

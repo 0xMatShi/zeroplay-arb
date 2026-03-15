@@ -161,7 +161,7 @@ function getSections(t: TFunc): Section[] {
           id: 'telegram-alerts',
           name: s('arbitrage.telegramAlerts.name'),
           expandContent: <p>{s('arbitrage.telegramAlerts.expand')}</p>,
-          week: 'check', base: 'check', pro: 'check',
+          week: 'cross', base: 'cross', pro: 'check',
         },
       ],
     },
