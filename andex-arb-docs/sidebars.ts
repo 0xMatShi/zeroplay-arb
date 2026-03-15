@@ -14,16 +14,38 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
  */
 const sidebars: SidebarsConfig = {
   tutorialSidebar: [
-    'intro',
     {
       type: 'category',
-      label: 'Basics',
-      items: ['basics/what-is-zeroplay', 'basics/how-to-use'],
+      label: '1. Старт',
+      items: [
+        {type: 'doc', id: 'start/s-chego-nachat', label: '1.1. С чего начать'},
+        {type: 'doc', id: 'start/bazovye-pravila', label: '1.2. Базовые правила'},
+      ],
     },
     {
       type: 'category',
-      label: 'Legal',
-      items: ['legal/overview', 'legal/disclaimer', 'legal/terms', 'legal/privacy'],
+      label: '2. PM <> BK',
+      items: [
+        {type: 'doc', id: 'pm-bk/interfeis', label: '2.1. Интерфейс'},
+        {type: 'doc', id: 'pm-bk/kak-chitat-kartochku', label: '2.2. Как читать карточку'},
+        {type: 'doc', id: 'pm-bk/filtry', label: '2.3. Фильтры'},
+        {type: 'doc', id: 'pm-bk/kak-ispolzovat', label: '2.4. Как использовать'},
+      ],
+    },
+    {
+      type: 'category',
+      label: '3. PM <> PM',
+      items: [
+        {type: 'doc', id: 'pm-pm/interfeis', label: '3.1. Интерфейс'},
+        {type: 'doc', id: 'pm-pm/kak-chitat-kartochku', label: '3.2. Как читать карточку'},
+        {type: 'doc', id: 'pm-pm/filtry', label: '3.3. Фильтры'},
+        {type: 'doc', id: 'pm-pm/kak-ispolzovat', label: '3.4. Как использовать'},
+      ],
+    },
+    {
+      type: 'category',
+      label: '4. Площадки',
+      items: [{type: 'doc', id: 'ploshchadki/index', label: '4.1. Площадки'}],
     },
   ],
 };

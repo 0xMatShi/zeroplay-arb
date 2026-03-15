@@ -5,8 +5,8 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'ZeroPlay',
-  tagline: 'Legal and basic product documentation',
+  title: 'SubLine',
+  tagline: 'Documentation',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -15,15 +15,15 @@ const config: Config = {
   },
 
   // Set the production url of your site here
-  url: 'https://docs.zeroplay.space',
+  url: 'https://docs.subline.space',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/',
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'zeroplay',
-  projectName: 'zeroplay-docs',
+  organizationName: 'subline',
+  projectName: 'subline-docs',
 
   onBrokenLinks: 'throw',
 
@@ -79,10 +79,10 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'ZeroPlay',
+      title: 'SubLine',
       logo: {
-        alt: 'ZeroPlay logo',
-        src: 'img/logo.svg',
+        alt: 'SubLine logo',
+        src: 'img/logo.jpeg',
       },
       items: [
         {
@@ -92,13 +92,23 @@ const config: Config = {
           label: 'Документация',
         },
         {
-          to: '/docs/basics/what-is-zeroplay',
-          label: 'Basics',
+          to: '/docs/start/s-chego-nachat',
+          label: 'Старт',
           position: 'right',
         },
         {
-          to: '/docs/legal/overview',
-          label: 'Legal',
+          to: '/docs/pm-bk/interfeis',
+          label: 'PM <> BK',
+          position: 'right',
+        },
+        {
+          to: '/docs/pm-pm/interfeis',
+          label: 'PM <> PM',
+          position: 'right',
+        },
+        {
+          to: '/docs/ploshchadki',
+          label: 'Площадки',
           position: 'right',
         },
         {
@@ -114,16 +124,20 @@ const config: Config = {
           title: 'Docs',
           items: [
             {
-              label: 'Overview',
-              to: '/docs/intro',
+              label: 'Старт',
+              to: '/docs/start/s-chego-nachat',
             },
             {
-              label: 'Basics',
-              to: '/docs/basics/what-is-zeroplay',
+              label: 'PM <> BK',
+              to: '/docs/pm-bk/interfeis',
             },
             {
-              label: 'Legal',
-              to: '/docs/legal/overview',
+              label: 'PM <> PM',
+              to: '/docs/pm-pm/interfeis',
+            },
+            {
+              label: 'Площадки',
+              to: '/docs/ploshchadki',
             },
           ],
         },
@@ -132,16 +146,16 @@ const config: Config = {
           items: [
             {
               label: 'Application',
-              href: 'https://zeroplay.space/',
+              href: 'https://subline.space/',
             },
             {
               label: 'Docs',
-              href: 'https://docs.zeroplay.space/',
+              href: 'https://docs.subline.space/',
             },
           ],
         },
       ],
-      copyright: `Copyright ${new Date().getFullYear()} ZeroPlay`,
+      copyright: `Copyright ${new Date().getFullYear()} SubLine`,
     },
     prism: {
       theme: prismThemes.github,

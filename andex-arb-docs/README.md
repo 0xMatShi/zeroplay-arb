@@ -1,6 +1,6 @@
-# ZeroPlay docs
+# SubLine docs
 
-Документационный подпроект на [Docusaurus](https://docusaurus.io/) для `ZeroPlay`.
+Документационный подпроект на [Docusaurus](https://docusaurus.io/) для `SubLine`.
 
 ## Установка
 
@@ -18,8 +18,8 @@ npm start
 
 ## Целевые домены
 
-- Приложение: `https://zeroplay.space`
-- Документация: `https://docs.zeroplay.space`
+- Приложение: `https://subline.space`
+- Документация: `https://docs.subline.space`
 
 ## Сборка статики
 
