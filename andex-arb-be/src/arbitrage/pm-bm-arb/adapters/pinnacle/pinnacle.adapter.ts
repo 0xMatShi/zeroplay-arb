@@ -397,7 +397,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
 
       for (const league of odds.update ?? []) {
         for (const event of league.events ?? []) {
-          const changed = this.mergeEvent(event, league);
+          const changed = this.mergeEvent(event, league, true);
           this.eventLastSeen.set(String(event.id), now);
           if (changed) changedEvents++;
         }
@@ -416,7 +416,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
 
   // ── Merge ─────────────────────────────────────────────────────
 
-  private mergeEvent(event: PinnacleEvent, league: PinnacleLeague): boolean {
+  private mergeEvent(event: PinnacleEvent, league: PinnacleLeague, isPartial = false): boolean {
     const eventId = String(event.id);
     const sportKey = this.resolveSportKey(league);
     if (!sportKey) return false;
@@ -479,12 +479,14 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     for (const cached of existing.markets) {
       const updated = newById.get(cached.marketId);
       if (updated) {
-        const changed =
-          cached.outcomes.length !== updated.outcomes.length ||
-          cached.outcomes.some((o, i) => o.price !== updated.outcomes[i]?.price);
-        if (changed) {
-          cached.outcomes = updated.outcomes;
-          anyPriceChange = true;
+        // Update outcomes individually — only replace prices that are valid in the new data.
+        // This handles partial UPDATE_ODDS where only one price (e.g. awayPrice) is sent.
+        for (let i = 0; i < cached.outcomes.length && i < updated.outcomes.length; i++) {
+          const newPrice = updated.outcomes[i].price;
+          if (isFinite(newPrice) && newPrice > 0 && cached.outcomes[i].price !== newPrice) {
+            cached.outcomes[i] = { ...cached.outcomes[i], price: newPrice };
+            anyPriceChange = true;
+          }
         }
         newById.delete(cached.marketId);
       }
@@ -496,12 +498,15 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       anyPriceChange = true;
     }
 
-    // Remove markets that disappeared
-    const updatedIds = new Set(markets.map((m) => m.marketId));
-    for (let i = existing.markets.length - 1; i >= 0; i--) {
-      if (!updatedIds.has(existing.markets[i].marketId)) {
-        existing.markets.splice(i, 1);
-        anyPriceChange = true;
+    // Remove markets that disappeared — only for FULL_ODDS (complete snapshot).
+    // UPDATE_ODDS only includes changed markets; absent markets are unchanged, not removed.
+    if (!isPartial) {
+      const updatedIds = new Set(markets.map((m) => m.marketId));
+      for (let i = existing.markets.length - 1; i >= 0; i--) {
+        if (!updatedIds.has(existing.markets[i].marketId)) {
+          existing.markets.splice(i, 1);
+          anyPriceChange = true;
+        }
       }
     }
 
@@ -546,11 +551,14 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     // ── Money line ─────────────────────────────────────────────
     const ml = data.moneyLine;
     if (ml && !ml.unavailable && !ml.offline) {
-      // UPDATE_ODDS can send a line-change notification (new lineId) without prices.
-      // parseFloat(undefined) = NaN — guard against this to avoid corrupting cached prices.
+      // UPDATE_ODDS can send partial prices (e.g. only awayPrice, homePrice absent → NaN).
+      // Allow NaN prices through — mergeEvent will only update outcomes with valid new prices.
+      // Skip only if BOTH prices are missing (lineId-only notification).
       const homePrice = parseFloat(ml.homePrice);
       const awayPrice = parseFloat(ml.awayPrice);
-      if (!isFinite(homePrice) || homePrice <= 0 || !isFinite(awayPrice) || awayPrice <= 0) return;
+      const homeValid = isFinite(homePrice) && homePrice > 0;
+      const awayValid = isFinite(awayPrice) && awayPrice > 0;
+      if (!homeValid && !awayValid) return;
 
       const outcomes: DexOutcome[] = [
         { name: home, price: homePrice },
