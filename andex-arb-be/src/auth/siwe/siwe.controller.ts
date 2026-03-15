@@ -1,5 +1,6 @@
-import { Controller, Post, Body, Get, UseGuards, Headers, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Headers, Req, UnauthorizedException, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import type { Request } from 'express';
 import { SiweService } from './siwe.service';
 import { RequestSiweDto, RequestSiweResponseDto } from './dto/request-siwe.dto';
 import { VerifySignatureDto, VerifySignatureResponseDto } from './dto/verify-signature.dto';
@@ -56,6 +57,32 @@ export class SiweController {
     if (!result) throw new UnauthorizedException('Invalid API key');
 
     return { sessionToken: result.sessionToken };
+  }
+
+  @Get('check')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Verify auth from cookies (used by Nginx auth_request for docs)' })
+  @ApiResponse({ status: 200, description: 'Authenticated' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async checkAuth(@Req() req: Request): Promise<void> {
+    const apiKey =
+      (req.cookies as Record<string, string>)?.['auth_api_key'] ||
+      (req.headers.authorization?.startsWith('Bearer ')
+        ? req.headers.authorization.substring(7)
+        : req.headers.authorization);
+
+    const sessionToken =
+      (req.cookies as Record<string, string>)?.['auth_session_token'] ||
+      (req.headers['x-session-token'] as string | undefined);
+
+    if (!apiKey || !sessionToken) {
+      throw new UnauthorizedException();
+    }
+
+    const user = await this.usersService.findByApiKeyAndSession(apiKey, sessionToken);
+    if (!user) {
+      throw new UnauthorizedException();
+    }
   }
 
   @Get('whoami')

@@ -27,6 +27,13 @@ const config: Config = {
 
   onBrokenLinks: 'throw',
 
+  customFields: {
+    // URL основного сайта — куда редиректить незалогиненных
+    mainSiteUrl: process.env.MAIN_SITE_URL || 'http://localhost:5173',
+    // URL бэкенда — для верификации токена
+    backendUrl: process.env.BACKEND_URL || 'http://localhost:3000',
+  },
+
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
   // may want to replace "en" with "zh-Hans".

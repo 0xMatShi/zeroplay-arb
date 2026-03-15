@@ -1,3 +1,4 @@
+import { clearAuthCookies } from '../utils/authCookies'
 import type {
   VersionDto,
   WhoamiResponse,
@@ -30,6 +31,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
     if (hadSession) {
       localStorage.removeItem('apiKey')
       localStorage.removeItem('sessionToken')
+      clearAuthCookies()
       window.dispatchEvent(new CustomEvent('auth:unauthorized'))
     }
     throw new ApiError(body.message ?? response.statusText, response.status)

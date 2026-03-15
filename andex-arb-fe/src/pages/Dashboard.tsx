@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { useWhoami, useActiveSubscription } from '../api'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
+import { clearAuthCookies } from '../utils/authCookies'
 
 export function Dashboard() {
   const { t } = useTranslation()
@@ -78,6 +79,7 @@ export function Dashboard() {
               <button className="logout-button" onClick={() => {
                 localStorage.removeItem('apiKey')
                 localStorage.removeItem('sessionToken')
+                clearAuthCookies()
                 queryClient.clear()
                 navigate('/')
               }}>

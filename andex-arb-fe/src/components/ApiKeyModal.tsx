@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys, authApi } from '../api'
+import { setAuthCookies } from '../utils/authCookies'
 
 interface ApiKeyModalProps {
   isOpen: boolean
@@ -29,6 +30,7 @@ export function ApiKeyModal({ isOpen, onClose, onSuccess }: ApiKeyModalProps) {
       const { sessionToken } = await authApi.createSession(trimmed)
       localStorage.setItem('apiKey', trimmed)
       localStorage.setItem('sessionToken', sessionToken)
+      setAuthCookies(trimmed, sessionToken)
       queryClient.invalidateQueries({ queryKey: queryKeys.whoami })
       setApiKey('')
       onSuccess()
