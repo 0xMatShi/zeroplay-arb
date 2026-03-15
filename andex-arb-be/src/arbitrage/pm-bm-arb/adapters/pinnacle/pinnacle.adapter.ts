@@ -44,14 +44,8 @@ const ESPORT_GAME_CODE_TO_SPORT_KEY: Record<string, string> = {
 /** All sport IDs we connect to */
 const ALL_SPORT_IDS = [...REGULAR_SPORTS.map((s) => s.sportId), ESPORTS_SPORT_ID];
 
-/** WS destinations — one for live events, one for pre-match */
-const DESTINATIONS = [
-  { dest: 'LIVE_EURO_ODDS',     isLive: true  },
-  { dest: 'MATCHUPS_EURO_ODDS', isLive: false },
-];
-
-/** Total FULL_ODDS messages expected before declaring ready */
-const EXPECTED_FULL_ODDS = ALL_SPORT_IDS.length * DESTINATIONS.length;
+/** Total FULL_ODDS messages expected before declaring ready (2 per sport) */
+const EXPECTED_FULL_ODDS = ALL_SPORT_IDS.length * 2;
 
 const WS_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
@@ -291,22 +285,24 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
 
     ws.on('open', () => {
       this.logger.log(`Pinnacle: [${sportLabel}] WS open — subscribing`);
-      for (const { dest, isLive } of DESTINATIONS) {
+      const sid = String(sportId);
+      if (sportId === ESPORTS_SPORT_ID) {
+        // Esports: HLE (highlights/pre-match) + LIVE, extended body
         ws.send(JSON.stringify({
-          type: 'SUBSCRIBE',
-          destination: dest,
-          body: {
-            dpJCA: this.dpJCA,
-            sportId:   String(sportId),
-            isHlE:     false,
-            isLive,
-            oddsType:  2,
-            version:   0,
-            eventType: 0,
-            locale:    'en_US',
-            periodNum: '0,8,39,3,4,5,6,7',
-          },
+          type: 'SUBSCRIBE', destination: 'HLE_EURO_ODDS',
+          body: { dpJCA: this.dpJCA, sportId: sid, isHlE: true, isLive: false, isHomePage: true,
+                  oddsType: 2, version: 0, eventType: 0, locale: 'en_US', periodNum: '0,8,39,3,4,5,6,7' },
         }));
+        ws.send(JSON.stringify({
+          type: 'SUBSCRIBE', destination: 'LIVE_EURO_ODDS',
+          body: { dpJCA: this.dpJCA, sportId: sid, isHlE: false, isLive: true,
+                  oddsType: 2, version: 0, eventType: 0, locale: 'en_US', periodNum: '0,8,39,3,4,5,6,7' },
+        }));
+      } else {
+        // Regular sports: MATCHUPS (pre-match) + LIVE, simple body
+        const body = { dpJCA: this.dpJCA, sportId: sid, oddsType: 2, version: 0, periodNum: 0, locale: 'en_US' };
+        ws.send(JSON.stringify({ type: 'SUBSCRIBE', destination: 'MATCHUPS_EURO_ODDS', body }));
+        ws.send(JSON.stringify({ type: 'SUBSCRIBE', destination: 'LIVE_EURO_ODDS', body }));
       }
     });
 
