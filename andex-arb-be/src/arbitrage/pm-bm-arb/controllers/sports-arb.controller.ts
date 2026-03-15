@@ -21,7 +21,7 @@ export class SportsArbController {
     const PINNACLE_SPORT_PATH: Record<string, string> = {
       basketball: 'basketball',
       tennis:     'tennis',
-      hockey:     'ice-hockey',
+      hockey:     'hockey',
       baseball:   'baseball',
       csgo:       'esports/games/cs2',
       dota2:      'esports/games/dota-2',
@@ -41,14 +41,11 @@ export class SportsArbController {
           const sportPath = PINNACLE_SPORT_PATH[dexSportKey];
           if (sportPath && match.dexEvent.tournamentName && match.dexEvent.name) {
             let leagueSlug = match.dexEvent.tournamentName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-            if (sportPath.startsWith('esports/games/')) {
-              const gameSlug = sportPath.split('/').pop() ?? '';
-              if (leagueSlug.startsWith(gameSlug + '-')) leagueSlug = leagueSlug.slice(gameSlug.length + 1);
-            }
+
             const matchSlug = match.dexEvent.name.toLowerCase().replace(/\s+/g, '-');
-            bookmakerUrl = `https://www.pinnacle888.com/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${match.dexEvent.eventId}#all`;
+            bookmakerUrl = `https://www.gentleflame47.xyz/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${match.dexEvent.eventId}#all`;
           } else {
-            bookmakerUrl = `https://www.pinnacle888.com/en/standard/${PINNACLE_SPORT_PATH[dexSportKey] ?? 'sports'}`;
+            bookmakerUrl = `https://www.gentleflame47.xyz/en/standard/${PINNACLE_SPORT_PATH[dexSportKey] ?? 'sports'}`;
           }
         } else if (match) {
           const rawId = match.dexEvent.eventId.includes('.') ? match.dexEvent.eventId.split('.')[1] : match.dexEvent.eventId;

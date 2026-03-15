@@ -86,7 +86,7 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
   private static readonly PINNACLE_SPORT_PATH: Record<string, string> = {
     basketball: 'basketball',
     tennis:     'tennis',
-    hockey:     'ice-hockey',
+    hockey:     'hockey',
     baseball:   'baseball',
     csgo:       'esports/games/cs2',
     dota2:      'esports/games/dota-2',
@@ -99,23 +99,17 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
 
     if (bookmakerPlatform === 'pinnacle') {
       const sportPath = SportsArbGateway.PINNACLE_SPORT_PATH[dexEvent.sportKey];
-      if (!sportPath) return 'https://www.pinnacle888.com/en/standard/sports';
+      if (!sportPath) return 'https://www.gentleflame47.xyz/en/standard/sports';
 
       // URL format: /en/standard/{sportPath}/{league-slug}/{home-vs-away}/{eventId}#all
       let leagueSlug = (dexEvent.tournamentName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      // Esports tournament names from Pinnacle include the game name prefix (e.g. "Dota 2 PGL Wallachia"
-      // → "dota-2-pgl-wallachia"), but the URL only needs the league part ("pgl-wallachia").
-      if (sportPath.startsWith('esports/games/')) {
-        const gameSlug = sportPath.split('/').pop() ?? '';
-        if (leagueSlug.startsWith(gameSlug + '-')) leagueSlug = leagueSlug.slice(gameSlug.length + 1);
-      }
       // Team names must be lowercased in the URL
       const matchSlug = dexEvent.name.toLowerCase().replace(/\s+/g, '-');
       const eventId = dexEvent.eventId;
 
       return leagueSlug && matchSlug && eventId
-        ? `https://www.pinnacle888.com/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${eventId}#all`
-        : `https://www.pinnacle888.com/en/standard/${sportPath}`;
+        ? `https://www.gentleflame47.xyz/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${eventId}#all`
+        : `https://www.gentleflame47.xyz/en/standard/${sportPath}`;
     }
 
     // DexSport URL: https://dexsport.io/{esports|sports}/{sport}/{name-slug}-{id}/bets/
