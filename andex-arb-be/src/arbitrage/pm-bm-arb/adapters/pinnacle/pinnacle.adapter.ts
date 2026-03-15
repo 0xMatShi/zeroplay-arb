@@ -24,6 +24,8 @@ const KEEPALIVE_INTERVAL_MS = 30_000;
 const EVICT_INTERVAL_MS = 60_000;
 /** Delay before attempting WS reconnect after close */
 const WS_RECONNECT_DELAY_MS = 5_000;
+/** Delay between UNSUBSCRIBE and next SUBSCRIBE in the poll cycle */
+const POLL_INTERVAL_MS = 3_000;
 
 /** Sports to track: sportId → sportKey (for regular sports) */
 const REGULAR_SPORTS: Array<{ sportId: number; sportKey: string }> = [
@@ -81,10 +83,10 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
   /** Session cookie string — used for HTTP keep-alive calls */
   private sessionCookie: string | null = null;
 
-  /** sportId:destination keys that have received FULL_ODDS */
-  private fullOddsReceived: Set<string> = new Set();
+  /** sportId:destination keys that have received FULL_ODDS in the current poll cycle */
+  private cycleFullOddsReceived: Set<string> = new Set();
 
-  /** Prevents firing onAllMarketsReady more than once per init cycle */
+  /** Prevents firing onAllMarketsReady more than once (only first cycle) */
   private initialFetchFired = false;
 
   // ── Event cache state ─────────────────────────────────────────
@@ -104,6 +106,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
   // ── Timers ────────────────────────────────────────────────────
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private evictTimer: ReturnType<typeof setInterval> | null = null;
+  private nextPollTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
 
   constructor() {
@@ -146,8 +149,9 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     this.eventCache.clear();
     this.eventLastSeen.clear();
     this.leagueSportKey.clear();
-    this.fullOddsReceived.clear();
+    this.cycleFullOddsReceived.clear();
     this.initialFetchFired = false;
+    if (this.nextPollTimer) { clearTimeout(this.nextPollTimer); this.nextPollTimer = null; }
   }
 
   /** Close existing WS connections and reconnect (after login() to get fresh URL). */
@@ -285,25 +289,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
 
     ws.on('open', () => {
       this.logger.log(`Pinnacle: [${sportLabel}] WS open — subscribing`);
-      const sid = String(sportId);
-      if (sportId === ESPORTS_SPORT_ID) {
-        // Esports: HLE (highlights/pre-match) + LIVE, extended body
-        ws.send(JSON.stringify({
-          type: 'SUBSCRIBE', destination: 'HLE_EURO_ODDS',
-          body: { dpJCA: this.dpJCA, sportId: sid, isHlE: true, isLive: false, isHomePage: true,
-                  oddsType: 2, version: 0, eventType: 0, locale: 'en_US', periodNum: '0,8,39,3,4,5,6,7' },
-        }));
-        ws.send(JSON.stringify({
-          type: 'SUBSCRIBE', destination: 'LIVE_EURO_ODDS',
-          body: { dpJCA: this.dpJCA, sportId: sid, isHlE: false, isLive: true,
-                  oddsType: 2, version: 0, eventType: 0, locale: 'en_US', periodNum: '0,8,39,3,4,5,6,7' },
-        }));
-      } else {
-        // Regular sports: MATCHUPS (pre-match) + LIVE, simple body
-        const body = { dpJCA: this.dpJCA, sportId: sid, oddsType: 2, version: 0, periodNum: 0, locale: 'en_US' };
-        ws.send(JSON.stringify({ type: 'SUBSCRIBE', destination: 'MATCHUPS_EURO_ODDS', body }));
-        ws.send(JSON.stringify({ type: 'SUBSCRIBE', destination: 'LIVE_EURO_ODDS', body }));
-      }
+      this.sendSubscribesToWs(ws, sportId);
     });
 
     ws.on('message', (raw: any) => {
@@ -338,6 +324,55 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Send SUBSCRIBE messages for a given sportId to a specific WS instance. */
+  private sendSubscribesToWs(ws: any, sportId: number): void {
+    const sid = String(sportId);
+    if (sportId === ESPORTS_SPORT_ID) {
+      ws.send(JSON.stringify({
+        type: 'SUBSCRIBE', destination: 'HLE_EURO_ODDS',
+        body: { dpJCA: this.dpJCA, sportId: sid, isHlE: true, isLive: false, isHomePage: true,
+                oddsType: 2, version: 0, eventType: 0, locale: 'en_US', periodNum: '0,8,39,3,4,5,6,7' },
+      }));
+      ws.send(JSON.stringify({
+        type: 'SUBSCRIBE', destination: 'LIVE_EURO_ODDS',
+        body: { dpJCA: this.dpJCA, sportId: sid, isHlE: false, isLive: true,
+                oddsType: 2, version: 0, eventType: 0, locale: 'en_US', periodNum: '0,8,39,3,4,5,6,7' },
+      }));
+    } else {
+      const body = { dpJCA: this.dpJCA, sportId: sid, oddsType: 2, version: 0, periodNum: 0, locale: 'en_US' };
+      ws.send(JSON.stringify({ type: 'SUBSCRIBE', destination: 'MATCHUPS_EURO_ODDS', body }));
+      ws.send(JSON.stringify({ type: 'SUBSCRIBE', destination: 'LIVE_EURO_ODDS', body }));
+    }
+  }
+
+  /** Unsubscribe from all active WS connections. */
+  private sendUnsubscribeAll(): void {
+    for (const [sportId, ws] of this.wsConnections) {
+      if (ws.readyState !== 1 /* OPEN */) continue;
+      if (sportId === ESPORTS_SPORT_ID) {
+        ws.send(JSON.stringify({ type: 'UNSUBSCRIBE', destination: 'HLE_EURO_ODDS' }));
+        ws.send(JSON.stringify({ type: 'UNSUBSCRIBE', destination: 'LIVE_EURO_ODDS' }));
+      } else {
+        ws.send(JSON.stringify({ type: 'UNSUBSCRIBE', destination: 'MATCHUPS_EURO_ODDS' }));
+        ws.send(JSON.stringify({ type: 'UNSUBSCRIBE', destination: 'LIVE_EURO_ODDS' }));
+      }
+    }
+  }
+
+  /** Schedule the next subscribe cycle after POLL_INTERVAL_MS. */
+  private schedulePollCycle(): void {
+    if (this.nextPollTimer) { clearTimeout(this.nextPollTimer); this.nextPollTimer = null; }
+    this.nextPollTimer = setTimeout(() => {
+      this.nextPollTimer = null;
+      if (this.destroyed) return;
+      for (const [sportId, ws] of this.wsConnections) {
+        if (ws.readyState === 1 /* OPEN */) {
+          this.sendSubscribesToWs(ws, sportId);
+        }
+      }
+    }, POLL_INTERVAL_MS);
+  }
+
   // ── Message handling ──────────────────────────────────────────
 
   private handleMessage(msg: any, sportId: number): void {
@@ -353,35 +388,38 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       const odds = msg.odds;
       const key = `${odds.sportId}:${msg.destination}`;
 
-      let mergedEvents = 0;
-      for (const league of odds.leagues ?? []) {
-        this.cacheLeagueSportKey(league);
-        for (const event of league.events ?? []) {
-          const changes = this.mergeEvent(event, league);
-          this.eventLastSeen.set(String(event.id), Date.now());
-          if (changes.length) mergedEvents++;
+      if (!this.cycleFullOddsReceived.has(key)) {
+        this.cycleFullOddsReceived.add(key);
+        let changedEvents = 0;
+        let totalEvents = 0;
+        for (const league of odds.leagues ?? []) {
+          this.cacheLeagueSportKey(league);
+          for (const event of league.events ?? []) {
+            const changes = this.mergeEvent(event, league);
+            this.eventLastSeen.set(String(event.id), Date.now());
+            totalEvents++;
+            if (changes.length) changedEvents++;
+          }
         }
-      }
-
-      if (!this.fullOddsReceived.has(key)) {
-        this.fullOddsReceived.add(key);
-        const totalEvents = (odds.leagues ?? []).reduce(
-          (s: number, l: any) => s + (l.events?.length ?? 0), 0,
-        );
         this.logger.log(
           `[Pinnacle WS] FULL_ODDS ${msg.destination} sportId=${odds.sportId} ` +
-          `— ${totalEvents} events, ${mergedEvents} cached ` +
-          `(${this.fullOddsReceived.size}/${EXPECTED_FULL_ODDS})`,
+          `— ${totalEvents} events, ${changedEvents} changed ` +
+          `(${this.cycleFullOddsReceived.size}/${EXPECTED_FULL_ODDS})`,
         );
-      }
 
-      // Fire onAllMarketsReady once all FULL_ODDS have arrived
-      if (!this.initialFetchFired && this.fullOddsReceived.size >= EXPECTED_FULL_ODDS) {
-        this.initialFetchFired = true;
-        this.logger.log(`[Pinnacle WS] All FULL_ODDS received — ${this.eventCache.size} events in cache`);
-        this.onAllMarketsReady?.();
-      } else if (mergedEvents > 0 && this.initialFetchFired) {
-        this.onPriceUpdate?.();
+        // All FULL_ODDS for this cycle received — fire callback, unsubscribe, schedule next poll
+        if (this.cycleFullOddsReceived.size >= EXPECTED_FULL_ODDS) {
+          this.logger.log(`[Pinnacle WS] Cycle complete — ${this.eventCache.size} events in cache`);
+          if (!this.initialFetchFired) {
+            this.initialFetchFired = true;
+            this.onAllMarketsReady?.();
+          } else {
+            this.onPriceUpdate?.();
+          }
+          this.sendUnsubscribeAll();
+          this.cycleFullOddsReceived.clear();
+          this.schedulePollCycle();
+        }
       }
       return;
     }
@@ -672,6 +710,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
   private stopTimers(): void {
     if (this.keepAliveTimer) { clearInterval(this.keepAliveTimer); this.keepAliveTimer = null; }
     if (this.evictTimer) { clearInterval(this.evictTimer); this.evictTimer = null; }
+    if (this.nextPollTimer) { clearTimeout(this.nextPollTimer); this.nextPollTimer = null; }
   }
 
   private async sendKeepAlive(): Promise<void> {
