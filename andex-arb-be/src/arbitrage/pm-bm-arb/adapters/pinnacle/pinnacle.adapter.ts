@@ -331,7 +331,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private closeAll(): void {
+  closeAll(): void {
     for (const [sportId, ws] of this.wsConnections) {
       try { ws.terminate(); } catch {}
       this.wsConnections.delete(sportId);

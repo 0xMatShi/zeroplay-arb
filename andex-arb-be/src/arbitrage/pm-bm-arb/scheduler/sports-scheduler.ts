@@ -126,10 +126,14 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.pinnacleAdapter.clearCache();
     this.dexAdapter.clearCache(); // also triggers WS reconnect → full rediscovery
 
-    // Re-login before re-fetch to get fresh session cookies
+    // Close existing Pinnacle WS connections BEFORE login so they don't
+    // receive messages against a cleared cache during the 20-30s Chrome login window.
+    this.pinnacleAdapter.closeAll();
+
+    // Re-login to get fresh session cookies and WS URL
     await this.pinnacleAdapter.login();
 
-    // Trigger Pinnacle re-fetch (will fire onAllMarketsReady when done)
+    // Open new connections with fresh credentials (closeAll already called above)
     this.pinnacleAdapter.resetPhaseState();
   }
 
