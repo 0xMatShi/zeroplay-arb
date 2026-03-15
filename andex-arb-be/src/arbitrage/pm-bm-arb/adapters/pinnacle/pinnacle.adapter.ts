@@ -14,7 +14,7 @@ import {
 // ── Constants ────────────────────────────────────────────────
 
 const BASE_URL = 'https://www.pinnacle888.com';
-const CHROME_PATH = process.env.CHROME_PATH ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const DEFAULT_CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 /** Remove event from cache if not seen for this long */
 const EVENT_TTL_MS = 2 * 60_000;
