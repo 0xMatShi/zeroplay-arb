@@ -14,7 +14,7 @@ import {
 // ── Constants ────────────────────────────────────────────────
 
 const BASE_URL = 'https://www.pinnacle888.com';
-const DEFAULT_CHROME_PATH = '/usr/bin/chromium-browser';
+const DEFAULT_CHROME_PATH = '/usr/bin/google-chrome';
 
 /** Remove event from cache if not seen for this long */
 const EVENT_TTL_MS = 2 * 60_000;
