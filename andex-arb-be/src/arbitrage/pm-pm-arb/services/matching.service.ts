@@ -193,7 +193,6 @@ export class MatchingService {
 
     const platforms = new Set(allIndexedEvents.map((e) => e.platformSlug));
     if (platforms.size < 2) {
-      this.logger.debug('Events from fewer than 2 platforms, nothing to match');
       return 0;
     }
 

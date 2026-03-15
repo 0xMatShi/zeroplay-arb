@@ -62,7 +62,7 @@ export class PollScheduler implements OnModuleInit {
    */
   async runMatchCycle(): Promise<void> {
     if (this.isRunning) {
-      this.logger.debug('Match cycle already running, skipping');
+      return;
       return;
     }
 
@@ -77,7 +77,6 @@ export class PollScheduler implements OnModuleInit {
       let totalFetched = 0;
       for (const [slug, ids] of fetchResults) {
         totalFetched += ids.length;
-        this.logger.debug(`  ${slug}: ${ids.length} events`);
       }
 
       // Step 2: Match events across platforms (text similarity → CONFIRMED)

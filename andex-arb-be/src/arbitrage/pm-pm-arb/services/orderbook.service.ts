@@ -155,7 +155,6 @@ export class OrderBookService {
 
     // Check all legs have asks
     if (legOrderBooks.some((l) => l.orderBook.asks.length === 0)) {
-      this.logger.debug('One or more legs have no asks — cannot compute tiers');
       return emptyResult;
     }
 

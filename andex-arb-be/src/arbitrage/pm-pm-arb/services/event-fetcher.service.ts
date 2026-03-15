@@ -316,10 +316,6 @@ export class EventFetcherService {
       }
     }
 
-    if (updatedCount > 0) {
-      this.logger.debug(`Updated ${updatedCount} outcome prices via orderbooks`);
-    }
-
     return updatedCount;
   }
 

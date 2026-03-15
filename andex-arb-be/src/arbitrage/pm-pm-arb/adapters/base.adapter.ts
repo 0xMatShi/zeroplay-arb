@@ -30,9 +30,6 @@ export abstract class BaseAdapter implements ISourceAdapter {
     // Request/response logging
     this.http.interceptors.response.use(
       (response) => {
-        this.logger.debug(
-          `${response.config.method?.toUpperCase()} ${response.config.url} -> ${response.status}`,
-        );
         return response;
       },
       (error) => {

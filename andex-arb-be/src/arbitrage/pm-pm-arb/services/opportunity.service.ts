@@ -41,7 +41,6 @@ export class OpportunityService {
     const matches = await this.matchingService.getScannableMatches();
 
     if (matches.length === 0) {
-      this.logger.debug('No active matches to scan');
       return [];
     }
 
