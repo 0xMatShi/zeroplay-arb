@@ -29,9 +29,9 @@ const config: Config = {
 
   customFields: {
     // URL основного сайта — куда редиректить незалогиненных
-    mainSiteUrl: process.env.MAIN_SITE_URL || 'http://localhost:5173',
+    mainSiteUrl: process.env.NODE_ENV === 'production' ? 'https://subline.space' : 'http://localhost:5173',
     // URL бэкенда — для верификации токена
-    backendUrl: process.env.BACKEND_URL || 'http://localhost:3000',
+    backendUrl: process.env.NODE_ENV === 'production' ? 'https://api.subline.space' : 'http://localhost:3000',
   },
 
   // Even if you don't use internationalization, you can use this field to set
