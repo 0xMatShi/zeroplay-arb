@@ -357,9 +357,9 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       for (const league of odds.leagues ?? []) {
         this.cacheLeagueSportKey(league);
         for (const event of league.events ?? []) {
-          const changed = this.mergeEvent(event, league);
+          const changes = this.mergeEvent(event, league);
           this.eventLastSeen.set(String(event.id), Date.now());
-          if (changed) mergedEvents++;
+          if (changes.length) mergedEvents++;
         }
       }
 
@@ -388,21 +388,24 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
 
     if (msg.type === 'UPDATE_ODDS') {
       const odds = msg.odds;
-      let changedEvents = 0;
+      const changeLines: string[] = [];
       const now = Date.now();
 
       for (const league of odds.update ?? []) {
         for (const event of league.events ?? []) {
-          const changed = this.mergeEvent(event, league, true);
+          const changes = this.mergeEvent(event, league, true);
           this.eventLastSeen.set(String(event.id), now);
-          if (changed) changedEvents++;
+          if (changes.length) {
+            const name = this.eventCache.get(String(event.id))?.name ?? `event#${event.id}`;
+            for (const c of changes) changeLines.push(`  ${name}: ${c}`);
+          }
         }
       }
 
-      if (changedEvents > 0) {
+      if (changeLines.length) {
         this.logger.log(
-          `[Pinnacle WS] UPDATE_ODDS ${msg.destination} sportId=${odds.sportId} ` +
-          `— ${changedEvents} events changed`,
+          `[Pinnacle WS] UPDATE_ODDS ${msg.destination} sportId=${odds.sportId}\n` +
+          changeLines.join('\n'),
         );
         if (this.initialFetchFired) this.onPriceUpdate?.();
       }
@@ -412,10 +415,10 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
 
   // ── Merge ─────────────────────────────────────────────────────
 
-  private mergeEvent(event: PinnacleEvent, league: PinnacleLeague, isPartial = false): boolean {
+  private mergeEvent(event: PinnacleEvent, league: PinnacleLeague, isPartial = false): string[] {
     const eventId = String(event.id);
     const sportKey = this.resolveSportKey(league);
-    if (!sportKey) return false;
+    if (!sportKey) return [];
 
     const existing = this.eventCache.get(eventId);
 
@@ -441,7 +444,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
 
     // For a brand-new event we must have both names to produce correct outcome labels.
     // Without them we'd store '?' in the market — reject instead and wait for FULL_ODDS.
-    if (!existing && (!homeName || !awayName)) return false;
+    if (!existing && (!homeName || !awayName)) return [];
 
     const markets = this.buildMarkets(event, homeName, awayName);
 
@@ -450,7 +453,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     // brings a market back online, mergeEvent can find the event and reuse stored names.
     // Without this, UPDATE_ODDS can never create a new event (no participants in partial msgs).
     if (!existing) {
-      if (!homeName || !awayName) return false;
+      if (!homeName || !awayName) return [];
       this.eventCache.set(eventId, {
         eventId,
         name: `${homeName} vs ${awayName}`,
@@ -461,7 +464,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         markets,
         updatedAt: Date.now(),
       });
-      return markets.length > 0;
+      return markets.length > 0 ? [`new event, ${markets.length} markets`] : [];
     }
 
     // ── Update existing event ─────────────────────────────────────
@@ -469,7 +472,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     // because an UPDATE_ODDS that only contains offline:true markets will produce
     // markets=[] (addPeriodMarkets skips them), but we still need to evict from cache.
 
-    let anyPriceChange = false;
+    const changes: string[] = [];
 
     // For UPDATE_ODDS: evict markets that are now offline.
     // Offline markets are skipped by addPeriodMarkets so they won't appear in markets[],
@@ -479,15 +482,15 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       if (offlineIds.size > 0) {
         for (let i = existing.markets.length - 1; i >= 0; i--) {
           if (offlineIds.has(existing.markets[i].marketId)) {
+            changes.push(`[${existing.markets[i].name}] offline`);
             existing.markets.splice(i, 1);
-            anyPriceChange = true;
           }
         }
       }
     }
 
     // Nothing else to do if no new/updated market data arrived.
-    if (!markets.length) return anyPriceChange;
+    if (!markets.length) return changes;
 
     // Update scalar fields in-place
     if (homeName && awayName) existing.name = `${homeName} vs ${awayName}`;
@@ -508,8 +511,11 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         for (let i = 0; i < cached.outcomes.length && i < updated.outcomes.length; i++) {
           const newPrice = updated.outcomes[i].price;
           if (isFinite(newPrice) && newPrice > 0 && cached.outcomes[i].price !== newPrice) {
+            const arrow = newPrice > cached.outcomes[i].price ? '↑' : '↓';
+            changes.push(
+              `[${cached.name}] ${cached.outcomes[i].name}: ${cached.outcomes[i].price?.toFixed(3)} → ${newPrice.toFixed(3)} ${arrow}`,
+            );
             cached.outcomes[i] = { ...cached.outcomes[i], price: newPrice };
-            anyPriceChange = true;
           }
         }
         newById.delete(cached.marketId);
@@ -519,7 +525,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     // Add markets that came back online or are genuinely new.
     for (const newMarket of newById.values()) {
       existing.markets.push(newMarket);
-      anyPriceChange = true;
+      changes.push(`[${newMarket.name}] online`);
     }
 
     // Remove markets that disappeared — only for FULL_ODDS (complete snapshot).
@@ -529,12 +535,12 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       for (let i = existing.markets.length - 1; i >= 0; i--) {
         if (!updatedIds.has(existing.markets[i].marketId)) {
           existing.markets.splice(i, 1);
-          anyPriceChange = true;
+          changes.push('market removed');
         }
       }
     }
 
-    return anyPriceChange;
+    return changes;
   }
 
   // ── Offline market detection ──────────────────────────────────
