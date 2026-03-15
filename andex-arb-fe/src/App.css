@@ -6114,6 +6114,20 @@
   border-color: rgba(62, 214, 255, 0.5);
 }
 
+.profile-action-btn--logout {
+  width: 100%;
+  color: rgba(255, 100, 100, 0.8);
+  border-color: rgba(255, 100, 100, 0.2);
+  cursor: pointer;
+  font: inherit;
+}
+
+.profile-action-btn--logout:hover {
+  background: rgba(255, 100, 100, 0.1);
+  border-color: rgba(255, 100, 100, 0.4);
+  color: rgba(255, 100, 100, 1);
+}
+
 /* FAQ Section */
 .faq-section {
   padding: 100px 24px;

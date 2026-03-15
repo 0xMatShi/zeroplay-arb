@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
 import { useSportsArbSocket } from '../hooks/useSportsArbSocket'
 import { ApiError } from '../api/client'
+import { clearAuthCookies } from '../utils/authCookies'
 import { formatRelativeTime } from '../utils/time'
 import type { Opportunity, SportsOpportunity, SportsOpportunityLeg, NewOpportunityEvent, OrderBookAnalysisResponse } from '../api/types'
 
@@ -1342,6 +1343,18 @@ export function Scanner() {
             >
               {t('scanner.askQuestion') || 'Задать вопрос'}
             </a>
+            <button
+              className="profile-action-btn profile-action-btn--logout"
+              onClick={() => {
+                localStorage.removeItem('apiKey')
+                localStorage.removeItem('sessionToken')
+                clearAuthCookies()
+                queryClient.clear()
+                navigate('/')
+              }}
+            >
+              {t('scanner.logout') || 'Выйти'}
+            </button>
           </div>
         </div>
       </div>

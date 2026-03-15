@@ -235,6 +235,7 @@
     "renewSub": "Renew subscription",
     "learnGuide": "Start learning",
     "askQuestion": "Ask a question",
+    "logout": "Log out",
     "paused": "PAUSED",
     "noOpportunities": "NO ARBITRAGE OPPORTUNITIES FOUND",
     "emptyHint": "Waiting for the scanner to detect price discrepancies across platforms...",
