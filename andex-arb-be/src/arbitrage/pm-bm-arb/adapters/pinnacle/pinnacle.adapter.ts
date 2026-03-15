@@ -444,9 +444,13 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     if (!existing && (!homeName || !awayName)) return false;
 
     const markets = this.buildMarkets(event, homeName, awayName);
-    if (!markets.length) return false;
 
+    // Brand-new event: need participant names to create an entry.
+    // We cache even with empty markets (all offline) so that when UPDATE_ODDS later
+    // brings a market back online, mergeEvent can find the event and reuse stored names.
+    // Without this, UPDATE_ODDS can never create a new event (no participants in partial msgs).
     if (!existing) {
+      if (!homeName || !awayName) return false;
       this.eventCache.set(eventId, {
         eventId,
         name: `${homeName} vs ${awayName}`,
@@ -457,8 +461,33 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         markets,
         updatedAt: Date.now(),
       });
-      return true;
+      return markets.length > 0;
     }
+
+    // ── Update existing event ─────────────────────────────────────
+    // NOTE: we must handle offline eviction BEFORE the early-return on empty markets,
+    // because an UPDATE_ODDS that only contains offline:true markets will produce
+    // markets=[] (addPeriodMarkets skips them), but we still need to evict from cache.
+
+    let anyPriceChange = false;
+
+    // For UPDATE_ODDS: evict markets that are now offline.
+    // Offline markets are skipped by addPeriodMarkets so they won't appear in markets[],
+    // and partial mode doesn't do a full sweep — explicit removal is required.
+    if (isPartial) {
+      const offlineIds = this.collectOfflineMarketIds(event);
+      if (offlineIds.size > 0) {
+        for (let i = existing.markets.length - 1; i >= 0; i--) {
+          if (offlineIds.has(existing.markets[i].marketId)) {
+            existing.markets.splice(i, 1);
+            anyPriceChange = true;
+          }
+        }
+      }
+    }
+
+    // Nothing else to do if no new/updated market data arrived.
+    if (!markets.length) return anyPriceChange;
 
     // Update scalar fields in-place
     if (homeName && awayName) existing.name = `${homeName} vs ${awayName}`;
@@ -469,7 +498,6 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     // Update markets in-place so that references held by currentMatches stay valid.
     // Replacing existing.markets with a new array would leave matchedMarkets[].dexMarket
     // pointing at stale objects, freezing prices until the next full match cycle.
-    let anyPriceChange = false;
     const newById = new Map(markets.map((m) => [m.marketId, m]));
 
     for (const cached of existing.markets) {
@@ -488,7 +516,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // Add markets that are new
+    // Add markets that came back online or are genuinely new.
     for (const newMarket of newById.values()) {
       existing.markets.push(newMarket);
       anyPriceChange = true;
@@ -507,6 +535,23 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     }
 
     return anyPriceChange;
+  }
+
+  // ── Offline market detection ──────────────────────────────────
+
+  /**
+   * Returns market IDs from the event whose moneyLine is offline.
+   * Used by partial (UPDATE_ODDS) merge to explicitly evict suspended markets from cache.
+   */
+  private collectOfflineMarketIds(event: PinnacleEvent): Set<string> {
+    const ids = new Set<string>();
+    for (const [periodStr, period] of Object.entries(event.periods ?? {})) {
+      const periodNum = Number(periodStr);
+      if ((period as PinnaclePeriod).moneyLine?.offline) {
+        ids.add(`${event.id}_p${periodNum}_ml`);
+      }
+    }
+    return ids;
   }
 
   // ── Market building ───────────────────────────────────────────

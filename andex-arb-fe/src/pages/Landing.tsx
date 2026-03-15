@@ -30,6 +30,8 @@ export function Landing() {
   const { t } = useTranslation()
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [previewMode, setPreviewMode] = useState<'bk' | 'pm'>('bk')
+  const [howItWorksTab, setHowItWorksTab] = useState<'mechanism' | 'example'>('mechanism')
+  const [faqOpen, setFaqOpen] = useState<number | null>(null)
   const { data: user } = useWhoami()
   const navigate = useNavigate()
 
@@ -222,53 +224,17 @@ export function Landing() {
         </div>
       </section>
 
-      {/* Problem/Solution Section */}
+      {/* Why SubLine Section */}
       <section className="problem-solution-section">
         <div className="container">
-          <h2 className="section-title">{t('problemSolution.title')}</h2>
-          <div className="comparison-grid">
-            <div className="comparison-card problem">
-              <h3 className="comparison-title">{t('problemSolution.manualTitle')}</h3>
-              <ul className="comparison-list">
-                <li className="comparison-item negative">
-                  <span className="icon">✕</span>
-                  <span>{t('problemSolution.manualItems.tabs')}</span>
-                </li>
-                <li className="comparison-item negative">
-                  <span className="icon">✕</span>
-                  <span>{t('problemSolution.manualItems.oddsChange')}</span>
-                </li>
-                <li className="comparison-item negative">
-                  <span className="icon">✕</span>
-                  <span>{t('problemSolution.manualItems.timeWasted')}</span>
-                </li>
-                <li className="comparison-item negative">
-                  <span className="icon">✕</span>
-                  <span>{t('problemSolution.manualItems.missOpportunities')}</span>
-                </li>
-              </ul>
-            </div>
-            <div className="comparison-card solution">
-              <h3 className="comparison-title">{t('problemSolution.nexusTitle')}</h3>
-              <ul className="comparison-list">
-                <li className="comparison-item positive">
-                  <span className="icon">✓</span>
-                  <span>{t('problemSolution.nexusItems.oneTable')}</span>
-                </li>
-                <li className="comparison-item positive">
-                  <span className="icon">✓</span>
-                  <span>{t('problemSolution.nexusItems.highlights')}</span>
-                </li>
-                <li className="comparison-item positive">
-                  <span className="icon">✓</span>
-                  <span>{t('problemSolution.nexusItems.telegramAlerts')}</span>
-                </li>
-                <li className="comparison-item positive">
-                  <span className="icon">✓</span>
-                  <span>{t('problemSolution.nexusItems.monitoring')}</span>
-                </li>
-              </ul>
-            </div>
+          <h2 className="section-title">{t('whySubline.title')}</h2>
+          <div className="why-subline-card">
+            {([1,2,3,4,5] as const).map((n) => (
+              <div key={n} className="why-subline-item">
+                <div className="why-subline-item-title">{t(`whySubline.item${n}Title`)}</div>
+                <p className="why-subline-item-desc">{t(`whySubline.item${n}Desc`)}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -277,24 +243,61 @@ export function Landing() {
       <section id="scanner" className="how-it-works-section">
         <div className="container">
           <h2 className="section-title">{t('howItWorks.title')}</h2>
-          <div className="steps-grid">
-            <div className="step-card">
-              <div className="step-label">{t('howItWorks.step1Label')}</div>
-              <h3 className="step-title">{t('howItWorks.step1Title')}</h3>
-              <p className="step-description">{t('howItWorks.step1Desc')}</p>
+          <p className="section-subtitle">{t('howItWorks.subtitle')}</p>
+          <div className="hiw-tabs">
+            <div className="hiw-toggle">
+              <button
+                className={`hiw-tab${howItWorksTab === 'mechanism' ? ' hiw-tab--active' : ''}`}
+                onClick={() => setHowItWorksTab('mechanism')}
+              >
+                {t('howItWorks.tabMechanism')}
+              </button>
+              <button
+                className={`hiw-tab${howItWorksTab === 'example' ? ' hiw-tab--active' : ''}`}
+                onClick={() => setHowItWorksTab('example')}
+              >
+                {t('howItWorks.tabExample')}
+              </button>
             </div>
-            <div className="step-arrow">→</div>
-            <div className="step-card">
-              <div className="step-label">{t('howItWorks.step2Label')}</div>
-              <h3 className="step-title">{t('howItWorks.step2Title')}</h3>
-              <p className="step-description">{t('howItWorks.step2Desc')}</p>
-            </div>
-            <div className="step-arrow">→</div>
-            <div className="step-card">
-              <div className="step-label">{t('howItWorks.step3Label')}</div>
-              <h3 className="step-title">{t('howItWorks.step3Title')}</h3>
-              <p className="step-description">{t('howItWorks.step3Desc')}</p>
-            </div>
+          </div>
+          <div key={howItWorksTab} className="hiw-content">
+            {howItWorksTab === 'mechanism' ? (
+              <div className="steps-grid">
+                <div className="step-card">
+                  <div className="step-number">1</div>
+                  <h3 className="step-title">{t('howItWorks.step1Title')}</h3>
+                  <p className="step-description">{t('howItWorks.step1Desc')}</p>
+                </div>
+                <div className="step-arrow">→</div>
+                <div className="step-card">
+                  <div className="step-number">2</div>
+                  <h3 className="step-title">{t('howItWorks.step2Title')}</h3>
+                  <p className="step-description">{t('howItWorks.step2Desc')}</p>
+                </div>
+                <div className="step-arrow">→</div>
+                <div className="step-card">
+                  <div className="step-number">3</div>
+                  <h3 className="step-title">{t('howItWorks.step3Title')}</h3>
+                  <p className="step-description">{t('howItWorks.step3Desc')}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="hiw-example">
+                <h3 className="hiw-example-title">{t('howItWorks.exampleTitle')}</h3>
+                <p className="hiw-example-subtitle">{t('howItWorks.exampleSubtitle')}</p>
+                <div className="hiw-example-bets">
+                  <div className="hiw-example-bet">
+                    <div className="hiw-example-bet-label">{t('howItWorks.exampleBet1Title')}</div>
+                    <p>{t('howItWorks.exampleBet1Desc')}</p>
+                  </div>
+                  <div className="hiw-example-bet">
+                    <div className="hiw-example-bet-label">{t('howItWorks.exampleBet2Title')}</div>
+                    <p>{t('howItWorks.exampleBet2Desc')}</p>
+                  </div>
+                </div>
+                <p className="hiw-example-conclusion">{t('howItWorks.exampleConclusion')}</p>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -349,6 +352,30 @@ export function Landing() {
                 >
                   {t('pricing.buy')}
                 </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section id="faq" className="faq-section">
+        <div className="container">
+          <h2 className="section-title">{t('faq.title')}</h2>
+          <div className="faq-list">
+            {([1,2,3,4,5,6,7,8] as const).map((n) => (
+              <div
+                key={n}
+                className={`faq-item${faqOpen === n ? ' faq-item--open' : ''}`}
+                onClick={() => setFaqOpen(faqOpen === n ? null : n)}
+              >
+                <div className="faq-question">
+                  <span data-text={t(`faq.q${n}`)}>{t(`faq.q${n}`)}</span>
+                  <span className="faq-icon" data-icon={faqOpen === n ? '−' : '+'}>{faqOpen === n ? '−' : '+'}</span>
+                </div>
+                {faqOpen === n && (
+                  <div className="faq-answer">{t(`faq.a${n}`)}</div>
+                )}
               </div>
             ))}
           </div>

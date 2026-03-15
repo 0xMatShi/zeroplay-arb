@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Calculator, ExternalLink, Pause, Pin, Play, User, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
-import { useOpportunities, useOrderBook, useSubscriptionStatus, useSportsOpportunities, queryKeys } from '../api/hooks'
+import { useOpportunities, useOrderBook, useSubscriptionStatus, useActiveSubscription, useSportsOpportunities, queryKeys } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
 import { useSportsArbSocket } from '../hooks/useSportsArbSocket'
@@ -513,6 +513,39 @@ export function Scanner() {
   const { data: subStatus, isLoading: isSubLoading } = useSubscriptionStatus()
   const hasSubscription = subStatus?.active === true
   const noApiKey = !localStorage.getItem('apiKey')
+  const { data: activeSub } = useActiveSubscription()
+
+  // Live countdown for profile panel (updates every second)
+  const calcSubInfo = useCallback(() => {
+    if (!activeSub) return null
+    if (!activeSub.expiresAt) return { label: null, pct: 100 }
+    const now = Date.now()
+    const expires = new Date(activeSub.expiresAt).getTime()
+    const starts = new Date(activeSub.startsAt).getTime()
+    const totalMs = expires - starts
+    const remainingMs = Math.max(0, expires - now)
+    const pct = totalMs > 0 ? Math.max(0, Math.min(100, (remainingMs / totalMs) * 100)) : 0
+
+    const totalMins = Math.floor(remainingMs / 60_000)
+    const days = Math.floor(totalMins / 1440)
+    const hours = Math.floor((totalMins % 1440) / 60)
+    const mins = totalMins % 60
+
+    const parts: string[] = []
+    if (days > 0) parts.push(`${days} ${days === 1 ? 'день' : days < 5 ? 'дня' : 'дней'}`)
+    if (hours > 0) parts.push(`${hours} ${hours === 1 ? 'час' : hours < 5 ? 'часа' : 'часов'}`)
+    if (mins > 0 || parts.length === 0) parts.push(`${mins} ${mins === 1 ? 'минута' : mins < 5 ? 'минуты' : 'минут'}`)
+
+    return { label: parts.join(', '), pct }
+  }, [activeSub])
+
+  const [subDaysInfo, setSubDaysInfo] = useState(() => calcSubInfo())
+  useEffect(() => {
+    setSubDaysInfo(calcSubInfo())
+    if (!activeSub?.expiresAt) return
+    const id = setInterval(() => setSubDaysInfo(calcSubInfo()), 60_000)
+    return () => clearInterval(id)
+  }, [activeSub, calcSubInfo])
 
   // Data — only fetch when subscription is confirmed active
   const pmpmQuery = useOpportunities()
@@ -1258,18 +1291,56 @@ export function Scanner() {
           <div className="profile-panel-avatar">
             <User size={32} />
           </div>
+
+          {/* Subscription info */}
           <div className="profile-panel-section">
-            <div className="profile-panel-label">{t('scanner.currentPlan') || 'Current Plan'}</div>
-            <div className="profile-plan-badge">1 Month</div>
+            <div className="profile-panel-label">{t('scanner.currentPlan') || 'Подписка'}</div>
+            {subDaysInfo ? (
+              <>
+                <div className="profile-sub-days">
+                  {subDaysInfo.label === null
+                    ? (t('scanner.lifetimeSub') || 'Навсегда')
+                    : subDaysInfo.label}
+                </div>
+                <div className="profile-hp-bar">
+                  <div
+                    className="profile-hp-fill"
+                    style={{ width: `${subDaysInfo.pct}%` }}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="profile-sub-days profile-sub-days--none">
+                {t('scanner.noActiveSub') || 'Нет подписки'}
+              </div>
+            )}
           </div>
-          <div className="profile-panel-section">
+
+          {/* Action buttons */}
+          <div className="profile-panel-actions">
             <a
               href={import.meta.env.VITE_TELEGRAM_BOT_URL as string}
               target="_blank"
               rel="noopener noreferrer"
-              className="profile-panel-bot-link"
+              className="profile-action-btn profile-action-btn--primary"
             >
-              {t('scanner.paymentBot') || 'Payment Bot'} →
+              {t('scanner.renewSub') || 'Продлить подписку'}
+            </a>
+            <a
+              href="https://docs.subline.space"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="profile-action-btn"
+            >
+              {t('scanner.learnGuide') || 'Пройти обучение'}
+            </a>
+            <a
+              href={import.meta.env.VITE_TELEGRAM_SUPPORT_URL as string}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="profile-action-btn"
+            >
+              {t('scanner.askQuestion') || 'Задать вопрос'}
             </a>
           </div>
         </div>

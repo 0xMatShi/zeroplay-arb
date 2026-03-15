@@ -6,6 +6,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { ApiKeyGuard } from '../auth/guards/api-key.guard';
+import { SubscriptionGuard } from '../auth/guards/subscription.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
 import { SubscriptionsService } from './subscriptions.service';
@@ -16,7 +17,7 @@ export class SubscriptionsController {
   constructor(private readonly subscriptionsService: SubscriptionsService) {}
 
   @Get('active')
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(SubscriptionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current active subscription' })
   @ApiResponse({ status: 200, description: 'Active subscription or null' })
@@ -36,7 +37,7 @@ export class SubscriptionsController {
   }
 
   @Get('history')
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(SubscriptionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get all user subscriptions (active + past)' })
   @ApiResponse({ status: 200, description: 'List of subscriptions' })
@@ -54,7 +55,7 @@ export class SubscriptionsController {
   }
 
   @Get('status')
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(SubscriptionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Check if user has active subscription' })
   @ApiResponse({ status: 200, description: 'Subscription status check' })

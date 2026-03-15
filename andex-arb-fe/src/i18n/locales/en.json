@@ -8,8 +8,8 @@
     "getAccess": "Get Access"
   },
   "hero": {
-    "title": "BEST ARBITRAGE SERVICE FOR PREDICTION MARKETS",
-    "subtitle": "Track spreads between Polymarket, Opinion, Probable and other platforms. Get real-time arbitrage alerts with ROI up to 25% and zero risk.",
+    "title": "ALL PLATFORMS. ONE ARBITRAGE TERMINAL",
+    "subtitle": "Track spreads between prediction markets and bookmakers. The service automatically matches events, finds opportunities and shows a ready entry scenario in real-time.",
     "badge": "100% SAFE.",
     "openScanner": "GET ACCESS",
     "telegram": "Join Telegram Channel",
@@ -24,34 +24,37 @@
   "dataSources": {
     "title": "DATA SOURCES"
   },
-  "problemSolution": {
-    "title": "STOP SWITCHING TABS",
-    "manualTitle": "MANUAL RESEARCH",
-    "manualItems": {
-      "tabs": "10+ open browser tabs",
-      "oddsChange": "Odds change while calculating",
-      "timeWasted": "Time wasted on manual checks",
-      "missOpportunities": "Miss opportunities overnight"
-    },
-    "nexusTitle": "SUBLINE AGGREGATION",
-    "nexusItems": {
-      "oneTable": "All markets in one table",
-      "highlights": "System highlights arbitrage",
-      "telegramAlerts": "Instant alerts",
-      "monitoring": "24/7 monitoring coverage"
-    }
+  "whySubline": {
+    "title": "WHY SUBLINE",
+    "item1Title": "A new layer of arbitrage",
+    "item1Desc": "Prediction markets open opportunities rarely covered by classic tools. The service lets you work with both PM ↔ PM and PM ↔ BK pairs in one place.",
+    "item2Title": "Less dependency on restrictions",
+    "item2Desc": "Unlike classic bookmaker scenarios, working with prediction markets offers a more flexible format and reduces dependency on limits, account cuts and restrictions.",
+    "item3Title": "Faster than manual",
+    "item3Desc": "Our service shortens the path from finding a discrepancy to entering a trade. Fewer tabs, less manual routine, less time spent on verification.",
+    "item4Title": "One terminal instead of chaos",
+    "item4Desc": "Signals, filters, calculators, alerts and trade entry tools are all in one interface so you can work faster and with greater control.",
+    "item5Title": "Profit now + Web3 activity",
+    "item5Desc": "While you earn, your activity on prediction markets can simultaneously work toward a future airdrop."
   },
   "howItWorks": {
-    "title": "WORKFLOW",
-    "step1Label": "STEP 01 :: SCAN",
-    "step1Title": "Monitor 24/7",
-    "step1Desc": "Our system continuously scans all prediction markets for price discrepancies and arbitrage opportunities.",
-    "step2Label": "STEP 02 :: ALERT",
-    "step2Title": "Get Notified",
-    "step2Desc": "Receive instant alerts with full opportunity details.",
-    "step3Label": "STEP 03 :: TRADE",
-    "step3Title": "Execute & Profit",
-    "step3Desc": "You manually place bets on both sides and lock in guaranteed profit regardless of outcome."
+    "title": "HOW IT WORKS",
+    "subtitle": "SubLine finds price discrepancies between platforms, shows a ready opportunity and helps you enter a trade quickly.",
+    "tabMechanism": "Mechanism",
+    "tabExample": "Example",
+    "step1Title": "Finding the Spread",
+    "step1Desc": "Every platform has its own odds on the same event. Because of differences in probability assessment between markets, spreads appear — price discrepancies you can profit from.",
+    "step2Title": "Ready Opportunity",
+    "step2Desc": "The service automatically matches identical events across platforms, compares prices and finds arbitrage combinations. You immediately see the potential profit, ROI and entry parameters.",
+    "step3Title": "Entering the Trade",
+    "step3Desc": "You enter one event on different outcomes and lock in profit from the price difference between platforms regardless of the result. SubLine helps you enter the trade with the best profit %.",
+    "exampleTitle": "TRADE EXAMPLE",
+    "exampleSubtitle": "The service found an arbitrage opportunity for us and we enter the trade.",
+    "exampleBet1Title": "Bet 1",
+    "exampleBet1Desc": "Team 1 — odds 2.30. We bet $100. If they win we earn $230. Taking into account the second bet, our net profit is $30.",
+    "exampleBet2Title": "Bet 2",
+    "exampleBet2Desc": "Team 2 — odds 2.15. We bet $100. If they win we earn $215. Taking into account the first bet, our net profit is $15.",
+    "exampleConclusion": "As you can see, it doesn't matter at all who wins or loses. We profit regardless of the outcome — earning a small % profit on every such opportunity."
   },
   "features": {
     "title": "CORE FEATURES",
@@ -93,15 +96,23 @@
     "errorInvalid": "Invalid API key"
   },
   "faq": {
-    "title": "SYSTEM FAQs",
-    "q1": "Do I need to provide API keys?",
-    "a1": "No API keys required. SubLine is a read-only scanner that displays opportunities. You manually execute trades on prediction market platforms. We never access your accounts or funds.",
-    "q2": "Which prediction markets are tracked?",
-    "a2": "We currently aggregate real-time data from Polymarket, Opinion, and Probable. More platforms are added based on demand and liquidity.",
-    "q3": "How do I get alerts for new opportunities?",
-    "a3": "You get instant alerts on the website and in Telegram. You can configure your own filters: platforms, spread threshold, minimum ROI, and more.",
-    "q4": "What ROI can I expect from arbitrage?",
-    "a4": "Typical arbitrage opportunities range from 2-12% ROI per trade. In specific events, ROI can reach up to 25%. Actual results depend on execution speed, liquidity, and platform fees."
+    "title": "FAQ",
+    "q1": "What do I need to get started?",
+    "a1": "You need a computer or laptop, a subscription to the service, and accounts on supported platforms — prediction markets and/or bookmakers with a small deposit to work with. After that, you can immediately start tracking arbitrage opportunities and entering your first trades.",
+    "q2": "Do I need experience in arbitrage?",
+    "a2": "No. The service is designed to be as simple and straightforward as possible for beginners. Just read the onboarding guide and practice with small amounts. Most users get comfortable within a few days.",
+    "q3": "How much money do I need to start?",
+    "a3": "A large deposit is not required. We recommend starting with small amounts to get familiar with the interface and mechanics. You can start with as little as $10, but for meaningful results, working with a deposit of $150 or more is more comfortable.",
+    "q4": "How safe is it?",
+    "a4": "You control your own funds and work directly with the platforms — you don't transfer a deposit to our service. SubLine is an analytical tool that helps you find arbitrage opportunities and calculate trades, but all operations are executed by you from your own accounts.",
+    "q5": "Are there any limits on trade size?",
+    "a5": "It depends on the specific platform and market liquidity. Prediction markets often have good liquidity, but on some events volume may be lower. That's why we show liquidity directly in the opportunity card, so you can immediately understand how much you can enter without unnecessary risk.",
+    "q6": "Are there any difficulties or nuances?",
+    "a6": "Yes — the key factor here is reaction speed. Arbitrage opportunities appear in real time and can disappear fairly quickly. Sometimes you have about a minute to open both sides of a trade. But this comes with practice: your first trades might take 30–40 seconds, and over time you'll be doing it in just a few seconds.",
+    "q7": "How much can I earn?",
+    "a7": "Your income depends on your deposit, reaction speed, liquidity, and the number of opportunities available on a given day. Trades can yield up to 40% ROI, and throughout the day the service may find dozens of opportunities. Keep in mind that results always depend on how quickly you can enter a trade and the size of your position.",
+    "q8": "Which subscription plan should I choose?",
+    "a8": "We have several subscription options. The weekly subscription is great for testing the service and understanding how it works in practice. The monthly subscription is the most popular option — it gives you not only access to the service, but also access to a private community of users with discussions, experience sharing, useful materials, and support."
   },
   "footer": {
     "tagline": "Real-time prediction market scanner for informed trading decisions.",
@@ -216,8 +227,14 @@
     "soundOff": "Sound off",
     "pauseScanner": "Pause scanner",
     "resumeScanner": "Resume scanner",
-    "currentPlan": "Current Plan",
+    "currentPlan": "Subscription",
     "paymentBot": "Payment Bot",
+    "daysLeft": "days left",
+    "lifetimeSub": "Lifetime",
+    "noActiveSub": "No active subscription",
+    "renewSub": "Renew subscription",
+    "learnGuide": "Start learning",
+    "askQuestion": "Ask a question",
     "paused": "PAUSED",
     "noOpportunities": "NO ARBITRAGE OPPORTUNITIES FOUND",
     "emptyHint": "Waiting for the scanner to detect price discrepancies across platforms...",

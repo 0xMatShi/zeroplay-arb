@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Subscription } from './entities/subscription.entity';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionsController } from './subscriptions.controller';
+import { SubscriptionGuard } from '../auth/guards/subscription.guard';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -11,7 +12,7 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
   ],
   controllers: [SubscriptionsController],
-  providers: [SubscriptionsService],
+  providers: [SubscriptionsService, SubscriptionGuard],
   exports: [SubscriptionsService],
 })
 export class SubscriptionsModule {}
