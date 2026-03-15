@@ -97,13 +97,6 @@ export class ScannerService {
     // Sort by profit DESC
     results.sort((a, b) => b.profitPercentage - a.profitPercentage);
 
-    if (results.length > 0) {
-      this.logger.log(
-        `"${match.title}": ${results.length} arb combinations found ` +
-          `(best: ${results[0].profitPercentage.toFixed(2)}%, worst: ${results[results.length - 1].profitPercentage.toFixed(2)}%)`,
-      );
-    }
-
     return results;
   }
 

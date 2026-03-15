@@ -328,11 +328,6 @@ export class OpportunityService {
     });
 
     const saved = await this.opportunityRepo.save(opportunity);
-    this.logger.log(
-      `New opportunity: ${saved.id} | "${match.title}" | ` +
-        `${details.legs.map((l) => l.platformSlug).join('+')} | ` +
-        `${details.profitPercentage.toFixed(2)}%`,
-    );
     return saved.id;
   }
 
