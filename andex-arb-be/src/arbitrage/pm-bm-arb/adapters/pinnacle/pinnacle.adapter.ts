@@ -391,9 +391,19 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       const changeLines: string[] = [];
       const now = Date.now();
 
-      for (const league of odds.update ?? []) {
+      // When refreshAll=true Pinnacle sends a complete current state in odds.leagues.
+      // odds.update may be empty or contain only lineId-only entries without prices.
+      // Fall back to odds.leagues if odds.update is absent or empty.
+      const isRefreshAll = !!odds.refreshAll;
+      const leagues: any[] = (isRefreshAll || !odds.update?.length) ? (odds.leagues ?? []) : (odds.update ?? []);
+
+      if (isRefreshAll) {
+        this.logger.log(`[Pinnacle WS] UPDATE_ODDS ${msg.destination} sportId=${odds.sportId} refreshAll — using leagues`);
+      }
+
+      for (const league of leagues) {
         for (const event of league.events ?? []) {
-          const changes = this.mergeEvent(event, league, true);
+          const changes = this.mergeEvent(event, league, isRefreshAll ? false : true);
           this.eventLastSeen.set(String(event.id), now);
           if (changes.length) {
             const name = this.eventCache.get(String(event.id))?.name ?? `event#${event.id}`;
