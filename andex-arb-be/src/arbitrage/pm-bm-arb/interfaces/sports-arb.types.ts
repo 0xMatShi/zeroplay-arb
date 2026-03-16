@@ -67,6 +67,8 @@ export interface DexSportsEvent {
   isLive: boolean;
   startTime?: number;
   tournamentName?: string;
+  /** Direct link to the event on the bookmaker's site (set by adapters that know it, e.g. Stake) */
+  url?: string;
   markets: DexMarket[];
   updatedAt: number;
 }
@@ -87,13 +89,13 @@ export interface SportsMatch {
   similarity: number;
   matchedMarkets: MatchedMarketPair[];
   matchedAt: number;
-  bookmakerPlatform: 'dexsport' | 'pinnacle';
+  bookmakerPlatform: 'dexsport' | 'pinnacle' | 'stake';
 }
 
 // ── Arbitrage ────────────────────────────────────────────────
 
 export interface SportsArbLeg {
-  platform: 'polymarket' | 'dexsport' | 'pinnacle';
+  platform: 'polymarket' | 'dexsport' | 'pinnacle' | 'stake';
   outcomeName: string;
   /** Probability 0..1 (cost per $1 payout) */
   probability: number;

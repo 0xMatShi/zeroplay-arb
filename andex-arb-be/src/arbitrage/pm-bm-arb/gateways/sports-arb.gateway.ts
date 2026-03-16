@@ -112,6 +112,10 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
         : `https://www.gentleflame47.xyz/en/standard/${sportPath}`;
     }
 
+    if (bookmakerPlatform === 'stake') {
+      return dexEvent.url ?? 'https://stake3017.com/en/sports';
+    }
+
     // DexSport URL: https://dexsport.io/{esports|sports}/{sport}/{name-slug}-{id}/bets/
     const rawId = dexEvent.eventId.includes('.')
       ? dexEvent.eventId.split('.')[1]

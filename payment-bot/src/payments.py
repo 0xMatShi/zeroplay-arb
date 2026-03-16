@@ -15,9 +15,12 @@ PRIVATE_CHAT_ID = int(os.getenv("PRIVATE_CHAT_ID", "0"))
 PRIVATE_GROUP_ID = int(os.getenv("PRIVATE_GROUP_ID", "0"))  # Используем имя переменной с опечаткой из .env
 
 SUBSCRIPTION_PLANS = {
-    "1week": {"label": "1 неделя", "price": 29, "duration_days": 7},
-    "1month": {"label": "1 месяц", "price": 99, "duration_days": 30},
+    "1week":   {"label": "1 неделя", "price": 34.90,  "duration_days": 7,  "invite_links": False},
+    "1month":  {"label": "1 месяц",  "price": 149.90, "duration_days": 30, "invite_links": True},
+    "3months": {"label": "3 месяца", "price": 359.90, "duration_days": 90, "invite_links": True},
 }
+
+DEFAULT_DEMO_DAYS = 1  # Бесплатный демо-доступ для новых пользователей без реферала
 
 SUPPORTED_NETWORKS = {
     "base": {
@@ -228,6 +231,10 @@ def init_db() -> None:
         cursor.execute("ALTER TABLE referral_links ADD COLUMN free_days INTEGER")
     if "is_instant" not in existing_ref:
         cursor.execute("ALTER TABLE referral_links ADD COLUMN is_instant INTEGER DEFAULT 0")
+    if "is_admin_link" not in existing_ref:
+        cursor.execute("ALTER TABLE referral_links ADD COLUMN is_admin_link INTEGER DEFAULT 0")
+    if "admin_commission_percent" not in existing_ref:
+        cursor.execute("ALTER TABLE referral_links ADD COLUMN admin_commission_percent INTEGER")
 
     # Миграция: добавить реферальный баланс и счётчик в профили пользователей
     existing_profiles = {row[1] for row in cursor.execute("PRAGMA table_info(user_profiles)").fetchall()}
@@ -235,6 +242,8 @@ def init_db() -> None:
         cursor.execute("ALTER TABLE user_profiles ADD COLUMN referral_balance REAL DEFAULT 0")
     if "referral_paid_count" not in existing_profiles:
         cursor.execute("ALTER TABLE user_profiles ADD COLUMN referral_paid_count INTEGER DEFAULT 0")
+    if "is_admin" not in existing_profiles:
+        cursor.execute("ALTER TABLE user_profiles ADD COLUMN is_admin INTEGER DEFAULT 0")
 
     # Таблица запросов на вывод реферального баланса
     cursor.execute("""
@@ -645,7 +654,9 @@ def create_referral_link(
     custom_prices: str | None,
     name: str | None = None,
     free_days: int | None = None,
-    is_instant: bool = False
+    is_instant: bool = False,
+    is_admin_link: bool = False,
+    admin_commission_percent: int | None = None,
 ) -> str:
     """Создает реферальную ссылку с уникальным кодом.
 
@@ -667,15 +678,18 @@ def create_referral_link(
     conn = _get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO referral_links (code, max_uses, custom_prices, name, free_days, is_instant) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (code, max_uses, custom_prices, name, free_days, 1 if is_instant else 0)
+        "INSERT INTO referral_links "
+        "(code, max_uses, custom_prices, name, free_days, is_instant, is_admin_link, admin_commission_percent) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (code, max_uses, custom_prices, name, free_days,
+         1 if is_instant else 0, 1 if is_admin_link else 0, admin_commission_percent)
     )
     conn.commit()
     conn.close()
 
     logger.info(f"Created referral link: code={code}, name={name}, max_uses={max_uses}, "
-                f"custom_prices={custom_prices}, free_days={free_days}, is_instant={is_instant}")
+                f"custom_prices={custom_prices}, free_days={free_days}, is_instant={is_instant}, "
+                f"is_admin_link={is_admin_link}, admin_commission_percent={admin_commission_percent}")
     return code
 
 
@@ -684,7 +698,8 @@ def get_referral_link(code: str) -> dict | None:
     conn = _get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, code, max_uses, current_uses, custom_prices, is_active, name, free_days, is_instant "
+        "SELECT id, code, max_uses, current_uses, custom_prices, is_active, name, "
+        "free_days, is_instant, owner_user_id, is_admin_link, admin_commission_percent "
         "FROM referral_links WHERE code = ?",
         (code,)
     )
@@ -841,6 +856,71 @@ def ensure_user_referral_link(user_id: int) -> str:
     conn.close()
 
     logger.info(f"Created personal referral link for user {user_id}: {code}")
+    return code
+
+
+def set_user_admin(user_id: int) -> None:
+    """Присваивает пользователю статус Admin."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE user_profiles SET is_admin = 1 WHERE user_id = ?",
+        (user_id,),
+    )
+    conn.commit()
+    conn.close()
+    logger.info(f"User {user_id} granted Admin status")
+
+
+def is_user_admin(user_id: int) -> bool:
+    """Проверяет, является ли пользователь администратором."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT is_admin FROM user_profiles WHERE user_id = ?",
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return bool(row and row["is_admin"])
+
+
+def ensure_admin_demo_link(user_id: int, commission_percent: int = 0) -> str:
+    """Создаёт или возвращает персональную демо-ссылку администратора.
+
+    Демо-ссылка: мгновенная, 1 день бесплатно, без лимита использований
+    (каждый конкретный пользователь может воспользоваться только 1 раз).
+
+    Returns:
+        Код реферальной ссылки
+    """
+    import secrets
+
+    conn = _get_connection()
+    cursor = conn.cursor()
+
+    # Ищем существующую демо-ссылку этого администратора
+    cursor.execute(
+        "SELECT code FROM referral_links WHERE owner_user_id = ? AND is_instant = 1 AND free_days = 1 LIMIT 1",
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    if row:
+        conn.close()
+        return row["code"]
+
+    # Создаём новую демо-ссылку
+    code = secrets.token_urlsafe(8)
+    cursor.execute(
+        "INSERT INTO referral_links "
+        "(code, max_uses, custom_prices, name, free_days, is_instant, owner_user_id, admin_commission_percent) "
+        "VALUES (?, NULL, NULL, ?, 1, 1, ?, ?)",
+        (code, "Демо-доступ", user_id, commission_percent if commission_percent else None),
+    )
+    conn.commit()
+    conn.close()
+
+    logger.info(f"Created admin demo link for user {user_id}: {code}, commission={commission_percent}%")
     return code
 
 
@@ -1173,6 +1253,200 @@ def deactivate_expired_subscriptions() -> list[dict]:
     return [{"user_id": r["user_id"], "plan": r["plan"]} for r in rows]
 
 
+def _credit_referral_reward(user_id: int, payment_amount: float) -> None:
+    """Начисляет реферальное вознаграждение владельцу ссылки пользователя.
+
+    Если у ссылки задан admin_commission_percent — использует его;
+    иначе применяет ступенчатую систему (20/25/30%).
+    """
+    referral_code = get_user_referral_code(user_id)
+    if not referral_code:
+        return
+    owner_id = get_referral_link_owner(referral_code)
+    if not owner_id:
+        return
+
+    ref_link = get_referral_link(referral_code)
+    custom_pct = ref_link.get("admin_commission_percent") if ref_link else None
+
+    if custom_pct is not None:
+        percent = custom_pct
+    else:
+        paid_count = get_referral_paid_count(owner_id)
+        percent = get_referral_percent(paid_count)
+
+    reward = round(payment_amount * percent / 100, 2)
+    increment_referral_paid_count(owner_id)
+    add_referral_balance(owner_id, reward)
+    logger.info(
+        f"✓ Начислено {reward}$ ({percent}%) на реферальный баланс пользователя {owner_id} "
+        f"(пригласил {user_id}, сумма платежа {payment_amount}$)"
+    )
+
+
+def get_admin_referral_stats(user_id: int) -> dict:
+    """Возвращает статистику для личного кабинета администратора.
+
+    Returns:
+        {"buyers": int, "total_spent": float, "admin_share": float, "commission_percent": int}
+    """
+    conn = _get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT code, admin_commission_percent FROM referral_links "
+        "WHERE owner_user_id = ? AND is_instant = 1 AND free_days = 1 LIMIT 1",
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return {"buyers": 0, "total_spent": 0.0, "admin_share": 0.0, "commission_percent": 0}
+
+    demo_code = row["code"]
+    commission_percent = int(row["admin_commission_percent"]) if row["admin_commission_percent"] else 0
+
+    cursor.execute(
+        "SELECT COUNT(DISTINCT p.user_id) as buyers, COALESCE(SUM(p.amount), 0) as total "
+        "FROM payments p "
+        "JOIN referral_usage ru ON p.user_id = ru.user_id "
+        "WHERE ru.referral_code = ? AND p.status = 'confirmed'",
+        (demo_code,),
+    )
+    stats = cursor.fetchone()
+    conn.close()
+
+    total_spent = float(stats["total"]) if stats and stats["total"] else 0.0
+    buyers = int(stats["buyers"]) if stats and stats["buyers"] else 0
+    admin_share = round(total_spent * commission_percent / 100, 2)
+
+    return {
+        "buyers": buyers,
+        "total_spent": total_spent,
+        "admin_share": admin_share,
+        "commission_percent": commission_percent,
+    }
+
+
+def get_admin_links_stats() -> list[dict]:
+    """Статистика по admin-ссылкам: сколько пришло и оплатило через демо-ссылку каждого админа.
+
+    Returns:
+        list of {name, is_active, commission_percent, admin_user_id, clicks, paid_users}
+    """
+    conn = _get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            rl.code,
+            rl.name,
+            rl.is_active,
+            rl.admin_commission_percent,
+            ru.user_id AS admin_user_id
+        FROM referral_links rl
+        LEFT JOIN referral_usage ru ON ru.referral_code = rl.code
+        WHERE rl.is_admin_link = 1
+        ORDER BY rl.id ASC
+    """)
+    admin_links = cursor.fetchall()
+
+    result = []
+    for link in admin_links:
+        admin_user_id = link["admin_user_id"]
+        clicks = 0
+        paid_users = 0
+        total_spent = 0.0
+
+        if admin_user_id:
+            cursor.execute(
+                "SELECT code FROM referral_links WHERE owner_user_id = ? AND is_instant = 1 LIMIT 1",
+                (admin_user_id,)
+            )
+            demo_row = cursor.fetchone()
+            if demo_row:
+                cursor.execute("""
+                    SELECT
+                        COUNT(DISTINCT ru2.user_id) AS clicks,
+                        COUNT(DISTINCT CASE WHEN p.status = 'confirmed' THEN p.user_id END) AS paid_users,
+                        COALESCE(SUM(CASE WHEN p.status = 'confirmed' THEN p.amount END), 0) AS total_spent
+                    FROM referral_usage ru2
+                    LEFT JOIN payments p ON p.user_id = ru2.user_id
+                    WHERE ru2.referral_code = ?
+                """, (demo_row["code"],))
+                stats = cursor.fetchone()
+                if stats:
+                    clicks = stats["clicks"] or 0
+                    paid_users = stats["paid_users"] or 0
+                    total_spent = float(stats["total_spent"] or 0)
+
+        commission_percent = link["admin_commission_percent"] or 0
+        result.append({
+            "name": link["name"] or link["code"],
+            "is_active": bool(link["is_active"]),
+            "commission_percent": commission_percent,
+            "admin_user_id": admin_user_id,
+            "clicks": clicks,
+            "paid_users": paid_users,
+            "total_spent": total_spent,
+            "admin_share": round(total_spent * commission_percent / 100, 2),
+        })
+
+    conn.close()
+    return result
+
+
+def get_all_referral_stats() -> list[dict]:
+    """Возвращает статистику по всем реферальным ссылкам.
+
+    Returns:
+        list of {code, name, link_type, is_active, max_uses, clicks, paid_users}
+    """
+    conn = _get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            rl.code,
+            rl.name,
+            rl.is_active,
+            rl.max_uses,
+            rl.is_instant,
+            rl.is_admin_link,
+            rl.free_days,
+            COUNT(DISTINCT ru.user_id) AS clicks,
+            COUNT(DISTINCT CASE WHEN p.status = 'confirmed' THEN p.user_id END) AS paid_users,
+            COALESCE(SUM(CASE WHEN p.status = 'confirmed' THEN p.amount END), 0) AS total_spent
+        FROM referral_links rl
+        LEFT JOIN referral_usage ru ON ru.referral_code = rl.code
+        LEFT JOIN payments p ON p.user_id = ru.user_id
+        WHERE rl.owner_user_id IS NULL AND rl.is_admin_link = 0
+        GROUP BY rl.id
+        ORDER BY clicks DESC, rl.id ASC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    result = []
+    for row in rows:
+        if row["is_admin_link"]:
+            link_type = "Admin"
+        elif row["is_instant"] and row["free_days"]:
+            link_type = f"Бесплатная ({row['free_days']}д)"
+        else:
+            link_type = "Обычная"
+        result.append({
+            "code": row["code"],
+            "name": row["name"] or row["code"],
+            "link_type": link_type,
+            "is_active": bool(row["is_active"]),
+            "max_uses": row["max_uses"],
+            "clicks": row["clicks"],
+            "paid_users": row["paid_users"],
+            "total_spent": float(row["total_spent"] or 0),
+        })
+    return result
+
+
 def activate_subscription(user_id: int, plan: str, payment_amount: float = 0.0) -> dict:
     """Активирует подписку для пользователя.
 
@@ -1229,19 +1503,7 @@ def activate_subscription(user_id: int, plan: str, payment_amount: float = 0.0) 
         logger.info(f"Cleared {deleted_notifications} old notification records for subscription {row['id']}")
 
         # Начисляем реферальное вознаграждение владельцу ссылки
-        referral_code = get_user_referral_code(user_id)
-        if referral_code:
-            owner_id = get_referral_link_owner(referral_code)
-            if owner_id:
-                paid_count = get_referral_paid_count(owner_id)
-                percent = get_referral_percent(paid_count)
-                reward = round(payment_amount * percent / 100, 2)
-                increment_referral_paid_count(owner_id)
-                add_referral_balance(owner_id, reward)
-                logger.info(
-                    f"✓ Начислено {reward}$ ({percent}%) на реферальный баланс пользователя {owner_id} "
-                    f"(пригласил {user_id}, сумма платежа {payment_amount}$)"
-                )
+        _credit_referral_reward(user_id, payment_amount)
 
         return {
             "action": "extended",
@@ -1273,19 +1535,7 @@ def activate_subscription(user_id: int, plan: str, payment_amount: float = 0.0) 
             logger.info(f"Cleared {deleted_notifications} old notification records for user {user_id}")
 
         # Начисляем реферальное вознаграждение владельцу ссылки
-        referral_code = get_user_referral_code(user_id)
-        if referral_code:
-            owner_id = get_referral_link_owner(referral_code)
-            if owner_id:
-                paid_count = get_referral_paid_count(owner_id)
-                percent = get_referral_percent(paid_count)
-                reward = round(payment_amount * percent / 100, 2)
-                increment_referral_paid_count(owner_id)
-                add_referral_balance(owner_id, reward)
-                logger.info(
-                    f"✓ Начислено {reward}$ ({percent}%) на реферальный баланс пользователя {owner_id} "
-                    f"(пригласил {user_id}, сумма платежа {payment_amount}$)"
-                )
+        _credit_referral_reward(user_id, payment_amount)
 
         return {
             "action": "created",
@@ -1334,19 +1584,10 @@ def activate_free_subscription(user_id: int, days: int) -> dict:
             logger.info(f"User {user_id} has lifetime subscription, skipping free days addition")
             return {"action": "skipped", "expires_at": None}
 
-        # Добавляем дни к существующей подписке
-        expires_dt = datetime.fromisoformat(current_expires)
-        new_expires = expires_dt + timedelta(days=days)
-
-        cursor.execute(
-            "UPDATE subscriptions SET expires_at = ? WHERE id = ?",
-            (new_expires.isoformat(), row["id"])
-        )
-        conn.commit()
+        # Активная подписка с датой истечения - не добавляем дни
         conn.close()
-
-        logger.info(f"Extended subscription for user {user_id}: added {days} days (new expires: {new_expires.isoformat()})")
-        return {"action": "extended", "expires_at": new_expires.isoformat()}
+        logger.info(f"User {user_id} already has active subscription, skipping free days addition")
+        return {"action": "skipped", "expires_at": current_expires}
 
     else:
         # Нет активной подписки - создаём новую
@@ -1444,7 +1685,6 @@ def get_subscriptions_requiring_notification() -> list[dict]:
     cursor = conn.cursor()
 
     now = datetime.now(timezone.utc)
-    three_days = now + timedelta(days=3)
     one_day = now + timedelta(days=1)
     one_hour = now + timedelta(hours=1)
 
@@ -1464,7 +1704,6 @@ def get_subscriptions_requiring_notification() -> list[dict]:
 
         # Проверяем каждый тип уведомления
         notifications_to_check = [
-            ("3days", three_days),
             ("1day", one_day),
             ("1hour", one_hour),
         ]
@@ -1520,42 +1759,6 @@ def mark_notification_sent(user_id: int, subscription_id: int, notification_type
     conn.close()
     logger.info(f"Marked notification as sent: user={user_id}, type={notification_type}")
 
-
-def get_users_to_kick() -> list[dict]:
-    """Возвращает пользователей, которых нужно кикнуть из группы.
-
-    Это пользователи, у которых:
-    - Подписка истекла более часа назад
-    - Уже отправлено уведомление 'expired'
-    - Ещё не были кикнуты (нет уведомления 'kicked')
-    """
-    conn = _get_connection()
-    cursor = conn.cursor()
-
-    now = datetime.now(timezone.utc)
-    grace_period_end = now - timedelta(hours=1)
-
-    # Находим истекшие подписки с отправленным уведомлением 'expired'
-    # Ищем как active, так и expired подписки (подписка может быть деактивирована до кика)
-    # Исключаем тех, кто уже был кикнут (есть уведомление 'kicked')
-    cursor.execute(
-        "SELECT DISTINCT s.user_id, s.id as subscription_id, s.expires_at, s.plan "
-        "FROM subscriptions s "
-        "JOIN expiry_notifications en ON s.id = en.subscription_id "
-        "WHERE s.status IN ('active', 'expired') "
-        "AND s.expires_at IS NOT NULL "
-        "AND s.expires_at <= ? "
-        "AND en.notification_type = 'expired' "
-        "AND NOT EXISTS ("
-        "    SELECT 1 FROM expiry_notifications "
-        "    WHERE subscription_id = s.id AND notification_type = 'kicked'"
-        ")",
-        (grace_period_end.isoformat(),)
-    )
-
-    results = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return results
 
 
 async def kick_and_unban_user(bot: Bot, user_id: int) -> dict[str, bool]:

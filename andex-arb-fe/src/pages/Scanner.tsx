@@ -240,7 +240,7 @@ function SportsOpportunityCard({
   const [expanded, setExpanded] = useState(false)
 
   const pmLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'polymarket')
-  const dexLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle')
+  const dexLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle' || l.platform === 'stake')
 
   const totalCost = opp.totalCost
   const profitPct = opp.profitPercentage
@@ -337,8 +337,8 @@ function SportsOpportunityCard({
 
           {/* Bookmaker box */}
           <div className="sports-platform-box">
-            <div className={`sports-platform-label sports-platform-label--${dexLeg?.platform === 'pinnacle' ? 'pinnacle' : 'dex'}`}>
-              {dexLeg?.platform === 'pinnacle' ? 'PINNACLE' : 'DEXSPORT'}
+            <div className={`sports-platform-label sports-platform-label--${dexLeg?.platform === 'pinnacle' ? 'pinnacle' : dexLeg?.platform === 'stake' ? 'stake' : 'dex'}`}>
+              {dexLeg?.platform === 'pinnacle' ? 'PINNACLE' : dexLeg?.platform === 'stake' ? 'STAKE' : 'DEXSPORT'}
             </div>
             <div className="sports-outcome-name">{dexLeg?.outcomeName ?? '—'}</div>
             <div className="sports-amounts-inline">
@@ -732,7 +732,7 @@ export function Scanner() {
       // Platform pair filter
       if (arbMode === 'pm-bm' && platformPairFilter.size > 0) {
         const sOpp = opp as SportsOpportunity
-        const dexLeg = sOpp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle')
+        const dexLeg = sOpp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle' || l.platform === 'stake')
         if (!dexLeg || !platformPairFilter.has(dexLeg.platform)) return false
       }
 
@@ -1160,6 +1160,7 @@ export function Scanner() {
                         {([
                           { key: 'dexsport', label: 'Polymarket → Dexsport' },
                           { key: 'pinnacle', label: 'Polymarket → Pinnacle' },
+                          { key: 'stake', label: 'Polymarket → Stake' },
                         ]).map(({ key, label }) => {
                           const isActive = platformPairFilter.size === 0 || platformPairFilter.has(key)
                           return (
@@ -1167,9 +1168,10 @@ export function Scanner() {
                               key={key}
                               className={`sidebar-mode-button ${isActive ? 'active' : ''}`}
                               onClick={() => setPlatformPairFilter((prev) => {
-                                const next = new Set(prev.size === 0 ? ['dexsport', 'pinnacle'] : prev)
+                                const all = ['dexsport', 'pinnacle', 'stake']
+                                const next = new Set(prev.size === 0 ? all : prev)
                                 if (next.has(key)) next.delete(key); else next.add(key)
-                                if (next.size === 2) return new Set()
+                                if (next.size === all.length) return new Set()
                                 return next
                               })}
                             >

@@ -15,48 +15,51 @@ from src.payments import (
     deactivate_expired_subscriptions,
     get_subscriptions_requiring_notification,
     mark_notification_sent,
-    get_users_to_kick,
     kick_and_unban_user,
     SUBSCRIPTION_PLANS,
 )
 from src.telegram_ui import router, setup_bot_commands
 from src import backend_client
 
-CHECK_INTERVAL = 5 * 60  # 5 минут
+CHECK_INTERVAL = 5 * 20  # 5 минут
 
 
 async def check_subscription_notifications(bot: Bot) -> None:
     """Фоновая задача: проверяет подписки и отправляет уведомления."""
+    from datetime import datetime, timezone, timedelta
+
     while True:
         await asyncio.sleep(CHECK_INTERVAL)
         try:
-            # 1. Проверяем уведомления об истечении
             notifications = get_subscriptions_requiring_notification()
+            kicked_telegram_ids = []
+
             for notif in notifications:
                 user_id = notif["user_id"]
                 sub_id = notif["subscription_id"]
                 notif_type = notif["notification_type"]
                 expires_at = notif["expires_at"]
 
-                # Формируем текст уведомления
-                from datetime import datetime, timezone, timedelta
                 expires_dt = datetime.fromisoformat(expires_at).astimezone(timezone(timedelta(hours=3)))
                 expires_str = expires_dt.strftime('%d.%m.%Y %H:%M')
 
-                if notif_type == "3days":
-                    message = (
-                        f"⏰ Ваша подписка истекает через 3 дня!\n\n"
-                        f"Дата окончания: {expires_str} (МСК)\n\n"
-                        f"Продлите подписку, чтобы не потерять доступ.\n"
-                        f"Нажмите /start → \"Оплатить подписку\""
-                    )
-                elif notif_type == "1day":
+                if notif_type == "1day":
                     message = (
                         f"⏰ Ваша подписка истекает завтра!\n\n"
                         f"Дата окончания: {expires_str} (МСК)\n\n"
                         f"Продлите подписку, чтобы не потерять доступ.\n"
                         f"Нажмите /start → \"Оплатить подписку\""
                     )
+                    try:
+                        await bot.send_message(user_id, message)
+                        mark_notification_sent(user_id, sub_id, notif_type)
+                        logger.info(f"Sent {notif_type} notification to user {user_id}")
+                    except TelegramForbiddenError:
+                        mark_notification_sent(user_id, sub_id, notif_type)
+                        logger.warning(f"User {user_id} blocked bot, marked {notif_type} anyway")
+                    except Exception as e:
+                        logger.warning(f"Failed to send {notif_type} notification to user {user_id}: {e}")
+
                 elif notif_type == "1hour":
                     message = (
                         f"⚠️ Ваша подписка истекает через час!\n\n"
@@ -64,59 +67,55 @@ async def check_subscription_notifications(bot: Bot) -> None:
                         f"Продлите подписку прямо сейчас!\n"
                         f"Нажмите /start → \"Оплатить подписку\""
                     )
+                    try:
+                        await bot.send_message(user_id, message)
+                        mark_notification_sent(user_id, sub_id, notif_type)
+                        logger.info(f"Sent {notif_type} notification to user {user_id}")
+                    except TelegramForbiddenError:
+                        mark_notification_sent(user_id, sub_id, notif_type)
+                        logger.warning(f"User {user_id} blocked bot, marked {notif_type} anyway")
+                    except Exception as e:
+                        logger.warning(f"Failed to send {notif_type} notification to user {user_id}: {e}")
+
                 elif notif_type == "expired":
-                    message = (
-                        f"❌ Ваша подписка истекла!\n\n"
-                        f"У вас есть 1 час для продления.\n"
-                        f"Если не продлите, доступ будет закрыт.\n\n"
-                        f"Нажмите /start → \"Оплатить подписку\""
-                    )
-                else:
-                    continue
+                    # Отправляем уведомление (ошибка отправки не блокирует деактивацию)
+                    try:
+                        await bot.send_message(
+                            user_id,
+                            "❌ Ваша подписка истекла. Доступ закрыт.\n\n"
+                            "Чтобы возобновить доступ, оформите новую подписку:\n"
+                            "/start → \"Оплатить подписку\""
+                        )
+                    except TelegramForbiddenError:
+                        logger.warning(f"User {user_id} blocked bot on expired notification")
+                    except Exception as e:
+                        logger.warning(f"Failed to send expired notification to user {user_id}: {e}")
 
-                try:
-                    await bot.send_message(user_id, message)
-                    mark_notification_sent(user_id, sub_id, notif_type)
-                    logger.info(f"Sent {notif_type} notification to user {user_id}")
-                except TelegramForbiddenError as e:
-                    logger.warning(f"Failed to send {notif_type} notification to user {user_id}: {e}")
-                    # Бот заблокирован — всё равно помечаем уведомление как отправленное,
-                    # чтобы не блокировать кик (get_users_to_kick требует запись 'expired')
-                    mark_notification_sent(user_id, sub_id, notif_type)
-                except Exception as e:
-                    logger.warning(f"Failed to send {notif_type} notification to user {user_id}: {e}")
+                    mark_notification_sent(user_id, sub_id, "expired")
 
-            # 2. Кикаем пользователей с истекшим grace period
-            users_to_kick = get_users_to_kick()
-            kicked_telegram_ids = []
-            for user_info in users_to_kick:
-                user_id = user_info["user_id"]
-                sub_id = user_info["subscription_id"]
-                try:
-                    results = await kick_and_unban_user(bot, user_id)
-                    logger.info(f"Kicked user {user_id} from chats: {results}")
+                    # Кикаем из чатов
+                    kick_results = await kick_and_unban_user(bot, user_id)
+                    logger.info(f"Kicked user {user_id} from chats: {kick_results}")
 
-                    # Деактивируем подписку в локальной БД
-                    deactivate_expired_subscriptions()
-
-                    # Отмечаем, что пользователь был кикнут (чтобы не кикать повторно)
-                    mark_notification_sent(user_id, sub_id, "kicked")
-
+                    # Добавляем в список на деактивацию бэкенда ДО любых DB-операций,
+                    # которые могут упасть — чтобы API-ключ удалился в любом случае
                     kicked_telegram_ids.append(user_id)
 
-                    # Отправляем финальное уведомление
-                    await bot.send_message(
-                        user_id,
-                        "❌ Ваша подписка истекла. Вы были удалены из ДАО.\n\n"
-                        "Чтобы вернуться, оформите новую подписку:\n"
-                        "/start → \"Оплатить подписку\""
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to kick user {user_id}: {e}")
+                    try:
+                        mark_notification_sent(user_id, sub_id, "kicked")
+                    except Exception as e:
+                        logger.error(f"Failed to mark kicked for user {user_id}: {e}")
 
-            # Деактивируем API-ключи истекших пользователей в бэкенде
+                    logger.info(f"Processed expiry for user {user_id}")
+
+            # Деактивируем просроченные подписки в локальной БД одним вызовом
+            if kicked_telegram_ids:
+                deactivate_expired_subscriptions()
+
+            # Деактивируем API-ключи в бэкенде одним запросом
             if kicked_telegram_ids:
                 await backend_client.deactivate_subscriptions(kicked_telegram_ids)
+                logger.info(f"Deactivated backend subscriptions for: {kicked_telegram_ids}")
 
         except Exception as e:
             logger.error(f"Error in subscription notifications check: {e}")

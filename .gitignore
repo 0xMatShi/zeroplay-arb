@@ -28,7 +28,7 @@ notification-bot/src/__pycache__/
 payment-bot/.venv/
 payment-bot/data/
 payment-bot/logs/
-
+payment-bot/__pycache__/
 # Temp / test files
 console-output.txt
 polymarket-sport-market-example.txt

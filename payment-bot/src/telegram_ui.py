@@ -51,6 +51,10 @@ from src.payments import (
     get_withdrawal_wallet,
     has_renewal_discount,
     get_recently_expired_subscription,
+    set_user_admin,
+    is_user_admin,
+    ensure_admin_demo_link,
+    get_admin_referral_stats,
 )
 
 router = Router()
@@ -209,6 +213,39 @@ async def cmd_start_with_referral(message: Message, state: FSMContext) -> None:
         logger.info(f"Referral link lookup: {ref_link}")
 
         if ref_link and ref_link["is_active"]:
+            # Проверяем, является ли это Admin-ссылкой
+            is_admin_link = ref_link.get("is_admin_link", 0) == 1
+
+            if is_admin_link:
+                success = use_referral_link(user.id, referral_code)  # type: ignore
+                if success:
+                    set_user_admin(user.id)  # type: ignore
+                    commission = ref_link.get("admin_commission_percent") or 0
+                    demo_code = ensure_admin_demo_link(user.id, commission)  # type: ignore
+                    bot_info = await bot.get_me()
+                    bot_username = bot_info.username or "bot"
+                    demo_url = f"https://t.me/{bot_username}?start={demo_code}"
+
+                    logger.info(f"User {user.id} granted Admin status via referral code {referral_code}")  # type: ignore
+                    await safe_send_message(
+                        message,
+                        f"🎉 Вам присвоен статус <b>Admin</b>!\n\n"
+                        f"Ваша персональная демо-ссылка:\n"
+                        f"<code>{demo_url}</code>\n\n"
+                        f"Пользователи, которые перейдут по этой ссылке, сразу получат "
+                        f"демо-доступ к сервису арбитража на 1 день с API-ключом.",
+                        parse_mode=ParseMode.HTML,
+                    )
+                else:
+                    logger.warning(f"User {user.id} failed to use admin referral code {referral_code}")  # type: ignore
+                    await safe_send_message(
+                        message,
+                        "❌ Эта ссылка уже была использована или недействительна."
+                    )
+                await state.clear()
+                cancel_user_payment_sessions(user.id)  # type: ignore
+                return
+
             # Проверяем, является ли это мгновенной бесплатной ссылкой
             is_instant = ref_link.get("is_instant", 0) == 1
             free_days = ref_link.get("free_days")
@@ -225,68 +262,85 @@ async def cmd_start_with_referral(message: Message, state: FSMContext) -> None:
                     action = result.get("action")
 
                     if action == "skipped":
-                        # У пользователя бессрочная подписка
+                        # У пользователя уже есть активная или бессрочная подписка
                         await safe_send_message(
                             message,
-                            "У вас уже есть бессрочная подписка! 🎉\n\n"
-                            "Бесплатные дни не могут быть добавлены к бессрочной подписке."
+                            "❌ У вас уже есть активная подписка.\n\n"
+                            "Бесплатные дни предоставляются только при отсутствии действующей подписки."
                         )
                         await state.clear()
                         cancel_user_payment_sessions(user.id) # type: ignore
                         return
 
-                    # Генерируем пригласительные ссылки для чата и группы
-                    try:
-                        invite_links = await create_invite_links(bot, user.id, f"Бесплатная подписка ({free_days} дней)") # type: ignore
+                    expires_at = result.get("expires_at")
+                    owner_user_id = ref_link.get("owner_user_id")
 
-                        link_text = "\n\n📱 Ваши одноразовые ссылки для вступления:"
-
-                        if invite_links.get("chat"):
-                            link_text += f"\n\n🔹 Чат:\n{invite_links['chat']}"
+                    if owner_user_id:
+                        # Демо-ссылка от администратора: только API-ключ, без ссылок на вступление
+                        api_key = await backend_client.activate_subscription(user.id, "demo", expires_at)  # type: ignore
+                        if api_key:
+                            api_key_text = (
+                                f"\n\n🔑 Ваш API-ключ для входа на сайт:\n<code>{api_key}</code>\n\n"
+                                f"⚠️ Сохраните ключ — он нужен для авторизации на сервисе!"
+                            )
                         else:
-                            link_text += f"\n\n🔹 Чат:\n⚠️ Не удалось создать ссылку"
+                            api_key_text = "\n\n⚠️ Не удалось получить API-ключ. Обратитесь в поддержку."
+                            logger.error(f"Failed to get API key from backend for demo user {user.id}")  # type: ignore
 
-                        if invite_links.get("group"):
-                            link_text += f"\n\n🔹 Группа:\n{invite_links['group']}"
+                        if action == "extended":
+                            if expires_at:
+                                expires_dt = datetime.fromisoformat(expires_at).astimezone(timezone(timedelta(hours=3)))
+                                expires_str = expires_dt.strftime('%d.%m.%Y %H:%M')
+                            else:
+                                expires_str = "не определена"
+                            success_text = (
+                                f"🎉 Отлично!\n\n"
+                                f"К вашей подписке добавлено {free_days} дней!\n\n"
+                                f"Новая дата истечения: {expires_str} (МСК)"
+                                f"{api_key_text}"
+                            )
                         else:
-                            link_text += f"\n\n🔹 Группа:\n⚠️ Не удалось создать ссылку"
+                            success_text = (
+                                f"🎉 Поздравляем!\n\n"
+                                f"Вам предоставлен демо-доступ к сервису арбитража на {free_days} день!"
+                                f"{api_key_text}"
+                            )
 
-                        link_text += "\n\n⚠️ Каждая ссылка станет недействительной после присоединения одного человека!"
+                        await safe_send_message(message, success_text, parse_mode=ParseMode.HTML)
 
-                    except Exception as e:
-                        logger.error(f"Failed to create invite links for user {user.id}: {e}") # type: ignore
-                        link_text = "\n\n⚠️ Не удалось создать пригласительные ссылки. Обратитесь в поддержку."
-
-                    # Формируем сообщение в зависимости от действия
-                    if action == "created":
-                        success_text = (
-                            f"🎉 Поздравляем!\n\n"
-                            f"Вам активирована бесплатная подписка на {free_days} дней!"
-                            f"{link_text}"
-                        )
-                    elif action == "extended":
-                        # Вычисляем новую дату истечения для отображения
-                        expires_at = result.get("expires_at")
-                        if expires_at:
-                            expires_dt = datetime.fromisoformat(expires_at).astimezone(timezone(timedelta(hours=3)))
-                            expires_str = expires_dt.strftime('%d.%m.%Y %H:%M')
-                        else:
-                            expires_str = "не определена"
-
-                        success_text = (
-                            f"🎉 Отлично!\n\n"
-                            f"К вашей подписке добавлено {free_days} дней!\n\n"
-                            f"Новая дата истечения: {expires_str} (МСК)"
-                            f"{link_text}"
-                        )
                     else:
-                        success_text = (
-                            f"🎉 Поздравляем!\n\n"
-                            f"Вам активирована бесплатная подписка на {free_days} дней!"
-                            f"{link_text}"
-                        )
+                        # Обычная бесплатная ссылка: формируем ссылки на вступление
+                        try:
+                            invite_links = await create_invite_links(bot, user.id, f"Бесплатная подписка ({free_days} дней)")  # type: ignore
 
-                    await safe_send_message(message, success_text)
+                            link_text = "\n\n📱 Ваши одноразовые ссылки для вступления:"
+                            link_text += f"\n\n🔹 Чат:\n{invite_links['chat']}" if invite_links.get("chat") else "\n\n🔹 Чат:\n⚠️ Не удалось создать ссылку"
+                            link_text += f"\n\n🔹 Группа:\n{invite_links['group']}" if invite_links.get("group") else "\n\n🔹 Группа:\n⚠️ Не удалось создать ссылку"
+                            link_text += "\n\n⚠️ Каждая ссылка станет недействительной после присоединения одного человека!"
+                        except Exception as e:
+                            logger.error(f"Failed to create invite links for user {user.id}: {e}")  # type: ignore
+                            link_text = "\n\n⚠️ Не удалось создать пригласительные ссылки. Обратитесь в поддержку."
+
+                        if action == "extended":
+                            if expires_at:
+                                expires_dt = datetime.fromisoformat(expires_at).astimezone(timezone(timedelta(hours=3)))
+                                expires_str = expires_dt.strftime('%d.%m.%Y %H:%M')
+                            else:
+                                expires_str = "не определена"
+                            success_text = (
+                                f"🎉 Отлично!\n\n"
+                                f"К вашей подписке добавлено {free_days} дней!\n\n"
+                                f"Новая дата истечения: {expires_str} (МСК)"
+                                f"{link_text}"
+                            )
+                        else:
+                            success_text = (
+                                f"🎉 Поздравляем!\n\n"
+                                f"Вам активирована бесплатная подписка на {free_days} дней!"
+                                f"{link_text}"
+                            )
+
+                        await safe_send_message(message, success_text)
 
                     # Очищаем FSM и сессии
                     await state.clear()
@@ -640,27 +694,21 @@ async def process_tx_hash(message: Message, state: FSMContext, bot: Bot) -> None
         api_key_text = "\n\n⚠️ Не удалось получить ключ для входа. Обратитесь в поддержку."
         logger.error(f"Failed to get API key from backend for user {user_id}")
 
-    # Генерируем пригласительные ссылки для чата и группы
-    try:
-        invite_links = await create_invite_links(bot, user_id, plan.get('label', plan_id))
+    # Генерируем пригласительные ссылки только для планов 1month и 3months
+    needs_invite = plan.get("invite_links", False)
+    link_text = ""
+    if needs_invite:
+        try:
+            invite_links = await create_invite_links(bot, user_id, plan.get('label', plan_id))
 
-        link_text = "\n\n📱 Ваши одноразовые ссылки для вступления:"
+            link_text = "\n\n📱 Ваши одноразовые ссылки для вступления:"
+            link_text += f"\n\n🔹 Чат:\n{invite_links['chat']}" if invite_links.get("chat") else "\n\n🔹 Чат:\n⚠️ Не удалось создать ссылку"
+            link_text += f"\n\n🔹 Группа:\n{invite_links['group']}" if invite_links.get("group") else "\n\n🔹 Группа:\n⚠️ Не удалось создать ссылку"
+            link_text += "\n\n⚠️ Каждая ссылка станет недействительной после присоединения одного человека!"
 
-        if invite_links.get("chat"):
-            link_text += f"\n\n🔹 Чат:\n{invite_links['chat']}"
-        else:
-            link_text += f"\n\n🔹 Чат:\n⚠️ Не удалось создать ссылку"
-
-        if invite_links.get("group"):
-            link_text += f"\n\n🔹 Группа:\n{invite_links['group']}"
-        else:
-            link_text += f"\n\n🔹 Группа:\n⚠️ Не удалось создать ссылку"
-
-        link_text += "\n\n⚠️ Каждая ссылка станет недействительной после присоединения одного человека!"
-
-    except Exception as e:
-        logger.error(f"Failed to create invite links for user {user_id}: {e}")
-        link_text = "\n\n⚠️ Не удалось создать пригласительные ссылки. Обратитесь в поддержку."
+        except Exception as e:
+            logger.error(f"Failed to create invite links for user {user_id}: {e}")
+            link_text = "\n\n⚠️ Не удалось создать пригласительные ссылки. Обратитесь в поддержку."
 
     # Формируем сообщение в зависимости от действия
     if action == "extended" and expires_at and days_added:
@@ -750,10 +798,31 @@ async def show_profile(callback: CallbackQuery) -> None:
     else:
         status_text = "У вас нет активной подписки."
 
+    # Формируем блок для Admin
+    admin_text = ""
+    if is_user_admin(user_id):
+        demo_code = ensure_admin_demo_link(user_id)
+        bot_info = await callback.bot.get_me()  # type: ignore
+        bot_username = bot_info.username or "bot"
+        demo_url = f"https://t.me/{bot_username}?start={demo_code}"
+
+        stats = get_admin_referral_stats(user_id)
+        buyers = stats["buyers"]
+        total_spent = stats["total_spent"]
+        admin_share = stats["admin_share"]
+        commission_pct = stats["commission_percent"]
+
+        admin_text = (
+            f"\n\n👑 Статус: <b>Admin</b>\n"
+            f"Покупок: {buyers} | {total_spent:.2f}$ - {admin_share:.2f}$ ({commission_pct}%)\n"
+            f"Ваша демо-ссылка:\n<code>{demo_url}</code>"
+        )
+
     text = (
         f"Личный кабинет\n\n"
         f"ID: {user_id}\n"
         f"{status_text}"
+        f"{admin_text}"
     )
 
     logger.info(f"User {user_id} opened profile")

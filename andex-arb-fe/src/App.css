@@ -5653,6 +5653,10 @@
   color: #ea580c;
 }
 
+.sports-platform-label--stake {
+  color: #22c55e;
+}
+
 .sports-outcome-name {
   font-family: var(--font-mono);
   font-size: 16px;

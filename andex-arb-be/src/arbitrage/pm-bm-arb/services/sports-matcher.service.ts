@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { PolymarketSportsAdapter } from '../adapters/polymarket-sports/polymarket-sports.adapter';
 import { DexsportAdapter } from '../adapters/dexsport/dexsport.adapter';
 import { PinnacleAdapter } from '../adapters/pinnacle/pinnacle.adapter';
+import { StakeAdapter } from '../adapters/stake/stake.adapter';
 import {
   SportsMatch,
   MatchedMarketPair,
@@ -180,7 +181,7 @@ function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): D
   const type = pm.sportsMarketType;
   if (!type) return null;
 
-  // ── Fast path: adapter knows exact market type (e.g. Pinnacle) ──────────
+  // ── Fast path: adapter knows exact market type (e.g. Pinnacle, Stake) ───
   const explicitMarkets = dexMarkets.filter((d) => d.marketType !== undefined);
   if (explicitMarkets.length > 0) {
     if (type === 'child_moneyline') {
@@ -191,7 +192,63 @@ function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): D
         (d) => d.marketType === 'child_moneyline' && d.name === `child_moneyline_map${n}`,
       ) ?? null;
     }
-    return explicitMarkets.find((d) => d.marketType === type) ?? null;
+
+    const typeMatches = explicitMarkets.filter((d) => d.marketType === type);
+    if (typeMatches.length === 0) return null;
+
+    // For value-based types (totals, spreads, handicaps) compare numeric values
+    // — there can be multiple lines (e.g. Total 220.5 and Total 224.5) and we need
+    // the one that matches the PM question's line, not just the first by marketType.
+    if (VALUE_TYPES.has(type)) {
+      const pmValue = extractPmValue(pm.question);
+      if (pmValue !== null) {
+        const valueMatches = typeMatches.filter((dex) => {
+          const dexValue = extractDexValue(dex.outcomes);
+          if (dexValue === null) return false;
+          if (SPREAD_TYPES.has(type)) {
+            return Math.abs(Math.abs(pmValue) - Math.abs(dexValue)) < 0.01;
+          }
+          return Math.abs(pmValue - dexValue) < 0.01;
+        });
+        if (valueMatches.length === 0) return null;
+
+        // For spread/handicap: also verify direction alignment
+        if (SPREAD_TYPES.has(type)) {
+          const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const pmNegNorms = [extractPmNegativeTeam(pm.question), pm.outcomeNames[0] ?? '']
+            .filter(Boolean)
+            .map((s) => norm(s!))
+            .filter((n) => n.length > 0);
+
+          if (pmNegNorms.length > 0) {
+            const matchesNegTeam = (teamNorm: string) =>
+              pmNegNorms.some((n) => teamNorm.includes(n) || n.includes(teamNorm));
+
+            const directionMatch = valueMatches.find((dex) =>
+              dex.outcomes.some((o) => {
+                if (!o.name.includes('-')) return false;
+                const teamNorm = norm(o.name.replace(/\s*[+-][\d.]+$/, '').trim());
+                return matchesNegTeam(teamNorm);
+              }),
+            );
+            if (directionMatch) return directionMatch;
+
+            const invertedDirection = valueMatches.some((dex) =>
+              dex.outcomes.some((o) => {
+                if (!o.name.includes('+')) return false;
+                const teamNorm = norm(o.name.replace(/\s*[+-][\d.]+$/, '').trim());
+                return matchesNegTeam(teamNorm);
+              }),
+            );
+            if (invertedDirection) return null;
+          }
+        }
+
+        return valueMatches[0];
+      }
+    }
+
+    return typeMatches[0];
   }
 
   // ── Name-based path: DexSport (market names come from API) ──────────────
@@ -316,6 +373,7 @@ export class SportsMatcher {
     private readonly polyAdapter: PolymarketSportsAdapter,
     private readonly dexAdapter: DexsportAdapter,
     private readonly pinnacleAdapter: PinnacleAdapter,
+    private readonly stakeAdapter: StakeAdapter,
   ) {}
 
   findMatches(): SportsMatch[] {
@@ -327,11 +385,14 @@ export class SportsMatcher {
     const pinnacleMatches = this.matchBookmakerEvents(
       this.pinnacleAdapter.getEvents(), pmEvents, 'pinnacle',
     );
+    const stakeMatches = this.matchBookmakerEvents(
+      this.stakeAdapter.getEvents(), pmEvents, 'stake',
+    );
 
-    const all = [...dexMatches, ...pinnacleMatches];
+    const all = [...dexMatches, ...pinnacleMatches, ...stakeMatches];
     const totalMarkets = all.reduce((s, p) => s + p.matchedMarkets.length, 0);
     this.logger.log(
-      `SportsMatcher: ${pmEvents.length} PM | dexsport=${dexMatches.length} pinnacle=${pinnacleMatches.length}` +
+      `SportsMatcher: ${pmEvents.length} PM | dexsport=${dexMatches.length} pinnacle=${pinnacleMatches.length} stake=${stakeMatches.length}` +
       ` → ${all.length} matched events, ${totalMarkets} matched markets`,
     );
     return all;
@@ -340,9 +401,10 @@ export class SportsMatcher {
   private matchBookmakerEvents(
     bmEvents: DexSportsEvent[],
     pmEvents: PmSportsEvent[],
-    platform: 'dexsport' | 'pinnacle',
+    platform: 'dexsport' | 'pinnacle' | 'stake',
   ): SportsMatch[] {
-    // Resolve dexsport sport slugs to canonical sport keys (no-op for Pinnacle)
+    // Resolve dexsport sport slugs to canonical sport keys.
+    // Pinnacle and Stake already set the canonical sportKey — DEX_SLUG_TO_SPORT is a no-op for them.
     const bmMapped = bmEvents.map((e) => ({
       ...e,
       sportKey: DEX_SLUG_TO_SPORT.get(e.sportKey) ?? e.sportKey,

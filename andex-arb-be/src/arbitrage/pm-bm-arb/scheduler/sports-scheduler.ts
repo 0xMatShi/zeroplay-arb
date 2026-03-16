@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PolymarketSportsAdapter } from '../adapters/polymarket-sports/polymarket-sports.adapter';
 import { DexsportAdapter } from '../adapters/dexsport/dexsport.adapter';
 import { PinnacleAdapter } from '../adapters/pinnacle/pinnacle.adapter';
+import { StakeAdapter } from '../adapters/stake/stake.adapter';
 import { SportsMatcher } from '../services/sports-matcher.service';
 import { SportsArbScanner } from '../services/sports-arb-scanner.service';
 import { SportsMatch, SportsArbitrageOpportunity } from '../interfaces/sports-arb.types';
@@ -48,6 +49,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   /** Track which adapters have completed at least one full fetch */
   private dexReady = false;
   private pinnacleReady = false;
+  private stakeReady = false;
 
   /**
    * PM token IDs for currently matched markets (updated after each match cycle).
@@ -60,6 +62,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly polyAdapter: PolymarketSportsAdapter,
     private readonly dexAdapter: DexsportAdapter,
     private readonly pinnacleAdapter: PinnacleAdapter,
+    private readonly stakeAdapter: StakeAdapter,
     private readonly matcher: SportsMatcher,
     private readonly scanner: SportsArbScanner,
     @Optional() private readonly gateway: SportsArbGateway | null = null,
@@ -71,16 +74,27 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.polyAdapter.onPriceUpdate = priceHandler;
     this.dexAdapter.onPriceUpdate = priceHandler;
     this.pinnacleAdapter.onPriceUpdate = priceHandler;
+    this.stakeAdapter.onPriceUpdate = priceHandler;
 
-    // When a bookmaker adapter signals all markets are ready, run a full match cycle
-    // — but only once BOTH bookmaker adapters have completed their initial fetch
+    // If Pinnacle credentials are missing it will never fire onAllMarketsReady,
+    // so mark it ready immediately to avoid blocking dex + stake.
+    if (!process.env.PINNACLE_USERNAME || !process.env.PINNACLE_PASSWORD) {
+      this.logger.warn('Pinnacle credentials not set — treating Pinnacle as ready (no events)');
+      this.pinnacleReady = true;
+    }
+
+    // Fire match cycle once all available bookmaker adapters have signalled ready.
     this.dexAdapter.onAllMarketsReady = () => {
       this.dexReady = true;
-      if (this.pinnacleReady) this.onBookmakerMarketsReady('dexsport');
+      if (this.pinnacleReady && this.stakeReady) this.onBookmakerMarketsReady('dexsport');
     };
     this.pinnacleAdapter.onAllMarketsReady = () => {
       this.pinnacleReady = true;
-      if (this.dexReady) this.onBookmakerMarketsReady('pinnacle');
+      if (this.dexReady && this.stakeReady) this.onBookmakerMarketsReady('pinnacle');
+    };
+    this.stakeAdapter.onAllMarketsReady = () => {
+      this.stakeReady = true;
+      if (this.dexReady && this.pinnacleReady) this.onBookmakerMarketsReady('stake');
     };
   }
 
@@ -91,6 +105,8 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.dexAdapter.onAllMarketsReady = null;
     this.pinnacleAdapter.onPriceUpdate = null;
     this.pinnacleAdapter.onAllMarketsReady = null;
+    this.stakeAdapter.onPriceUpdate = null;
+    this.stakeAdapter.onAllMarketsReady = null;
   }
 
   // ── Cron: hourly discovery reset ──────────────────────────────
@@ -120,21 +136,36 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     // Reset readiness flags before adapters start re-fetching
     this.dexReady = false;
     this.pinnacleReady = false;
+    this.stakeReady = false;
+
+    // If Pinnacle credentials are missing it will never fire onAllMarketsReady — skip it
+    if (!process.env.PINNACLE_USERNAME || !process.env.PINNACLE_PASSWORD) {
+      this.pinnacleReady = true;
+    }
 
     // Clear all adapter caches (as if just started)
     this.polyAdapter.clearCache();
     this.pinnacleAdapter.clearCache();
     this.dexAdapter.clearCache(); // also triggers WS reconnect → full rediscovery
 
-    // Close existing Pinnacle WS connections BEFORE login so they don't
-    // receive messages against a cleared cache during the 20-30s Chrome login window.
+    // Close existing Pinnacle + Stake WS connections BEFORE login so they don't
+    // receive messages against a cleared cache during the Chrome login window.
     this.pinnacleAdapter.closeAll();
+    this.stakeAdapter.closeAll();
 
-    // Re-login to get fresh session cookies and WS URL
-    await this.pinnacleAdapter.login();
+    // Re-login: Pinnacle needs fresh session + WS URL; Stake needs fresh cf_clearance.
+    // Run in parallel to save time.
+    await Promise.all([
+      this.pinnacleAdapter.login(),
+      this.stakeAdapter.login(),
+    ]);
 
-    // Open new connections with fresh credentials (closeAll already called above)
+    // Pinnacle: reconnect WS with fresh session
     this.pinnacleAdapter.resetPhaseState();
+
+    // Stake: full reset — clear caches, re-fetch fixtures + initial odds, reconnect WS
+    // clearCache() handles the full async chain internally
+    this.stakeAdapter.clearCache();
   }
 
   // ── Cron: Refresh PM order books every second ─────────────────
@@ -192,8 +223,10 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       const pmTokenSet = new Set<string>();
       const dexEntries: Array<{ eventId: string; marketId: string }> = [];
       const pinnacleEntries: Array<{ eventId: string; marketId: string }> = [];
+      const stakeEntries: Array<{ eventId: string; marketId: string }> = [];
       const dexTracked = new Set<string>();
       const pinnacleTracked = new Set<string>();
+      const stakeTracked = new Set<string>();
 
       for (const m of this.currentMatches) {
         for (const mp of m.matchedMarkets) {
@@ -201,6 +234,9 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
           if (m.bookmakerPlatform === 'dexsport') {
             dexEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
             dexTracked.add(mp.dexMarket.marketId);
+          } else if (m.bookmakerPlatform === 'stake') {
+            stakeEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
+            stakeTracked.add(mp.dexMarket.marketId);
           } else {
             pinnacleEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
             pinnacleTracked.add(mp.dexMarket.marketId);
@@ -223,10 +259,16 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       if (pinnacleEntries.length > 0) {
         this.pinnacleAdapter.subscribeToMatchedMarkets(pinnacleEntries);
       }
+      // Stake: subscribeToMatchedMarkets is a no-op (push-based), but we still call it
+      // to keep the contract symmetric and allow future per-fixture filtering.
+      if (stakeEntries.length > 0) {
+        this.stakeAdapter.subscribeToMatchedMarkets(stakeEntries);
+      }
 
       // Update tracked market IDs for debug logging
       this.dexAdapter.trackedMarketIds = dexTracked;
       this.pinnacleAdapter.trackedMarketIds = pinnacleTracked;
+      this.stakeAdapter.trackedMarketIds = stakeTracked;
 
       // Immediately scan after fresh match (no debounce — explicit trigger)
       this.runScanNow();

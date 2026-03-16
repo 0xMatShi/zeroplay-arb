@@ -19,5 +19,14 @@ services:
       timeout: 5s
       retries: 5
 
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: arb-flaresolverr
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: info
+    ports:
+      - "8191:8191"
+
 volumes:
   postgres_data:

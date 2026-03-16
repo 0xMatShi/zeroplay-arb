@@ -90,9 +90,9 @@ def format_expires(expires_at: str | None) -> str:
 
 
 PLAN_LABELS = {
-    "1month": "1 месяц",
+    "1week":   "1 неделя",
+    "1month":  "1 месяц",
     "3months": "3 месяца",
-    "forever": "Навсегда",
 }
 
 
@@ -127,11 +127,8 @@ def change_plan(user_id: int) -> None:
     conn = get_connection()
     cursor = conn.cursor()
 
-    if new_plan == "forever":
-        expires_at = None
-    else:
-        days = {"1month": 30, "3months": 90}[new_plan]
-        expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    days = {"1week": 7, "1month": 30, "3months": 90}[new_plan]
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
 
     cursor.execute("DELETE FROM subscriptions WHERE user_id = ?", (user_id,))
     cursor.execute(
@@ -468,8 +465,8 @@ def menu_new_referral() -> None:
     link_type = inquirer.select(  # type: ignore
         message="Тип ссылки:",
         choices=[
-            "Обычная (с оплатой)",
-            "Бесплатная мгновенная (одноразовая)",
+            "Для внутреннего использования",
+            "Admins (присваивает статус Admin + демо-ссылка)",
             "< Отмена"
         ]
     ).execute()
@@ -477,39 +474,51 @@ def menu_new_referral() -> None:
     if link_type == "< Отмена":
         return
 
-    is_instant = (link_type == "Бесплатная мгновенная (одноразовая)")
+    is_admin_link = (link_type == "Admins (присваивает статус Admin + демо-ссылка)")
 
-    if is_instant:
-        # Для бесплатной ссылки запрашиваем только количество дней и название
-        days_str = inquirer.text(  # type: ignore
-            message="Количество дней подписки:",
-            default="30"
-        ).execute()
-
-        try:
-            free_days = int(days_str)
-            if free_days <= 0:
-                raise ValueError("Количество дней должно быть положительным")
-        except ValueError:
-            print("\n❌ Некорректное число. Отмена.\n")
-            inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
-            return
-
+    if is_admin_link:
+        # Для Admin-ссылки: название и лимит использований
         name = inquirer.text(  # type: ignore
             message="Название ссылки (для идентификации):",
             default=""
         ).execute()
-
         name = name.strip() if name.strip() else None
+
+        max_uses_str = inquirer.text(  # type: ignore
+            message="Лимит использований (пустое = безлимит):",
+            default=""
+        ).execute()
+        max_uses = None
+        if max_uses_str.strip():
+            try:
+                max_uses = int(max_uses_str)
+            except ValueError:
+                print("\n❌ Некорректное число. Отмена.\n")
+                inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
+                return
+
+        commission_str = inquirer.text(  # type: ignore
+            message="Комиссия администратора от покупок (% от суммы, например 20):",
+            default="20"
+        ).execute()
+        try:
+            commission_percent = int(commission_str.strip())
+            if not (0 <= commission_percent <= 100):
+                raise ValueError
+        except ValueError:
+            print("\n❌ Некорректный процент. Отмена.\n")
+            inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
+            return
 
         # Подтверждение
         clear()
         print("=" * 80)
         print("ПОДТВЕРЖДЕНИЕ")
         print("=" * 80)
-        print(f"  Тип:                 Бесплатная мгновенная (одноразовая)")
+        print(f"  Тип:                 Admins (присваивает статус Admin)")
         print(f"  Название:            {name if name else 'без названия'}")
-        print(f"  Количество дней:     {free_days}")
+        print(f"  Лимит использований: {max_uses if max_uses else 'безлимит'}")
+        print(f"  Комиссия:            {commission_percent}%")
         print("=" * 80 + "\n")
 
         confirm = inquirer.select(  # type: ignore
@@ -520,49 +529,48 @@ def menu_new_referral() -> None:
         if confirm != "Да":
             return
 
-        # Создание бесплатной ссылки (одноразовая, max_uses=1)
         code = create_referral_link(
-            max_uses=1,
+            max_uses=max_uses,
             custom_prices=None,
             name=name,
-            free_days=free_days,
-            is_instant=True
+            is_admin_link=True,
+            admin_commission_percent=commission_percent,
         )
 
-        # Получаем username бота и формируем ссылку
         bot_username = asyncio.run(get_bot_username())
         referral_url = f"https://t.me/{bot_username}?start={code}"
 
-        # Сохраняем в файл
         os.makedirs("data", exist_ok=True)
-        filepath = f"data/referral_free_{code}.txt"
+        filepath = f"data/referral_admin_{code}.txt"
         with open(filepath, "w", encoding="utf-8") as f:
-            f.write(f"Бесплатная реферальная ссылка\n")
+            f.write("Admin реферальная ссылка\n")
             f.write("=" * 80 + "\n\n")
             if name:
                 f.write(f"Название: {name}\n")
             f.write(f"Код: {code}\n")
             f.write(f"Ссылка: {referral_url}\n\n")
-            f.write(f"Тип: Мгновенная активация (одноразовая)\n")
-            f.write(f"Количество дней: {free_days}\n")
+            f.write(f"Тип: Admin (присваивает статус Admin + персональная демо-ссылка)\n")
+            f.write(f"Лимит использований: {max_uses if max_uses else 'безлимит'}\n")
+            f.write(f"Комиссия: {commission_percent}%\n")
 
-        # Показываем результат
         clear()
         print("=" * 80)
-        print("✅ БЕСПЛАТНАЯ ССЫЛКА СОЗДАНА")
+        print("✅ ADMIN-ССЫЛКА СОЗДАНА")
         print("=" * 80)
         if name:
             print(f"\nНазвание: {name}")
         print(f"Код: {code}")
         print(f"Ссылка: {referral_url}")
-        print(f"Количество дней: {free_days}")
+        print(f"Комиссия: {commission_percent}%")
+        print(f"\nПользователь, перешедший по этой ссылке, получит статус Admin")
+        print(f"и персональную демо-ссылку для раздачи 1-дневного демо-доступа.")
         print(f"\nСохранено в: {filepath}\n")
         print("=" * 80 + "\n")
 
         inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
         return
 
-    # Для обычной ссылки - старый функционал
+    # Для обычной ссылки
     # 1. Лимит пользователей
     max_uses_str = inquirer.text(  # type: ignore
         message="Лимит использований (оставьте пустым для безлимита):",
@@ -590,7 +598,7 @@ def menu_new_referral() -> None:
             # Проверяем формат (поддержка float)
             prices = [float(p.strip()) for p in custom_prices_str.split(",")]
             if len(prices) != 3:
-                print("\n❌ Нужно указать ровно 3 цены (для 1мес, 3мес, навсегда). Отмена.\n")
+                print("\n❌ Нужно указать ровно 3 цены (для 1нед, 1мес, 3мес). Отмена.\n")
                 inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
                 return
             custom_prices = custom_prices_str.strip()
@@ -612,7 +620,7 @@ def menu_new_referral() -> None:
     print("=" * 80)
     print("ПОДТВЕРЖДЕНИЕ")
     print("=" * 80)
-    print(f"  Тип:                 Обычная (с оплатой)")
+    print(f"  Тип:                 Для внутреннего использования")
     print(f"  Название:            {name if name else 'без названия'}")
     print(f"  Лимит использований: {max_uses if max_uses else 'безлимит'}")
     print(f"  Кастомные цены:      {custom_prices if custom_prices else 'дефолтные'}")
@@ -887,12 +895,82 @@ def menu_check_balance() -> None:
     inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
 
 
+def menu_admin_stats() -> None:
+    """Статистика по admin-ссылкам."""
+    import sys
+    sys.path.insert(0, ".")
+    from src.payments import get_admin_links_stats
+
+    clear()
+    stats = get_admin_links_stats()
+
+    print("=" * 80)
+    print("СТАТИСТИКА ADMIN-ССЫЛОК")
+    print("=" * 80)
+
+    if not stats:
+        print("\n  Admin-ссылок нет.\n")
+    else:
+        print(f"\n  {'Название':<28} {'Комис.':>7} {'Переходы':>10} {'Оплатили':>10}  {'Сумма / Доля':>22}  Актив.")
+        print("  " + "-" * 88)
+        for s in stats:
+            name = s["name"][:27] if len(s["name"]) > 27 else s["name"]
+            active = "✅" if s["is_active"] else "❌"
+            user_label = "" if s["admin_user_id"] else "(не использована)"
+            amount_str = f"${s['total_spent']:.2f} / ${s['admin_share']:.2f}"
+            print(f"  {name:<28} {s['commission_percent']:>6}% {s['clicks']:>10} {s['paid_users']:>10}  {amount_str:>22}  {active}  {user_label}")
+        print()
+        total_clicks = sum(s["clicks"] for s in stats)
+        total_paid = sum(s["paid_users"] for s in stats)
+        total_spent = sum(s["total_spent"] for s in stats)
+        total_share = sum(s["admin_share"] for s in stats)
+        print(f"  {'ИТОГО':<28} {'':>7} {total_clicks:>10} {total_paid:>10}  {'$' + f'{total_spent:.2f}' + ' / $' + f'{total_share:.2f}':>22}")
+
+    print("\n" + "=" * 80 + "\n")
+    inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
+
+
+def menu_referral_stats() -> None:
+    """Статистика реферальных ссылок."""
+    import sys
+    sys.path.insert(0, ".")
+    from src.payments import get_all_referral_stats
+
+    clear()
+    stats = get_all_referral_stats()
+
+    print("=" * 80)
+    print("СТАТИСТИКА РЕФЕРАЛЬНЫХ ССЫЛОК")
+    print("=" * 80)
+
+    if not stats:
+        print("\n  Реферальных ссылок нет.\n")
+    else:
+        print(f"\n  {'Название':<28} {'Тип':<18} {'Переходы':>9} {'Оплатили':>9} {'Сумма':>12} {'Лимит':>8}  Актив.")
+        print("  " + "-" * 90)
+        for s in stats:
+            name = s["name"][:27] if len(s["name"]) > 27 else s["name"]
+            link_type = s["link_type"][:17] if len(s["link_type"]) > 17 else s["link_type"]
+            max_uses = str(s["max_uses"]) if s["max_uses"] else "∞"
+            active = "✅" if s["is_active"] else "❌"
+            amount_str = f"${s['total_spent']:.2f}"
+            print(f"  {name:<28} {link_type:<18} {s['clicks']:>9} {s['paid_users']:>9} {amount_str:>12} {max_uses:>8}  {active}")
+        print()
+        total_clicks = sum(s["clicks"] for s in stats)
+        total_paid = sum(s["paid_users"] for s in stats)
+        total_spent = sum(s["total_spent"] for s in stats)
+        print(f"  {'ИТОГО':<28} {'':<18} {total_clicks:>9} {total_paid:>9} {'$' + f'{total_spent:.2f}':>12}")
+
+    print("\n" + "=" * 80 + "\n")
+    inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
+
+
 def main() -> None:
     clear()
     while True:
         action = inquirer.select( # type: ignore
             message="Управление ботом:",
-            choices=["Users", "Active Users", "Check Balance", "View Master Wallets", "Export Master Wallets", "New Referral", "Exit"],
+            choices=["Users", "Active Users", "Check Balance", "View Master Wallets", "Export Master Wallets", "New Referral", "Referral Stats", "Admin Stats", "Exit"],
         ).execute()
 
         if action == "Users":
@@ -907,6 +985,10 @@ def main() -> None:
             menu_export_wallets()
         elif action == "New Referral":
             menu_new_referral()
+        elif action == "Referral Stats":
+            menu_referral_stats()
+        elif action == "Admin Stats":
+            menu_admin_stats()
         elif action == "Exit":
             break
 
