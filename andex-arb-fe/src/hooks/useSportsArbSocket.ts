@@ -129,6 +129,18 @@ export function useSportsArbSocket(options?: UseSportsArbSocketOptions) {
       )
     })
 
+    // Full snapshot every 10s — replaces entire cache to fix stale prices
+    socket.on('sports:snapshot', (data: SportsOpportunity[]) => {
+      if (pausedRef.current) return
+      queryClient.setQueryData<SportsOpportunitiesResponse>(
+        queryKeys.sportsOpportunities,
+        (old) => {
+          if (!old) return old
+          return { ...old, items: data, total: data.length }
+        },
+      )
+    })
+
     // Expired opportunity
     socket.on('sports:expired', (data: { id: string }) => {
       if (pausedRef.current) return

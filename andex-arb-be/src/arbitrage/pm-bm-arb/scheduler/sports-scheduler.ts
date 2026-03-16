@@ -194,6 +194,15 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.cloudbetAdapter.clearCache();
   }
 
+  // ── Cron: Snapshot every 10 seconds ──────────────────────────
+
+  @Cron('*/10 * * * * *')
+  handleSnapshotCron(): void {
+    if (!this.gateway || this.currentOpportunities.length === 0) return;
+    const matchMap = new Map(this.currentMatches.map((m) => [m.id, m]));
+    this.gateway.emitSnapshot(this.currentOpportunities, matchMap);
+  }
+
   // ── Cron: Refresh PM order books every second ─────────────────
 
   @Cron('* * * * * *')

@@ -204,6 +204,10 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
     this.server.emit('sports:expired', { id });
   }
 
+  emitSnapshot(opps: SportsArbitrageOpportunity[], matchMap: Map<string, SportsMatch>): void {
+    this.server.emit('sports:snapshot', opps.map((opp) => this.mapOpportunity(opp, matchMap)));
+  }
+
   getConnectedCount(): number {
     return this.server?.sockets?.sockets?.size || 0;
   }
