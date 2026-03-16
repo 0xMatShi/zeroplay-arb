@@ -5657,6 +5657,10 @@
   color: #22c55e;
 }
 
+.sports-platform-label--cloudbet {
+  color: #f59e0b;
+}
+
 .sports-outcome-name {
   font-family: var(--font-mono);
   font-size: 16px;

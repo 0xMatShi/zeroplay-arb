@@ -221,9 +221,9 @@ export function CalculatorModal({ params, onClose }: Props) {
           </div>
 
           {/* DEX box */}
-          <div className={`calc-box calc-box--${params.dexPlatform === 'pinnacle' ? 'pinnacle' : 'dex'}`} style={{ padding: '8px 12px', gap: 6, borderRadius: 20 }}>
-            <div className={`calc-box-label calc-box-label--${params.dexPlatform === 'pinnacle' ? 'pinnacle' : 'dex'}`}>
-              {params.dexPlatform === 'pinnacle' ? 'PINNACLE' : 'DEXSPORT'}
+          <div className={`calc-box calc-box--${params.dexPlatform === 'pinnacle' ? 'pinnacle' : params.dexPlatform === 'stake' ? 'stake' : params.dexPlatform === 'cloudbet' ? 'cloudbet' : 'dex'}`} style={{ padding: '8px 12px', gap: 6, borderRadius: 20 }}>
+            <div className={`calc-box-label calc-box-label--${params.dexPlatform === 'pinnacle' ? 'pinnacle' : params.dexPlatform === 'stake' ? 'stake' : params.dexPlatform === 'cloudbet' ? 'cloudbet' : 'dex'}`}>
+              {params.dexPlatform === 'pinnacle' ? 'PINNACLE' : params.dexPlatform === 'stake' ? 'STAKE' : params.dexPlatform === 'cloudbet' ? 'CLOUDBET' : 'DEXSPORT'}
             </div>
             <div className="calc-outcome" style={{ fontSize: 13 }}>{params.dexOutcome || '—'}</div>
             <div className="calc-field">

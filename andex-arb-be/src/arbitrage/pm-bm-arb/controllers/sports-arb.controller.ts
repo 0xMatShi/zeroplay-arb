@@ -48,6 +48,8 @@ export class SportsArbController {
           }
         } else if (match?.bookmakerPlatform === 'stake') {
           bookmakerUrl = match.dexEvent.url ?? 'https://stake3017.com/en/sports';
+        } else if (match?.bookmakerPlatform === 'cloudbet') {
+          bookmakerUrl = match.dexEvent.url ?? 'https://www.cloudbet.com/en/sports';
         } else if (match) {
           const rawId = match.dexEvent.eventId.includes('.') ? match.dexEvent.eventId.split('.')[1] : match.dexEvent.eventId;
           const nameSlug = match.dexEvent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

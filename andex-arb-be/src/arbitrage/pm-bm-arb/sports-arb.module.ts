@@ -5,6 +5,7 @@ import { PolymarketSportsAdapter } from './adapters/polymarket-sports/polymarket
 import { DexsportAdapter } from './adapters/dexsport/dexsport.adapter';
 import { PinnacleAdapter } from './adapters/pinnacle/pinnacle.adapter';
 import { StakeAdapter } from './adapters/stake/stake.adapter';
+import { CloudbetAdapter } from './adapters/cloudbet/cloudbet.adapter';
 
 // Services
 import { SportsMatcher } from './services/sports-matcher.service';
@@ -44,6 +45,7 @@ import { SubscriptionsModule } from '../../subscriptions/subscriptions.module';
     DexsportAdapter,
     PinnacleAdapter,
     StakeAdapter,
+    CloudbetAdapter,
 
     // Pipeline services
     SportsMatcher,

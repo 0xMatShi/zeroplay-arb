@@ -27,9 +27,9 @@ const WS_RECONNECT_DELAY_MS = 3_000;
 /** How long to wait for event list to stabilize before checking phase 1 (ms) */
 const EVENT_SETTLE_MS = 5_000;
 /** How long to wait for Match Winner on all events after list settles (ms) */
-const PHASE1_TIMEOUT_MS = 10_000;
+const PHASE1_TIMEOUT_MS = 5_000;
 /** How long to wait for phase 2 market data before firing ready anyway (ms) */
-const PHASE2_TIMEOUT_MS = 10_000;
+const PHASE2_TIMEOUT_MS = 5_000;
 
 /** Sports we track for arbitrage */
 const TARGET_SPORTS = [

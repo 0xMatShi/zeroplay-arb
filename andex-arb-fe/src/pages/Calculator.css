@@ -61,6 +61,14 @@
   color: #ea580c;
 }
 
+.calc-box-label--stake {
+  color: #22c55e;
+}
+
+.calc-box-label--cloudbet {
+  color: #f59e0b;
+}
+
 /* Outcome name — same as .sports-outcome-name */
 .calc-outcome {
   font-family: 'Inter', -apple-system, monospace;

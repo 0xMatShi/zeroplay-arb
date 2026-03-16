@@ -114,6 +114,10 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       return dexEvent.url ?? 'https://stake3017.com/en/sports';
     }
 
+    if (bookmakerPlatform === 'cloudbet') {
+      return dexEvent.url ?? 'https://www.cloudbet.com/en/sports';
+    }
+
     // DexSport URL: https://dexsport.io/{esports|sports}/{sport}/{name-slug}-{id}/bets/
     const rawId = dexEvent.eventId.includes('.')
       ? dexEvent.eventId.split('.')[1]

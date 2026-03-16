@@ -89,13 +89,13 @@ export interface SportsMatch {
   similarity: number;
   matchedMarkets: MatchedMarketPair[];
   matchedAt: number;
-  bookmakerPlatform: 'dexsport' | 'pinnacle' | 'stake';
+  bookmakerPlatform: 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet';
 }
 
 // ── Arbitrage ────────────────────────────────────────────────
 
 export interface SportsArbLeg {
-  platform: 'polymarket' | 'dexsport' | 'pinnacle' | 'stake';
+  platform: 'polymarket' | 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet';
   outcomeName: string;
   /** Probability 0..1 (cost per $1 payout) */
   probability: number;
