@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Calculator, ExternalLink, Pause, Pin, Play, User, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
-import { useOpportunities, useOrderBook, useSubscriptionStatus, useActiveSubscription, useSportsOpportunities, queryKeys } from '../api/hooks'
+import { useOpportunities, useOrderBook, useSubscriptionStatus, useActiveSubscription, useSportsOpportunities, useWhoami, queryKeys } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
 import { useSportsArbSocket } from '../hooks/useSportsArbSocket'
@@ -511,6 +511,7 @@ export function Scanner() {
 
 
   // Subscription gate: check before loading arbitrage data
+  useWhoami()
   const { data: subStatus, isLoading: isSubLoading } = useSubscriptionStatus()
   const hasSubscription = subStatus?.active === true
   const noApiKey = !localStorage.getItem('apiKey')

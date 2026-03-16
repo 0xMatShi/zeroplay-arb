@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { AuthCacheModule } from './auth/auth-cache.module';
 import { VersionModule } from './version/version.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -26,6 +29,15 @@ import { BotModule } from './bot/bot.module';
       inject: [ConfigService],
     }),
 
+    // Auth cache (global singleton — доступен во всех модулях)
+    AuthCacheModule,
+
+    // Rate limiting: 30 запросов / минуту глобально
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 30,
+    }]),
+
     // Feature modules
     VersionModule,
     UsersModule,
@@ -36,6 +48,9 @@ import { BotModule } from './bot/bot.module';
 
     ArbitrageModule,
     SportsArbModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

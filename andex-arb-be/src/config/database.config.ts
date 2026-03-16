@@ -23,6 +23,12 @@ export class DatabaseConfig implements TypeOrmOptionsFactory {
       retryAttempts: 5,
       retryDelay: 3000,
       connectTimeoutMS: 10000,
+      extra: {
+        max: 20,
+        min: 2,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000,
+      },
     };
 
     console.log('Database options:', options);
