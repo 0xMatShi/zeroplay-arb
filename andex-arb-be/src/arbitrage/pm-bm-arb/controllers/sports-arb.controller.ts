@@ -39,11 +39,10 @@ export class SportsArbController {
         let bookmakerUrl: string | undefined;
         if (match?.bookmakerPlatform === 'pinnacle') {
           const sportPath = PINNACLE_SPORT_PATH[dexSportKey];
-          if (sportPath && match.dexEvent.tournamentName && match.dexEvent.name) {
-            let leagueSlug = match.dexEvent.tournamentName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-
-            const matchSlug = match.dexEvent.name.toLowerCase().replace(/\s+/g, '-');
-            bookmakerUrl = `https://www.gentleflame47.xyz/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${match.dexEvent.eventId}#all`;
+          if (sportPath && match.dexEvent.eventId) {
+            // Pinnacle ignores the league/match slugs — only eventId matters for routing.
+            const leagueSlug = (match.dexEvent.tournamentName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            bookmakerUrl = `https://www.gentleflame47.xyz/en/standard/${sportPath}/${leagueSlug}/vs/${match.dexEvent.eventId}#all`;
           } else {
             bookmakerUrl = `https://www.gentleflame47.xyz/en/standard/${PINNACLE_SPORT_PATH[dexSportKey] ?? 'sports'}`;
           }

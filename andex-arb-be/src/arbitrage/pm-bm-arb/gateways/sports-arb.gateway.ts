@@ -101,14 +101,12 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       const sportPath = SportsArbGateway.PINNACLE_SPORT_PATH[dexEvent.sportKey];
       if (!sportPath) return 'https://www.gentleflame47.xyz/en/standard/sports';
 
-      // URL format: /en/standard/{sportPath}/{league-slug}/{home-vs-away}/{eventId}#all
-      let leagueSlug = (dexEvent.tournamentName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      // Team names must be lowercased in the URL
-      const matchSlug = dexEvent.name.toLowerCase().replace(/\s+/g, '-');
+      // Pinnacle ignores the league/match slugs — only eventId matters for routing.
+      const leagueSlug = (dexEvent.tournamentName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       const eventId = dexEvent.eventId;
 
-      return leagueSlug && matchSlug && eventId
-        ? `https://www.gentleflame47.xyz/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${eventId}#all`
+      return eventId
+        ? `https://www.gentleflame47.xyz/en/standard/${sportPath}/${leagueSlug}/vs/${eventId}#all`
         : `https://www.gentleflame47.xyz/en/standard/${sportPath}`;
     }
 

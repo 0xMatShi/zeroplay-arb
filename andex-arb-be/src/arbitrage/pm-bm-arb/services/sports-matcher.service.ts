@@ -469,7 +469,10 @@ export class SportsMatcher {
           }
 
           const sim = computeSimilarity(pmStripped, bm.name);
-          if (sim > bestSim) {
+          const isBetter =
+            sim > bestSim ||
+            (sim === bestSim && Number(bm.eventId) > Number(bestBm?.eventId ?? '0'));
+          if (isBetter) {
             bestSim = sim;
             bestBm = bm;
           }
