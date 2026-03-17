@@ -1340,7 +1340,7 @@ export function Scanner() {
               {t('scanner.renewSub') || 'Продлить подписку'}
             </a>
             <a
-              href="https://docs.subline.space"
+              href={`https://docs.subline.space?key=${localStorage.getItem('apiKey') ?? ''}`}
               target="_blank"
               rel="noopener noreferrer"
               className="profile-action-btn"

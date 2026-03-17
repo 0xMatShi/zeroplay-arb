@@ -40,6 +40,7 @@ export class SiweController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async checkAuth(@Req() req: Request): Promise<void> {
     const apiKey =
+      (req.headers['x-api-key'] as string | undefined) ||
       (req.cookies as Record<string, string>)?.['auth_api_key'] ||
       (req.headers.authorization?.startsWith('Bearer ')
         ? req.headers.authorization.substring(7)
