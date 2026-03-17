@@ -62,6 +62,7 @@ router = Router()
 BOT_WEBSITE = os.getenv("BOT_WEBSITE_URL", "subline.space")
 BOT_TELEGRAM = os.getenv("BOT_TELEGRAM_URL", "@Subline_arb")
 BOT_TWITTER = os.getenv("BOT_TWITTER_URL", "")
+NOTIFICATION_BOT_USERNAME = os.getenv("NOTIFICATION_BOT_USERNAME", "")
 
 SUPPORT_USERNAME = "wrhundred"
 
@@ -255,6 +256,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "invite_group_error": "\n\n🔹 Группа:\n⚠️ Не удалось создать ссылку",
         "invite_one_use": "\n\n⚠️ Каждая ссылка станет недействительной после присоединения одного человека!",
         "invite_error": "\n\n⚠️ Не удалось создать пригласительные ссылки. Обратитесь в поддержку.",
+        "notification_bot": "\n\n🤖 Бот уведомлений об арбитраже: {username}",
     },
     "en": {
         "choose_language": "Выберите язык / Choose language",
@@ -442,6 +444,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "invite_group_error": "\n\n🔹 Group:\n⚠️ Failed to create link",
         "invite_one_use": "\n\n⚠️ Each link becomes invalid after one person joins!",
         "invite_error": "\n\n⚠️ Failed to create invite links. Please contact support.",
+        "notification_bot": "\n\n🤖 Arbitrage notification bot: {username}",
     },
 }
 
@@ -1120,6 +1123,8 @@ async def process_tx_hash(message: Message, state: FSMContext, bot: Bot) -> None
         except Exception as e:
             logger.error(f"Failed to create invite links for user {user_id}: {e}")
             link_text = tx(lang, "invite_error")
+        if NOTIFICATION_BOT_USERNAME:
+            link_text += tx(lang, "notification_bot", username=NOTIFICATION_BOT_USERNAME)
 
     if action == "extended" and expires_at and days_added:
         expires_dt = datetime.fromisoformat(expires_at).astimezone(timezone(timedelta(hours=3)))
