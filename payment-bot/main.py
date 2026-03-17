@@ -127,9 +127,7 @@ async def main() -> None:
         logger.error("TELEGRAM_BOT_TOKEN not found in .env")
         return
 
-    chat_id = os.getenv("PRIVATE_CHAT_ID")
     group_id = os.getenv("PRIVATE_GROUP_ID")
-    logger.info(f"Loaded PRIVATE_CHAT_ID from .env: {chat_id}")
     logger.info(f"Loaded PRIVATE_GROUP_ID from .env: {group_id}")
 
     init_db()

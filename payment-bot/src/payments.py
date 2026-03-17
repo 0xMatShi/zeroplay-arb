@@ -11,7 +11,6 @@ from solders.keypair import Keypair
 from src.logger import logger
 
 DB_PATH = "data/bot.db"
-PRIVATE_CHAT_ID = int(os.getenv("PRIVATE_CHAT_ID", "0"))
 PRIVATE_GROUP_ID = int(os.getenv("PRIVATE_GROUP_ID", "0"))  # Используем имя переменной с опечаткой из .env
 
 SUBSCRIPTION_PLANS = {
@@ -1684,13 +1683,6 @@ async def create_invite_links(bot: Bot, user_id: int, plan_name: str) -> dict[st
     """
     links = {}
 
-    # Создаём ссылку для чата
-    try:
-        links["chat"] = await create_invite_link_for_chat(bot, PRIVATE_CHAT_ID, user_id, plan_name, "chat")
-    except Exception as e:
-        logger.error(f"Failed to create chat invite link: {e}")
-        links["chat"] = None
-
     # Создаём ссылку для группы
     try:
         links["group"] = await create_invite_link_for_chat(bot, PRIVATE_GROUP_ID, user_id, plan_name, "group")
@@ -1806,19 +1798,7 @@ async def kick_and_unban_user(bot: Bot, user_id: int) -> dict[str, bool]:
     Returns:
         Словарь с результатами: {"chat": bool, "group": bool}
     """
-    results = {"chat": False, "group": False}
-
-    # Кик из чата
-    if PRIVATE_CHAT_ID != 0:
-        try:
-            await bot.ban_chat_member(chat_id=PRIVATE_CHAT_ID, user_id=user_id)
-            logger.info(f"Kicked user {user_id} from chat {PRIVATE_CHAT_ID}")
-            # Сразу разбаниваем, чтобы не попал в ЧС
-            await bot.unban_chat_member(chat_id=PRIVATE_CHAT_ID, user_id=user_id, only_if_banned=True)
-            logger.info(f"Unbanned user {user_id} from chat {PRIVATE_CHAT_ID}")
-            results["chat"] = True
-        except Exception as e:
-            logger.error(f"Failed to kick/unban user {user_id} from chat: {e}")
+    results = {"group": False}
 
     # Кик из группы
     if PRIVATE_GROUP_ID != 0:

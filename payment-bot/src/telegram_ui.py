@@ -608,10 +608,6 @@ def _main_menu_text(lang: str) -> str:
 
 def _build_invite_links_text(lang: str, invite_links: dict) -> str:
     text = tx(lang, "invite_links_header")
-    if invite_links.get("chat"):
-        text += tx(lang, "invite_chat", link=invite_links["chat"])
-    else:
-        text += tx(lang, "invite_chat_error")
     if invite_links.get("group"):
         text += tx(lang, "invite_group", link=invite_links["group"])
     else:
