@@ -258,6 +258,11 @@ function SportsOpportunityCard({
   const effectiveTotal = realTotal > 0 ? Math.min(realTotal, perfectAmount) : 0
   const profitUsd = effectiveTotal > 0 ? effectiveTotal * (profitPct / 100) : 0
 
+  // Effective amounts for calculator (same min logic as profitUsd)
+  const useRealForCalc = realTotal > 0 && realTotal <= perfectAmount
+  const pmCalcAmount = useRealForCalc ? pmReal : pmPerfect
+  const dexCalcAmount = useRealForCalc ? dexReal : dexPerfect
+
   const SPORT_DISPLAY: Record<string, string> = { csgo: 'CS2' }
   const sportKey = opp.sportKey ?? ''
   const sportLabel = SPORT_DISPLAY[sportKey] ?? sportKey.toUpperCase()
@@ -395,8 +400,8 @@ function SportsOpportunityCard({
               dexOutcome: dexLeg?.outcomeName ?? '',
               pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
               dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
-              pmAmount: pmPerfect.toFixed(2),
-              dexAmount: dexPerfect.toFixed(2),
+              pmAmount: pmCalcAmount.toFixed(2),
+              dexAmount: dexCalcAmount.toFixed(2),
               dexPlatform: dexLeg?.platform,
               marketType: displayMarketType,
             })
@@ -420,8 +425,8 @@ function SportsOpportunityCard({
               dexOutcome: dexLeg?.outcomeName ?? '',
               pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
               dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
-              pmAmount: pmPerfect.toFixed(2),
-              dexAmount: dexPerfect.toFixed(2),
+              pmAmount: pmCalcAmount.toFixed(2),
+              dexAmount: dexCalcAmount.toFixed(2),
               dexPlatform: dexLeg?.platform,
               marketType: displayMarketType,
             })
