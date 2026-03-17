@@ -9,7 +9,7 @@ export function LanguageSwitcher() {
   }
 
   return (
-    <button className="lang-switcher" onClick={toggleLanguage} title="Switch language">
+    <button className="lang-switcher" onClick={toggleLanguage}>
       {i18n.language === 'ru' ? 'EN' : 'RU'}
     </button>
   )

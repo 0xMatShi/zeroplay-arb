@@ -60,7 +60,6 @@ export function Landing() {
           <nav className="header-nav">
             <div className="nav-links">
               <button onClick={() => navigate('/scanner')} className="nav-link nav-link-button" data-text={t('header.scanner')}>{t('header.scanner')}</button>
-              <a href="#alerts" className="nav-link" data-text={t('header.alerts')}>{t('header.alerts')}</a>
               <a href="/pricing" className="nav-link" data-text={t('header.pricing')}>{t('header.pricing')}</a>
             </div>
             <div className="header-actions">
@@ -68,8 +67,8 @@ export function Landing() {
               <button className="header-button-login" onClick={handleLoginClick}>
                 {t('header.login')}
               </button>
-              <button 
-                className="header-button-signup" 
+              <button
+                className="header-button-signup"
                 onClick={() => {
                   const pricingSection = document.getElementById('pricing');
                   if (pricingSection) {
@@ -79,6 +78,16 @@ export function Landing() {
               >
                 {t('header.getAccess')}
               </button>
+              <a href="#" className="header-social-icon" target="_blank" rel="noopener noreferrer" aria-label="Telegram">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                  <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                </svg>
+              </a>
+              <a href="#" className="header-social-icon" target="_blank" rel="noopener noreferrer" aria-label="X">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.91-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </a>
             </div>
           </nav>
         </div>
@@ -89,7 +98,7 @@ export function Landing() {
         <div className="hero-container hero-container--centered">
           <div className="hero-content hero-content--centered">
             <h1 className="hero-title">
-              {t('hero.title')}
+              {t('hero.titleLine1')}<br />{t('hero.titleLine2')}
             </h1>
             <p className="hero-subtitle">
               {t('hero.subtitle')}
@@ -111,7 +120,6 @@ export function Landing() {
       {/* Preview Section */}
       <section className="preview-section">
         <div className="container">
-          <h2 className="section-title">{t('preview.title')}</h2>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
             <div className="preview-toggle">
               <button className={`preview-tab${previewMode === 'bk' ? ' preview-tab--active' : ''}`} onClick={() => setPreviewMode('bk')}>PM - BK</button>
@@ -264,19 +272,16 @@ export function Landing() {
             {howItWorksTab === 'mechanism' ? (
               <div className="steps-grid">
                 <div className="step-card">
-                  <div className="step-number">1</div>
                   <h3 className="step-title">{t('howItWorks.step1Title')}</h3>
                   <p className="step-description">{t('howItWorks.step1Desc')}</p>
                 </div>
                 <div className="step-arrow">→</div>
                 <div className="step-card">
-                  <div className="step-number">2</div>
                   <h3 className="step-title">{t('howItWorks.step2Title')}</h3>
                   <p className="step-description">{t('howItWorks.step2Desc')}</p>
                 </div>
                 <div className="step-arrow">→</div>
                 <div className="step-card">
-                  <div className="step-number">3</div>
                   <h3 className="step-title">{t('howItWorks.step3Title')}</h3>
                   <p className="step-description">{t('howItWorks.step3Desc')}</p>
                 </div>
@@ -286,13 +291,35 @@ export function Landing() {
                 <h3 className="hiw-example-title">{t('howItWorks.exampleTitle')}</h3>
                 <p className="hiw-example-subtitle">{t('howItWorks.exampleSubtitle')}</p>
                 <div className="hiw-example-bets">
-                  <div className="hiw-example-bet">
-                    <div className="hiw-example-bet-label">{t('howItWorks.exampleBet1Title')}</div>
-                    <p>{t('howItWorks.exampleBet1Desc')}</p>
+                  <div className="hiw-example-bet hiw-example-bet--1">
+                    <div className="hiw-example-bet-left">
+                      <div className="hiw-example-bet-label">
+                        <span className="hiw-bet-number hiw-bet-number--1">{t('howItWorks.exampleBet1Number')}</span>{t('howItWorks.exampleBet1Title')}
+                      </div>
+                      <div className="hiw-example-bet-platform">{t('howItWorks.exampleBet1Platform')}</div>
+                    </div>
+                    <div className="hiw-example-bet-right">
+                      <span className="hiw-bet-amount">{t('howItWorks.exampleBet1Amount')}</span>
+                      <span className="hiw-bet-sep">×</span>
+                      <span className="hiw-bet-odds">{t('howItWorks.exampleBet1Odds')}</span>
+                      <span className="hiw-bet-sep">=</span>
+                      <span className="hiw-bet-result">{t('howItWorks.exampleBet1Result')}</span>
+                    </div>
                   </div>
-                  <div className="hiw-example-bet">
-                    <div className="hiw-example-bet-label">{t('howItWorks.exampleBet2Title')}</div>
-                    <p>{t('howItWorks.exampleBet2Desc')}</p>
+                  <div className="hiw-example-bet hiw-example-bet--2">
+                    <div className="hiw-example-bet-left">
+                      <div className="hiw-example-bet-label">
+                        <span className="hiw-bet-number hiw-bet-number--2">{t('howItWorks.exampleBet2Number')}</span>{t('howItWorks.exampleBet2Title')}
+                      </div>
+                      <div className="hiw-example-bet-platform">{t('howItWorks.exampleBet2Platform')}</div>
+                    </div>
+                    <div className="hiw-example-bet-right">
+                      <span className="hiw-bet-amount">{t('howItWorks.exampleBet2Amount')}</span>
+                      <span className="hiw-bet-sep">×</span>
+                      <span className="hiw-bet-odds">{t('howItWorks.exampleBet2Odds')}</span>
+                      <span className="hiw-bet-sep">=</span>
+                      <span className="hiw-bet-result">{t('howItWorks.exampleBet2Result')}</span>
+                    </div>
                   </div>
                 </div>
                 <p className="hiw-example-conclusion">{t('howItWorks.exampleConclusion')}</p>
@@ -331,9 +358,9 @@ export function Landing() {
           
           <div className="plans-grid">
             {[
-              { id: 'basic', name: 'TEST', description: t('pricing.basicDesc'), price: '30', durationDays: 7 },
-              { id: 'medium', name: 'Medium', description: t('pricing.mediumDesc'), price: '100', durationDays: 30 },
-              { id: 'pro', name: 'Pro', description: t('pricing.proDesc'), price: '150', durationDays: 30 },
+              { id: 'basic', name: 'LITE', description: t('pricing.basicDesc'), price: '35', durationDays: 7 },
+              { id: 'medium', name: 'PRO', description: t('pricing.mediumDesc'), price: '149', durationDays: 30 },
+              { id: 'pro', name: 'MAX', description: t('pricing.proDesc'), price: '359', durationDays: 90 },
             ].map((plan) => (
               <div key={plan.id} className="plan-card">
                 <div className="plan-header">
@@ -373,9 +400,7 @@ export function Landing() {
                   <span data-text={t(`faq.q${n}`)}>{t(`faq.q${n}`)}</span>
                   <span className="faq-icon" data-icon={faqOpen === n ? '−' : '+'}>{faqOpen === n ? '−' : '+'}</span>
                 </div>
-                {faqOpen === n && (
-                  <div className="faq-answer">{t(`faq.a${n}`)}</div>
-                )}
+                <div className={`faq-answer${faqOpen === n ? ' faq-answer--open' : ''}`}>{t(`faq.a${n}`)}</div>
               </div>
             ))}
           </div>
@@ -398,7 +423,6 @@ export function Landing() {
                 <h4 className="footer-column-title">{t('footer.product')}</h4>
                 <ul className="footer-nav">
                   <li><a href="#scanner">{t('header.scanner')}</a></li>
-                  <li><a href="#alerts">{t('header.alerts')}</a></li>
                   <li><a href="/pricing">{t('header.pricing')}</a></li>
                 </ul>
               </div>

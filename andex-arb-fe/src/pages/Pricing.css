@@ -250,6 +250,10 @@
   grid-template-columns: 1fr 1fr 1fr;
 }
 
+.pricing-cols--three {
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+}
+
 .pricing-col-area {
   border-left: 1px solid var(--border-color);
   display: flex;
