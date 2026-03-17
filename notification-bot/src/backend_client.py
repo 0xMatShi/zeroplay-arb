@@ -20,7 +20,7 @@ async def verify_api_key(api_key: str, telegram_user_id: int) -> bool | None:
                 headers={"X-Bot-Secret": bot_secret},
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
-                if resp.status == 200:
+                if resp.status < 300:
                     data = await resp.json()
                     return bool(data.get("valid", False))
                 logger.warning("verify_api_key: unexpected status %s", resp.status)

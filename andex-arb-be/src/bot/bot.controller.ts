@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { BotGuard } from './bot.guard';
@@ -37,6 +37,7 @@ export class BotController {
   }
 
   @Post('verify-key')
+  @HttpCode(200)
   @ApiOperation({ summary: 'Verify that an API key belongs to the given Telegram user' })
   @ApiResponse({ status: 200, description: 'Returns {valid: boolean}' })
   async verifyApiKey(@Body() dto: VerifyApiKeyDto) {
