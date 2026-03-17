@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import puppeteer, { Browser, Page } from 'puppeteer-core';
 import * as WebSocketLib from 'ws';
 const WebSocket = (WebSocketLib as any).default ?? WebSocketLib;
@@ -50,7 +51,7 @@ const ALL_SPORT_IDS = [...REGULAR_SPORTS.map((s) => s.sportId), ESPORTS_SPORT_ID
 const EXPECTED_FULL_ODDS = ALL_SPORT_IDS.length * 2;
 
 const WS_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Origin': BASE_URL,
 };
 
@@ -110,6 +111,9 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
   private destroyed = false;
 
   constructor() {
+    const proxyUrl = process.env.PINNACLE_PROXY_URL;
+    const proxyAgent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
+
     this.httpClient = axios.create({
       baseURL: BASE_URL,
       timeout: 10_000,
@@ -117,6 +121,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         'User-Agent': WS_HEADERS['User-Agent'],
         Accept: 'application/json, text/plain, */*',
       },
+      ...(proxyAgent ? { httpsAgent: proxyAgent, proxy: false } : {}),
     });
   }
 
@@ -181,6 +186,21 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     let browser: Browser | null = null;
 
     try {
+      const proxyUrl = process.env.PINNACLE_PROXY_URL;
+      let proxyServer: string | undefined;
+      let proxyUser: string | undefined;
+      let proxyPass: string | undefined;
+
+      if (proxyUrl) {
+        const parsed = new URL(proxyUrl);
+        proxyUser = parsed.username || undefined;
+        proxyPass = parsed.password || undefined;
+        // Chrome --proxy-server does not accept credentials in URL
+        parsed.username = '';
+        parsed.password = '';
+        proxyServer = parsed.toString().replace(/\/$/, '');
+      }
+
       browser = await puppeteer.launch({
         executablePath: chromePath,
         headless: true,
@@ -190,25 +210,46 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
           '--disable-blink-features=AutomationControlled',
           '--disable-dev-shm-usage',
           '--disable-gpu',
+          ...(proxyServer ? [`--proxy-server=${proxyServer}`] : []),
         ],
       });
 
       const page: Page = await browser.newPage();
       await page.setUserAgent(WS_HEADERS['User-Agent']);
+      if (proxyUser && proxyPass) {
+        await page.authenticate({ username: proxyUser, password: proxyPass });
+      }
 
-      // Intercept WebSocket URL via CDP
+      // Intercept WebSocket URL via JS injection
       let wsUrl: string | null = null;
-      const cdp = await page.target().createCDPSession();
-      await cdp.send('Network.enable');
-      cdp.on('Network.webSocketCreated', (params: any) => {
-        if (params.url.includes('sports-websocket') && !wsUrl) {
-          wsUrl = params.url;
-          this.logger.log(`Pinnacle: WS URL intercepted (${params.url.slice(0, 80)}…)`);
+      await (page as any).evaluateOnNewDocument(`
+        (() => {
+          const OrigWS = window.WebSocket;
+          window.WebSocket = function(url, protocols) {
+            const ws = protocols ? new OrigWS(url, protocols) : new OrigWS(url);
+            if (url.includes('sports-websocket')) {
+              console.log('[WS_URL]' + url);
+            }
+            return ws;
+          };
+          window.WebSocket.prototype = OrigWS.prototype;
+          window.WebSocket.CONNECTING = OrigWS.CONNECTING;
+          window.WebSocket.OPEN = OrigWS.OPEN;
+          window.WebSocket.CLOSING = OrigWS.CLOSING;
+          window.WebSocket.CLOSED = OrigWS.CLOSED;
+        })();
+      `);
+
+      page.on('console', (msg) => {
+        const text = msg.text();
+        if (text.startsWith('[WS_URL]')) {
+          const url = text.slice(8);
+          if (!wsUrl) { wsUrl = url; this.logger.log(`Pinnacle: WS URL intercepted (${url.slice(0, 80)}…)`); }
         }
       });
 
       this.logger.log('Pinnacle: navigating to sports page...');
-      await page.goto(`${BASE_URL}/en/standard/sports`, { waitUntil: 'networkidle2', timeout: 30_000 });
+      await page.goto(`${BASE_URL}/en/standard/home`, { waitUntil: 'networkidle2', timeout: 30_000 });
 
       // Fill and submit header login form
       const HEADER_USER = '#top-header input[name="username"]';
@@ -284,11 +325,19 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     const sportLabel = this.sportLabel(sportId);
     this.logger.log(`Pinnacle: connecting WS for ${sportLabel} (sportId=${sportId})`);
 
-    const ws = new WebSocket(this.wsUrl, { headers: WS_HEADERS });
+    const proxyUrl = process.env.PINNACLE_PROXY_URL;
+    const wsOptions: any = {
+      headers: {
+        ...WS_HEADERS,
+        ...(this.sessionCookie ? { Cookie: this.sessionCookie } : {}),
+      },
+      ...(proxyUrl ? { agent: new HttpsProxyAgent(proxyUrl) } : {}),
+    };
+
+    const ws = new WebSocket(this.wsUrl, wsOptions);
     this.wsConnections.set(sportId, ws);
 
     ws.on('open', () => {
-      this.logger.log(`Pinnacle: [${sportLabel}] WS open — subscribing`);
       this.sendSubscribesToWs(ws, sportId);
     });
 
@@ -434,10 +483,6 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       // Fall back to odds.leagues if odds.update is absent or empty.
       const isRefreshAll = !!odds.refreshAll;
       const leagues: any[] = (isRefreshAll || !odds.update?.length) ? (odds.leagues ?? []) : (odds.update ?? []);
-
-      if (isRefreshAll) {
-        this.logger.log(`[Pinnacle WS] UPDATE_ODDS ${msg.destination} sportId=${odds.sportId} refreshAll — using leagues`);
-      }
 
       for (const league of leagues) {
         for (const event of league.events ?? []) {

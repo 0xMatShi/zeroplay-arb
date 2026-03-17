@@ -425,7 +425,6 @@ export function Pricing() {
                 <h4 className="footer-column-title">PRODUCT</h4>
                 <ul className="footer-nav">
                   <li><a href="/scanner">Scanner</a></li>
-                  <li><a href="/#alerts">Alerts</a></li>
                   <li><a href="/pricing">Pricing</a></li>
                 </ul>
               </div>

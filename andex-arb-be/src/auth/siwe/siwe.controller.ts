@@ -45,15 +45,11 @@ export class SiweController {
         ? req.headers.authorization.substring(7)
         : req.headers.authorization);
 
-    const sessionToken =
-      (req.cookies as Record<string, string>)?.['auth_session_token'] ||
-      (req.headers['x-session-token'] as string | undefined);
-
-    if (!apiKey || !sessionToken) {
+    if (!apiKey) {
       throw new UnauthorizedException();
     }
 
-    const user = await this.usersService.findByApiKeyAndSession(apiKey, sessionToken);
+    const user = await this.usersService.findByApiKey(apiKey);
     if (!user) {
       throw new UnauthorizedException();
     }
