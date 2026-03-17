@@ -1,0 +1,10 @@
+{
+  "theme.DocPaginator.previous": {
+    "message": "Назад",
+    "description": "The label used to navigate to the previous doc"
+  },
+  "theme.DocPaginator.next": {
+    "message": "Вперёд",
+    "description": "The label used to navigate to the next doc"
+  }
+}

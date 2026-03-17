@@ -87,36 +87,12 @@ const config: Config = {
     },
     navbar: {
       title: 'SubLine',
-      logo: {
-        alt: 'SubLine logo',
-        src: 'img/logo.jpeg',
-      },
       items: [
         {
           type: 'docSidebar',
           sidebarId: 'tutorialSidebar',
           position: 'left',
-          label: 'Документация',
-        },
-        {
-          to: '/docs/start/s-chego-nachat',
-          label: 'Старт',
-          position: 'right',
-        },
-        {
-          to: '/docs/pm-bk/interfeis',
-          label: 'PM <> BK',
-          position: 'right',
-        },
-        {
-          to: '/docs/pm-pm/interfeis',
-          label: 'PM <> PM',
-          position: 'right',
-        },
-        {
-          to: '/docs/ploshchadki',
-          label: 'Площадки',
-          position: 'right',
+          label: 'Docs',
         },
         {
           type: 'search',
@@ -144,7 +120,7 @@ const config: Config = {
             },
             {
               label: 'Площадки',
-              to: '/docs/ploshchadki',
+              to: '/docs/ploshchadki/polymarket',
             },
           ],
         },
