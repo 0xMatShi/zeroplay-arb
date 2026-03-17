@@ -35,6 +35,7 @@ export class SiweController {
 
   @Get('check')
   @HttpCode(200)
+  @Throttle({ default: { ttl: 60000, limit: 1000 } })
   @ApiOperation({ summary: 'Verify auth from cookies (used by Nginx auth_request for docs)' })
   @ApiResponse({ status: 200, description: 'Authenticated' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
