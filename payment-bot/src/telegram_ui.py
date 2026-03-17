@@ -747,7 +747,7 @@ async def handle_set_language(callback: CallbackQuery, state: FSMContext) -> Non
 
     # Показываем главное меню
     cancel_user_payment_sessions(user_id)
-    await safe_edit_message(callback, _main_menu_text(lang), reply_markup=main_menu_kb(lang))
+    await safe_edit_message(callback, _main_menu_text(lang), reply_markup=main_menu_kb(lang), disable_web_page_preview=True)
     await callback.answer()
 
 
@@ -758,7 +758,7 @@ async def handle_toggle_language(callback: CallbackQuery) -> None:
     if lang not in TEXTS:
         lang = "ru"
     set_user_language(callback.from_user.id, lang)
-    await safe_edit_message(callback, _main_menu_text(lang), reply_markup=main_menu_kb(lang))
+    await safe_edit_message(callback, _main_menu_text(lang), reply_markup=main_menu_kb(lang), disable_web_page_preview=True)
     await callback.answer()
 
 
@@ -832,7 +832,7 @@ async def cmd_start_with_referral(message: Message, state: FSMContext) -> None:
 
     await state.clear()
     cancel_user_payment_sessions(user.id)  # type: ignore
-    await safe_send_message(message, _main_menu_text(lang), reply_markup=main_menu_kb(lang))
+    await safe_send_message(message, _main_menu_text(lang), reply_markup=main_menu_kb(lang), disable_web_page_preview=True)
 
 
 @router.message(CommandStart())
@@ -852,7 +852,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     cancel_user_payment_sessions(user.id)  # type: ignore
     lang = get_lang(user.id)  # type: ignore
-    await safe_send_message(message, _main_menu_text(lang), reply_markup=main_menu_kb(lang))
+    await safe_send_message(message, _main_menu_text(lang), reply_markup=main_menu_kb(lang), disable_web_page_preview=True)
 
 
 @router.callback_query(F.data == "back_to_main")
@@ -861,7 +861,7 @@ async def back_to_main(callback: CallbackQuery) -> None:
     update_user_profile(user.id, user.username, user.first_name, user.last_name)
     cancel_user_payment_sessions(user.id)
     lang = get_lang(user.id)
-    await safe_edit_message(callback, _main_menu_text(lang), reply_markup=main_menu_kb(lang))
+    await safe_edit_message(callback, _main_menu_text(lang), reply_markup=main_menu_kb(lang), disable_web_page_preview=True)
     await callback.answer()
 
 
