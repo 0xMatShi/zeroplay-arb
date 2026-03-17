@@ -131,9 +131,9 @@ export function CalculatorContent({
         </div>
 
         {/* DEX box */}
-        <div className={`calc-box calc-box--${dexPlatform === 'pinnacle' ? 'pinnacle' : 'dex'}`}>
-          <div className={`calc-box-label calc-box-label--${dexPlatform === 'pinnacle' ? 'pinnacle' : 'dex'}`}>
-            {dexPlatform === 'pinnacle' ? 'PINNACLE' : 'DEXSPORT'}
+        <div className={`calc-box calc-box--${dexPlatform === 'pinnacle' ? 'pinnacle' : dexPlatform === 'stake' ? 'stake' : dexPlatform === 'cloudbet' ? 'cloudbet' : 'dex'}`}>
+          <div className={`calc-box-label calc-box-label--${dexPlatform === 'pinnacle' ? 'pinnacle' : dexPlatform === 'stake' ? 'stake' : dexPlatform === 'cloudbet' ? 'cloudbet' : 'dex'}`}>
+            {dexPlatform === 'pinnacle' ? 'PINNACLE' : dexPlatform === 'stake' ? 'STAKE' : dexPlatform === 'cloudbet' ? 'CLOUDBET' : 'DEXSPORT'}
           </div>
           <div className="calc-outcome">{dexOutcome || '—'}</div>
           <div className="calc-field">

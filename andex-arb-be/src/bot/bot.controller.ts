@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { BotGuard } from './bot.guard';
 import { BotService } from './bot.service';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
@@ -7,6 +8,7 @@ import { DeactivateSubscriptionsDto } from './dto/deactivate-subscriptions.dto';
 
 @ApiTags('bot')
 @Controller('bot')
+@SkipThrottle()
 @UseGuards(BotGuard)
 export class BotController {
   constructor(private readonly botService: BotService) {}

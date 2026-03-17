@@ -15,9 +15,9 @@ PRIVATE_CHAT_ID = int(os.getenv("PRIVATE_CHAT_ID", "0"))
 PRIVATE_GROUP_ID = int(os.getenv("PRIVATE_GROUP_ID", "0"))  # Используем имя переменной с опечаткой из .env
 
 SUBSCRIPTION_PLANS = {
-    "1week":   {"label": "1 неделя", "price": 34.90,  "duration_days": 7,  "invite_links": False},
-    "1month":  {"label": "1 месяц",  "price": 149.90, "duration_days": 30, "invite_links": True},
-    "3months": {"label": "3 месяца", "price": 359.90, "duration_days": 90, "invite_links": True},
+    "1week":   {"label": "LITE", "price": 35,  "duration_days": 7,  "invite_links": False},
+    "1month":  {"label": "PRO",  "price": 149, "duration_days": 30, "invite_links": True},
+    "3months": {"label": "MAX",  "price": 359, "duration_days": 90, "invite_links": True},
 }
 
 DEFAULT_DEMO_DAYS = 1  # Бесплатный демо-доступ для новых пользователей без реферала
@@ -244,6 +244,8 @@ def init_db() -> None:
         cursor.execute("ALTER TABLE user_profiles ADD COLUMN referral_paid_count INTEGER DEFAULT 0")
     if "is_admin" not in existing_profiles:
         cursor.execute("ALTER TABLE user_profiles ADD COLUMN is_admin INTEGER DEFAULT 0")
+    if "language" not in existing_profiles:
+        cursor.execute("ALTER TABLE user_profiles ADD COLUMN language TEXT")
 
     # Таблица запросов на вывод реферального баланса
     cursor.execute("""
@@ -430,16 +432,32 @@ def get_referral_paid_count(user_id: int) -> int:
 
 
 def get_referral_percent(paid_count: int) -> int:
-    """Возвращает процент вознаграждения в зависимости от количества оплативших рефералов.
+    """Возвращает процент вознаграждения (фиксированный 20%)."""
+    return 20
 
-    0 рефералов → 20%, 1 реферал → 25%, 2+ рефералов → 30%.
-    """
-    if paid_count == 0:
-        return 20
-    elif paid_count == 1:
-        return 25
-    else:
-        return 30
+
+def get_user_language(user_id: int) -> str | None:
+    """Возвращает язык интерфейса пользователя или None если не задан."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT language FROM user_profiles WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row and row["language"]:
+        return row["language"]
+    return None
+
+
+def set_user_language(user_id: int, lang: str) -> None:
+    """Устанавливает язык интерфейса пользователя."""
+    conn = _get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE user_profiles SET language = ? WHERE user_id = ?",
+        (lang, user_id),
+    )
+    conn.commit()
+    conn.close()
 
 
 def increment_referral_paid_count(user_id: int) -> None:
@@ -1314,17 +1332,34 @@ def get_admin_referral_stats(user_id: int) -> dict:
         (demo_code,),
     )
     stats = cursor.fetchone()
+
+    # Количество покупок по каждому плану
+    cursor.execute(
+        "SELECT p.plan, COUNT(*) as cnt "
+        "FROM payments p "
+        "JOIN referral_usage ru ON p.user_id = ru.user_id "
+        "WHERE ru.referral_code = ? AND p.status = 'confirmed' "
+        "GROUP BY p.plan",
+        (demo_code,),
+    )
+    plan_rows = cursor.fetchall()
     conn.close()
 
     total_spent = float(stats["total"]) if stats and stats["total"] else 0.0
     buyers = int(stats["buyers"]) if stats and stats["buyers"] else 0
     admin_share = round(total_spent * commission_percent / 100, 2)
 
+    plan_counts = {"1week": 0, "1month": 0, "3months": 0}
+    for row in plan_rows:
+        if row["plan"] in plan_counts:
+            plan_counts[row["plan"]] = int(row["cnt"])
+
     return {
         "buyers": buyers,
         "total_spent": total_spent,
         "admin_share": admin_share,
         "commission_percent": commission_percent,
+        "plan_counts": plan_counts,
     }
 
 

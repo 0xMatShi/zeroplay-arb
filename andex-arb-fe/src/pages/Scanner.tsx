@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Calculator, ExternalLink, Pause, Pin, Play, User, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
-import { useOpportunities, useOrderBook, useSubscriptionStatus, useActiveSubscription, useSportsOpportunities, queryKeys } from '../api/hooks'
+import { useOpportunities, useOrderBook, useSubscriptionStatus, useActiveSubscription, useSportsOpportunities, useWhoami, queryKeys } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
 import { useSportsArbSocket } from '../hooks/useSportsArbSocket'
@@ -240,7 +240,7 @@ function SportsOpportunityCard({
   const [expanded, setExpanded] = useState(false)
 
   const pmLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'polymarket')
-  const dexLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle' || l.platform === 'stake')
+  const dexLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle' || l.platform === 'stake' || l.platform === 'cloudbet')
 
   const totalCost = opp.totalCost
   const profitPct = opp.profitPercentage
@@ -257,6 +257,11 @@ function SportsOpportunityCard({
   const realTotal = pmQty * totalCost
   const effectiveTotal = realTotal > 0 ? Math.min(realTotal, perfectAmount) : 0
   const profitUsd = effectiveTotal > 0 ? effectiveTotal * (profitPct / 100) : 0
+
+  // Effective amounts for calculator (same min logic as profitUsd)
+  const useRealForCalc = realTotal > 0 && realTotal <= perfectAmount
+  const pmCalcAmount = useRealForCalc ? pmReal : pmPerfect
+  const dexCalcAmount = useRealForCalc ? dexReal : dexPerfect
 
   const SPORT_DISPLAY: Record<string, string> = { csgo: 'CS2' }
   const sportKey = opp.sportKey ?? ''
@@ -337,8 +342,8 @@ function SportsOpportunityCard({
 
           {/* Bookmaker box */}
           <div className="sports-platform-box">
-            <div className={`sports-platform-label sports-platform-label--${dexLeg?.platform === 'pinnacle' ? 'pinnacle' : dexLeg?.platform === 'stake' ? 'stake' : 'dex'}`}>
-              {dexLeg?.platform === 'pinnacle' ? 'PINNACLE' : dexLeg?.platform === 'stake' ? 'STAKE' : 'DEXSPORT'}
+            <div className={`sports-platform-label sports-platform-label--${dexLeg?.platform === 'pinnacle' ? 'pinnacle' : dexLeg?.platform === 'stake' ? 'stake' : dexLeg?.platform === 'cloudbet' ? 'cloudbet' : 'dex'}`}>
+              {dexLeg?.platform === 'pinnacle' ? 'PINNACLE' : dexLeg?.platform === 'stake' ? 'STAKE' : dexLeg?.platform === 'cloudbet' ? 'CLOUDBET' : 'DEXSPORT'}
             </div>
             <div className="sports-outcome-name">{dexLeg?.outcomeName ?? '—'}</div>
             <div className="sports-amounts-inline">
@@ -395,8 +400,8 @@ function SportsOpportunityCard({
               dexOutcome: dexLeg?.outcomeName ?? '',
               pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
               dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
-              pmAmount: pmPerfect.toFixed(2),
-              dexAmount: dexPerfect.toFixed(2),
+              pmAmount: pmCalcAmount.toFixed(2),
+              dexAmount: dexCalcAmount.toFixed(2),
               dexPlatform: dexLeg?.platform,
               marketType: displayMarketType,
             })
@@ -420,8 +425,8 @@ function SportsOpportunityCard({
               dexOutcome: dexLeg?.outcomeName ?? '',
               pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
               dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
-              pmAmount: pmPerfect.toFixed(2),
-              dexAmount: dexPerfect.toFixed(2),
+              pmAmount: pmCalcAmount.toFixed(2),
+              dexAmount: dexCalcAmount.toFixed(2),
               dexPlatform: dexLeg?.platform,
               marketType: displayMarketType,
             })
@@ -511,6 +516,7 @@ export function Scanner() {
 
 
   // Subscription gate: check before loading arbitrage data
+  useWhoami()
   const { data: subStatus, isLoading: isSubLoading } = useSubscriptionStatus()
   const hasSubscription = subStatus?.active === true
   const noApiKey = !localStorage.getItem('apiKey')
@@ -732,7 +738,7 @@ export function Scanner() {
       // Platform pair filter
       if (arbMode === 'pm-bm' && platformPairFilter.size > 0) {
         const sOpp = opp as SportsOpportunity
-        const dexLeg = sOpp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle' || l.platform === 'stake')
+        const dexLeg = sOpp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle' || l.platform === 'stake' || l.platform === 'cloudbet')
         if (!dexLeg || !platformPairFilter.has(dexLeg.platform)) return false
       }
 
@@ -780,7 +786,10 @@ export function Scanner() {
           if (arbMode === 'pm-bm') {
             const sOpp = o as SportsOpportunity
             const pmLeg = sOpp.sportsLegs?.find(l => l.platform === 'polymarket')
-            return (pmLeg?.pmBestAskQty ?? 0) * (1 - o.totalCost)
+            const pmQty = pmLeg?.pmBestAskQty ?? 0
+            const realTotal = pmQty * o.totalCost
+            const effectiveTotal = realTotal > 0 ? Math.min(realTotal, perfectAmount) : 0
+            return effectiveTotal * (Number(o.profitPercentage) || 0) / 100
           }
           return Number(o.totalGrossProfit) || 0
         }
@@ -1158,9 +1167,10 @@ export function Scanner() {
                     <div className={`collapsible-body ${pairsOpen ? 'collapsible-body--open' : ''}`}>
                       <div className="platform-buttons">
                         {([
-                          { key: 'dexsport', label: 'Polymarket → Dexsport' },
-                          { key: 'pinnacle', label: 'Polymarket → Pinnacle' },
-                          { key: 'stake', label: 'Polymarket → Stake' },
+                          { key: 'dexsport',  label: 'Polymarket → Dexsport'  },
+                          { key: 'pinnacle',  label: 'Polymarket → Pinnacle'  },
+                          { key: 'stake',     label: 'Polymarket → Stake'     },
+                          { key: 'cloudbet',  label: 'Polymarket → Cloudbet'  },
                         ]).map(({ key, label }) => {
                           const isActive = platformPairFilter.size === 0 || platformPairFilter.has(key)
                           return (
@@ -1168,7 +1178,7 @@ export function Scanner() {
                               key={key}
                               className={`sidebar-mode-button ${isActive ? 'active' : ''}`}
                               onClick={() => setPlatformPairFilter((prev) => {
-                                const all = ['dexsport', 'pinnacle', 'stake']
+                                const all = ['dexsport', 'pinnacle', 'stake', 'cloudbet']
                                 const next = new Set(prev.size === 0 ? all : prev)
                                 if (next.has(key)) next.delete(key); else next.add(key)
                                 if (next.size === all.length) return new Set()

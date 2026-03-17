@@ -34,6 +34,8 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
   @WebSocketServer()
   server: Server;
 
+  private snapshotCache: ReturnType<typeof this.mapOpportunity>[] = []
+
   constructor(
     private readonly usersService: UsersService,
     private readonly subscriptionsService: SubscriptionsService,
@@ -54,6 +56,9 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
     const adminKey = this.configService.get<string>('ADMIN_API_KEY');
     if (adminKey && apiKey === adminKey) {
       this.logger.log(`Admin client connected: ${client.id}`);
+      if (this.snapshotCache.length > 0) {
+        client.emit('sports:snapshot', this.snapshotCache);
+      }
       return;
     }
 
@@ -74,6 +79,9 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
     }
 
     this.logger.log(`Client connected: ${client.id} (user: ${user.id})`);
+    if (this.snapshotCache.length > 0) {
+      client.emit('sports:snapshot', this.snapshotCache);
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -101,19 +109,21 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       const sportPath = SportsArbGateway.PINNACLE_SPORT_PATH[dexEvent.sportKey];
       if (!sportPath) return 'https://www.gentleflame47.xyz/en/standard/sports';
 
-      // URL format: /en/standard/{sportPath}/{league-slug}/{home-vs-away}/{eventId}#all
-      let leagueSlug = (dexEvent.tournamentName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      // Team names must be lowercased in the URL
-      const matchSlug = dexEvent.name.toLowerCase().replace(/\s+/g, '-');
+      // Pinnacle ignores the league/match slugs — only eventId matters for routing.
+      const leagueSlug = (dexEvent.tournamentName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       const eventId = dexEvent.eventId;
 
-      return leagueSlug && matchSlug && eventId
-        ? `https://www.gentleflame47.xyz/en/standard/${sportPath}/${leagueSlug}/${matchSlug}/${eventId}#all`
+      return eventId
+        ? `https://www.gentleflame47.xyz/en/standard/${sportPath}/${leagueSlug}/vs/${eventId}#all`
         : `https://www.gentleflame47.xyz/en/standard/${sportPath}`;
     }
 
     if (bookmakerPlatform === 'stake') {
       return dexEvent.url ?? 'https://stake3017.com/en/sports';
+    }
+
+    if (bookmakerPlatform === 'cloudbet') {
+      return dexEvent.url ?? 'https://www.cloudbet.com/en/sports';
     }
 
     // DexSport URL: https://dexsport.io/{esports|sports}/{sport}/{name-slug}-{id}/bets/
@@ -171,6 +181,7 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       tournamentName,
       marketType: opp.marketType,
       dexMarketName: opp.dexMarketName,
+      startTime: match?.pmEvent.startTime ?? match?.dexEvent.startTime ?? null,
       sportsLegs: opp.legs.map((leg) => ({
         platform: leg.platform,
         outcomeName: leg.outcomeName,
@@ -200,6 +211,11 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
 
   emitExpired(id: string): void {
     this.server.emit('sports:expired', { id });
+  }
+
+  emitSnapshot(opps: SportsArbitrageOpportunity[], matchMap: Map<string, SportsMatch>): void {
+    this.snapshotCache = opps.map((opp) => this.mapOpportunity(opp, matchMap));
+    this.server.emit('sports:snapshot', this.snapshotCache);
   }
 
   getConnectedCount(): number {

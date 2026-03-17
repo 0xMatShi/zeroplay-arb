@@ -45,10 +45,6 @@ const MONEYLINE_NAME_RE = /^(match winner|winner|h2h|head.to.head|winner \(incl\
 /** Keepalive ping interval (server disconnects after ~30s without pong) */
 const PING_INTERVAL_MS = 20_000;
 
-/** How long to wait after connection_ack before firing onAllMarketsReady.
- *  Stake delivers the initial full odds snapshot ~18s after each subscription. */
-const INITIAL_STATE_WAIT_MS = 28_000;
-
 /** Remove event from cache if not updated within this window */
 const EVENT_TTL_MS = 5 * 60_000;
 
@@ -155,7 +151,6 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
 
   // ── Ready state ────────────────────────────────────────────────
   private initialStateFired = false;
-  private initialStateTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ── Timers ─────────────────────────────────────────────────────
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -168,6 +163,11 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
     await this.login();
     await this.fetchAllFixtures();
     await this.fetchInitialOddsForAllFixtures();
+    // HTTP snapshot complete — signal ready immediately.
+    // WS connects in background for real-time delta updates.
+    this.initialStateFired = true;
+    this.logger.log(`Stake: HTTP snapshot complete — ${this.eventCache.size} events ready, firing onAllMarketsReady`);
+    this.onAllMarketsReady?.();
     this.connectWs();
     this.startTimers();
   }
@@ -199,12 +199,17 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
     this.subToFixture.clear();
     this.fixtureInitialReceived.clear();
     this.initialStateFired = false;
-    if (this.initialStateTimer) { clearTimeout(this.initialStateTimer); this.initialStateTimer = null; }
     this.terminateWs();
-    // Async chain: fetch fixtures → prefetch odds → reconnect WS
+    // Async chain: fetch fixtures → prefetch odds → signal ready → reconnect WS
     this.fetchAllFixtures()
       .then(() => this.fetchInitialOddsForAllFixtures())
-      .then(() => { if (!this.destroyed) this.connectWs(); })
+      .then(() => {
+        if (this.destroyed) return;
+        this.initialStateFired = true;
+        this.logger.log(`Stake: clearCache refetch complete — ${this.eventCache.size} events, firing onAllMarketsReady`);
+        this.onAllMarketsReady?.();
+        this.connectWs();
+      })
       .catch((e) => this.logger.error(`Stake: clearCache refetch failed — ${e.message}`));
   }
 
@@ -216,7 +221,6 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
     this.subToFixture.clear();
     this.fixtureInitialReceived.clear();
     this.initialStateFired = false;
-    if (this.initialStateTimer) { clearTimeout(this.initialStateTimer); this.initialStateTimer = null; }
     this.terminateWs();
     if (!this.destroyed) this.connectWs();
   }
@@ -455,7 +459,7 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
           }
           if (wsMarkets.length === 0) continue;
 
-          this.mergeFixtureMarkets(fixture, wsMarkets, /* isSnapshot */ true);
+          this.mergeFixtureMarkets(fixture, wsMarkets, true, /* pruneStale */ true);
           if (this.eventCache.has(fixture.id)) populated++;
         }
       } catch (e: any) {
@@ -535,7 +539,6 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
       if (this.ws !== ws) return; // Stale connection (already replaced)
       this.ws = null;
       if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
-      if (this.initialStateTimer) { clearTimeout(this.initialStateTimer); this.initialStateTimer = null; }
       this.logger.warn(`Stake: WS closed (code=${code}), reconnecting in ${WS_RECONNECT_DELAY_MS}ms`);
       if (!this.destroyed) {
         setTimeout(() => this.connectWs(), WS_RECONNECT_DELAY_MS);
@@ -552,26 +555,8 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
 
     // ── connection_ack → subscribe all fixtures ────────────────
     if (msg.type === 'connection_ack') {
-      this.logger.log(
-        `Stake: connection_ack — subscribing to ${this.fixtureCache.size} fixtures` +
-        ` (initial state expected in ~${INITIAL_STATE_WAIT_MS / 1000}s)`,
-      );
+      this.logger.log(`Stake: connection_ack — subscribing to ${this.fixtureCache.size} fixtures`);
       this.subscribeAll();
-
-      // Schedule ready signal — fires after initial state window
-      if (this.initialStateTimer) clearTimeout(this.initialStateTimer);
-      this.initialStateTimer = setTimeout(() => {
-        this.initialStateTimer = null;
-        if (!this.initialStateFired) {
-          this.initialStateFired = true;
-          this.logger.log(
-            `Stake: initial state window elapsed — ${this.fixtureInitialReceived.size}/` +
-            `${this.fixtureCache.size} fixtures received data; ` +
-            `${this.eventCache.size} events in cache`,
-          );
-          this.onAllMarketsReady?.();
-        }
-      }, INITIAL_STATE_WAIT_MS);
       return;
     }
 
@@ -645,12 +630,15 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Update or create the stable DexSportsEvent for this fixture.
-   * First message is a complete snapshot; subsequent messages are partial updates.
+   * pruneStale=true removes markets absent from the update (safe only during HTTP
+   * prefetch when currentMatches is empty). WS calls must never prune — doing so
+   * could orphan DexMarket references already stored in SportsMatch objects.
    */
   private mergeFixtureMarkets(
     fixture: StakeFixture,
     wsMarkets: StakeWsMarket[],
-    isSnapshot: boolean,
+    _isSnapshot: boolean,
+    pruneStale = false,
   ): void {
     const now = Date.now();
     this.eventLastSeen.set(fixture.id, now);
@@ -693,20 +681,20 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
       const updated = newById.get(cached.marketId);
       if (!updated) continue;
 
-      // Update outcomes in-place — only overwrite prices that are valid in the incoming data
-      for (let i = 0; i < cached.outcomes.length && i < updated.outcomes.length; i++) {
-        const newPrice = updated.outcomes[i].price;
-        if (isFinite(newPrice) && newPrice > 1) {
-          if (cached.outcomes[i].price !== newPrice) {
-            if (this.trackedMarketIds.has(cached.marketId)) {
-              const arrow = newPrice > cached.outcomes[i].price ? '↑' : '↓';
-              changes.push(
-                `[${cached.name}] ${cached.outcomes[i].name}: ` +
-                `${cached.outcomes[i].price?.toFixed(3)} → ${newPrice.toFixed(3)} ${arrow}`,
-              );
-            }
-            cached.outcomes[i] = { ...cached.outcomes[i], price: newPrice };
+      // Update outcomes in-place — match by name to avoid index-order issues
+      for (let i = 0; i < cached.outcomes.length; i++) {
+        const updatedOutcome = updated.outcomes.find((o) => o.name === cached.outcomes[i].name);
+        if (!updatedOutcome) continue;
+        const newPrice = updatedOutcome.price;
+        if (isFinite(newPrice) && newPrice > 1 && cached.outcomes[i].price !== newPrice) {
+          if (this.trackedMarketIds.has(cached.marketId)) {
+            const arrow = newPrice > cached.outcomes[i].price ? '↑' : '↓';
+            changes.push(
+              `[${cached.name}] ${cached.outcomes[i].name}: ` +
+              `${cached.outcomes[i].price?.toFixed(3)} → ${newPrice.toFixed(3)} ${arrow}`,
+            );
           }
+          cached.outcomes[i] = { ...cached.outcomes[i], price: newPrice };
         }
       }
       newById.delete(cached.marketId);
@@ -717,8 +705,10 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
       existing.markets.push(m);
     }
 
-    // On full snapshot: remove markets that are no longer present
-    if (isSnapshot) {
+    // Prune markets absent from the update — only safe during HTTP prefetch
+    // (when currentMatches is empty). Never prune from WS: would orphan DexMarket
+    // references held by SportsMatch objects, freezing prices until the next reset.
+    if (pruneStale) {
       const updatedIds = new Set(newMarkets.map((m) => m.marketId));
       for (let i = existing.markets.length - 1; i >= 0; i--) {
         if (!updatedIds.has(existing.markets[i].marketId)) {
@@ -850,7 +840,6 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
   private stopTimers(): void {
     if (this.pingTimer)  { clearInterval(this.pingTimer);  this.pingTimer = null; }
     if (this.evictTimer) { clearInterval(this.evictTimer); this.evictTimer = null; }
-    if (this.initialStateTimer) { clearTimeout(this.initialStateTimer); this.initialStateTimer = null; }
   }
 
   private terminateWs(): void {

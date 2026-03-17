@@ -116,6 +116,8 @@ export const useSportsOpportunities = () => {
   return useQuery({
     queryKey: queryKeys.sportsOpportunities,
     queryFn: sportsArbApi.getOpportunities,
+    enabled: false,
+    initialData: { items: [], total: 0, limit: 100, offset: 0 },
   })
 }
 

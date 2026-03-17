@@ -103,12 +103,7 @@ export const authApi = {
       method: 'GET',
       headers: createHeaders(true),
     })
-
-    if (!response.ok) {
-      throw new Error(`Failed to get user info: ${response.statusText}`)
-    }
-
-    return response.json()
+    return handleResponse(response)
   },
 }
 

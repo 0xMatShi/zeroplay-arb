@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { Subscription, SubscriptionStatus } from '../subscriptions/entities/subscription.entity';
 import { UsersService } from '../users/users.service';
+import { AuthCacheService } from '../auth/auth-cache.service';
 
 @Injectable()
 export class BotService {
@@ -11,6 +12,7 @@ export class BotService {
 
   constructor(
     private readonly usersService: UsersService,
+    private readonly authCache: AuthCacheService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(Subscription)
@@ -73,6 +75,10 @@ export class BotService {
         { userId: user.id, status: SubscriptionStatus.ACTIVE },
         { status: SubscriptionStatus.EXPIRED },
       );
+
+      if (user.apiKey) {
+        this.authCache.invalidate(user.apiKey);
+      }
 
       await this.usersService.clearApiKey(user.id);
 
