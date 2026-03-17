@@ -127,7 +127,7 @@ export function useSportsArbSocket(options?: UseSportsArbSocketOptions) {
       if (pausedRef.current) return
       queryClient.setQueryData<SportsOpportunitiesResponse>(
         queryKeys.sportsOpportunities,
-        (old) => ({ ...(old ?? { items: [], total: 0 }), items: data, total: data.length }),
+        (old) => ({ ...(old ?? { items: [], total: 0, limit: 100, offset: 0 }), items: data, total: data.length }),
       )
     })
 
