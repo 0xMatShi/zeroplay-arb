@@ -74,6 +74,8 @@ function getSections(t: TFunc): Section[] {
           subRows: [
             { name: <>Polymarket {'<>'} <BlurredText text="DexSport" /></>, week: 'check', base: 'check', pro: 'check' },
             { name: <>Polymarket {'<>'} <BlurredText text="Pinnacle" /></>, week: 'check', base: 'check', pro: 'check' },
+            { name: <>Polymarket {'<>'} <BlurredText text="Stake" /></>, week: 'check', base: 'check', pro: 'check' },
+            { name: <>Polymarket {'<>'} <BlurredText text="CloudBet" /></>, week: 'check', base: 'check', pro: 'check' },
           ],
           week: 'check', base: 'check', pro: 'check',
         },
