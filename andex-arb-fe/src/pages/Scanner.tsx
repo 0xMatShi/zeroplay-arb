@@ -786,7 +786,10 @@ export function Scanner() {
           if (arbMode === 'pm-bm') {
             const sOpp = o as SportsOpportunity
             const pmLeg = sOpp.sportsLegs?.find(l => l.platform === 'polymarket')
-            return (pmLeg?.pmBestAskQty ?? 0) * (1 - o.totalCost)
+            const pmQty = pmLeg?.pmBestAskQty ?? 0
+            const realTotal = pmQty * o.totalCost
+            const effectiveTotal = realTotal > 0 ? Math.min(realTotal, perfectAmount) : 0
+            return effectiveTotal * (Number(o.profitPercentage) || 0) / 100
           }
           return Number(o.totalGrossProfit) || 0
         }
