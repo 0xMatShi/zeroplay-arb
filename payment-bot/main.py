@@ -98,7 +98,7 @@ async def check_subscription_notifications(bot: Bot) -> None:
                     logger.info(f"Kicked user {user_id} from chats: {kick_results}")
 
                     # Добавляем в список на деактивацию бэкенда ДО любых DB-операций,
-                    # которые могут упасть — чтобы API-ключ удалился в любом случае
+                    # которые могут упасть - чтобы API-ключ удалился в любом случае
                     kicked_telegram_ids.append(user_id)
 
                     try:

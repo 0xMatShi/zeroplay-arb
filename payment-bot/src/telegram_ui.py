@@ -75,15 +75,15 @@ TEXTS: dict[str, dict[str, str]] = {
         "btn_en": "🇬🇧 English",
         "btn_lang_toggle": "🌐 Язык: RU",
         "main_menu": (
-            "Добро пожаловать в SUBLINE — сервис для арбитража между prediction markets "
+            "Добро пожаловать в SUBLINE - сервис для арбитража между prediction markets "
             "и букмекерскими платформами.\n\n"
             "Мы создали терминал, который в реальном времени сканирует рынки, находит ценовые расхождения "
             "между площадками и показывает готовые возможности для входа. SUBLINE объединяет web2 и web3 "
             "инфраструктуру в одном интерфейсе, чтобы вы могли быстрее находить и реализовывать "
             "арбитражные сделки.\n\n"
-            "Наш сайт — {website}\n"
-            "Наш Telegram — {telegram}\n"
-            "Наш X/Twitter — {twitter}"
+            "Наш сайт - {website}\n"
+            "Наш Telegram - {telegram}\n"
+            "Наш X/Twitter - {twitter}"
         ),
         "btn_subscribe": "Оформить подписку",
         "btn_profile": "Личный кабинет",
@@ -93,20 +93,20 @@ TEXTS: dict[str, dict[str, str]] = {
         "btn_ask_question": "Задать вопрос",
         "subscribe_text": (
             "<b>Оформить подписку</b>\n\n"
-            "SUBLINE — это профессиональный арбитражный терминал для работы с prediction markets "
+            "SUBLINE - это профессиональный арбитражный терминал для работы с prediction markets "
             "и букмекерами.\n\n"
             "<b>С подпиской вы получаете:</b>\n\n"
-            "— доступ к 4 букмекерам, 5 prediction markets и 10 видам спорта\n"
-            "— калькуляторы входа, фильтры по ликвидности, профиту и ROI\n"
-            "— алерты по новым возможностям как на сайте, так и в Telegram\n"
-            "— инструменты для быстрого входа в сделку\n"
-            "— real-time сканер спредов без задержки\n\n"
+            "- доступ к 4 букмекерам, 5 prediction markets и 10 видам спорта\n"
+            "- калькуляторы входа, фильтры по ликвидности, профиту и ROI\n"
+            "- алерты по новым возможностям как на сайте, так и в Telegram\n"
+            "- инструменты для быстрого входа в сделку\n"
+            "- real-time сканер спредов без задержки\n\n"
             "В тарифах PRO и MAX также входит доступ в приватную Telegram-группу с поддержкой, "
             "комьюнити, live-стримами и полезными материалами\n\n"
             "<b>Тарифы:</b>\n\n"
-            "LITE — 35$ / 7 дней\n"
-            "PRO — 149$ / 1 месяц + приватная группа\n"
-            "MAX — 359$ / 3 месяца + приватная группа\n\n"
+            "LITE - 35$ / 7 дней\n"
+            "PRO - 149$ / 1 месяц + приватная группа\n"
+            "MAX - 359$ / 3 месяца + приватная группа\n\n"
             "Выберите тариф для оплаты"
         ),
         "subscribe_active": (
@@ -135,7 +135,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "support_text": (
             "<b>Поддержка</b>\n\n"
             "По любому вопросу касательно сервиса и не только вы можете обратиться к нам в любое время, "
-            "работаем 24/7. Задать вопрос — @wrhundred\n\n"
+            "работаем 24/7. Задать вопрос - @wrhundred\n\n"
             "<i>Если вопрос касается оплаты, пожалуйста, сразу присылайте скриншоты или ID транзакции "
             "для ускорения работы.</i>"
         ),
@@ -155,7 +155,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "результат был ощутимым, комфортнее работать с депозитом от $150.\n\n"
             "<b>4. Насколько это безопасно?</b>\n\n"
             "Вы сами контролируете свои средства и работаете напрямую с платформами, а не делаете депозит "
-            "на наш сервис. SubLine — это аналитический инструмент, который помогает находить арбитражные "
+            "на наш сервис. SubLine - это аналитический инструмент, который помогает находить арбитражные "
             "возможности и рассчитывать сделки, но все операции выполняются вами на ваших аккаунтах.\n\n"
             "<b>5. Есть ли ограничения по суммам?</b>\n\n"
             "Это зависит от конкретной платформы и ликвидности рынка. На prediction markets часто доступна "
@@ -163,7 +163,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "ликвидность прямо в карточке возможности, чтобы вы сразу понимали, на какую сумму можно "
             "зайти без лишних рисков.\n\n"
             "<b>6. Есть ли сложности или нюансы в работе?</b>\n\n"
-            "Да — важный момент здесь это скорость реакции. Арбитражные возможности появляются в реальном "
+            "Да - важный момент здесь это скорость реакции. Арбитражные возможности появляются в реальном "
             "времени и могут исчезать довольно быстро. Иногда у вас есть около минуты, чтобы успеть "
             "открыть обе стороны сделки. Но это приходит с практикой: первые сделки могут занимать "
             "30–40 секунд, а со временем вы будете делать это за считанные секунды.\n\n"
@@ -174,7 +174,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "от того, насколько быстро вы успеваете зайти в сделку и на какой объём входите.\n\n"
             "<b>8. Какую подписку лучше выбрать?</b>\n\n"
             "У нас есть несколько вариантов подписки. Недельная подписка подходит для того, чтобы "
-            "протестировать сервис и понять, как он работает на практике. Месячная подписка — самый "
+            "протестировать сервис и понять, как он работает на практике. Месячная подписка - самый "
             "популярный вариант, потому что она даёт не только доступ к сервису, но и доступ к закрытому "
             "сообществу пользователей, где есть общение, обмен опытом, полезные материалы и поддержка."
         ),
@@ -193,7 +193,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "withdrawal_invalid_address": "Неверный EVM-адрес. Адрес должен начинаться с 0x и содержать 42 символа.\nПопробуйте ещё раз:",
         "withdrawal_success": (
             "✅ Запрос на вывод {amount}$ отправлен на подтверждение.\n\n"
-            "Сеть: {network}\nАдрес: {address}\n\nОжидайте — средства будут переведены в течение 24 часов."
+            "Сеть: {network}\nАдрес: {address}\n\nОжидайте - средства будут переведены в течение 24 часов."
         ),
         "withdrawal_request_error": (
             "Ошибка при создании запроса. Возможно, недостаточно средств или уже есть активный запрос.\n"
@@ -215,23 +215,23 @@ TEXTS: dict[str, dict[str, str]] = {
             "Новая дата истечения: {expires} (МСК)\n\nСумма: {amount} {token}\nСеть: {network}\n"
             "Tx: <code>{tx}</code>"
         ),
-        "payment_api_key": "\n\n🔑 Ваш ключ для входа на сайт:\n<code>{key}</code>\n\n⚠️ Сохраните ключ — он нужен для авторизации!",
+        "payment_api_key": "\n\n🔑 Ваш ключ для входа на сайт:\n<code>{key}</code>\n\n⚠️ Сохраните ключ - он нужен для авторизации!",
         "payment_api_key_error": "\n\n⚠️ Не удалось получить ключ для входа. Обратитесь в поддержку.",
         "payment_confirm_btn": "Подтвердить оплату",
         "payment_select_sub": "Выберите одну из предложенных подписок:",
-        "payment_select_token": "Оплата подписки: {plan} — {price}$\n\nВыберите монету для оплаты:",
-        "payment_select_network": "Оплата подписки: {plan} — {price}$\nМонета: {token}\n\nВыберите сеть для перевода:",
+        "payment_select_token": "Оплата подписки: {plan} - {price}$\n\nВыберите монету для оплаты:",
+        "payment_select_network": "Оплата подписки: {plan} - {price}$\nМонета: {token}\n\nВыберите сеть для перевода:",
         "payment_instructions": (
             "Оплата подписки: {plan}\n\nПереведите {price}$ {token} в сети {network} на адрес ниже:\n\n"
             "<code>{address}</code>\n\nПосле перевода нажмите «Подтвердить оплату» и отправьте хэш транзакции."
         ),
         # Plan button labels
-        "plan_1week": "LITE — {price}$ / 7 дней",
-        "plan_1month": "PRO — {price}$ / 1 месяц",
-        "plan_3months": "MAX — {price}$ / 3 месяца",
-        "plan_1week_discount": "LITE — {price}$ / 7 дней (было {orig}$, -20%)",
-        "plan_1month_discount": "PRO — {price}$ / 1 месяц (было {orig}$, -20%)",
-        "plan_3months_discount": "MAX — {price}$ / 3 месяца (было {orig}$, -20%)",
+        "plan_1week": "LITE - {price}$ / 7 дней",
+        "plan_1month": "PRO - {price}$ / 1 месяц",
+        "plan_3months": "MAX - {price}$ / 3 месяца",
+        "plan_1week_discount": "LITE - {price}$ / 7 дней (было {orig}$, -20%)",
+        "plan_1month_discount": "PRO - {price}$ / 1 месяц (было {orig}$, -20%)",
+        "plan_3months_discount": "MAX - {price}$ / 3 месяца (было {orig}$, -20%)",
         # Referral / free subscription messages
         "admin_granted": (
             "🎉 Вам присвоен статус <b>Admin</b>!\n\nВаша персональная демо-ссылка:\n<code>{url}</code>\n\n"
@@ -247,7 +247,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "demo_access_extended": "🎉 Отлично!\n\nК вашей подписке добавлено {days} дней!\n\nНовая дата истечения: {expires} (МСК)",
         "free_sub_new": "🎉 Поздравляем!\n\nВам активирована бесплатная подписка на {days} дней!",
         "free_sub_extended": "🎉 Отлично!\n\nК вашей подписке добавлено {days} дней!\n\nНовая дата истечения: {expires} (МСК)",
-        "api_key_save": "\n\n🔑 Ваш API-ключ для входа на сайт:\n<code>{key}</code>\n\n⚠️ Сохраните ключ — он нужен для авторизации на сервисе!",
+        "api_key_save": "\n\n🔑 Ваш API-ключ для входа на сайт:\n<code>{key}</code>\n\n⚠️ Сохраните ключ - он нужен для авторизации на сервисе!",
         "api_key_error": "\n\n⚠️ Не удалось получить API-ключ. Обратитесь в поддержку.",
         "invite_links_header": "\n\n📱 Ваши одноразовые ссылки для вступления:",
         "invite_chat": "\n\n🔹 Чат:\n{link}",
@@ -264,14 +264,14 @@ TEXTS: dict[str, dict[str, str]] = {
         "btn_en": "🇬🇧 English",
         "btn_lang_toggle": "🌐 Lang: EN",
         "main_menu": (
-            "Welcome to SUBLINE — an arbitrage service between prediction markets "
+            "Welcome to SUBLINE - an arbitrage service between prediction markets "
             "and bookmaking platforms.\n\n"
             "We built a terminal that scans markets in real time, finds price discrepancies between "
             "platforms and shows ready-to-use entry opportunities. SUBLINE combines web2 and web3 "
             "infrastructure in one interface so you can find and execute arbitrage trades faster.\n\n"
-            "Our website — {website}\n"
-            "Our Telegram — {telegram}\n"
-            "Our X/Twitter — {twitter}"
+            "Our website - {website}\n"
+            "Our Telegram - {telegram}\n"
+            "Our X/Twitter - {twitter}"
         ),
         "btn_subscribe": "Subscribe",
         "btn_profile": "My Account",
@@ -284,17 +284,17 @@ TEXTS: dict[str, dict[str, str]] = {
             "SUBLINE is a professional arbitrage terminal for working with prediction markets "
             "and bookmakers.\n\n"
             "<b>With a subscription you get:</b>\n\n"
-            "— access to 4 bookmakers, 5 prediction markets and 10 sports\n"
-            "— entry calculators, filters by liquidity, profit and ROI\n"
-            "— alerts for new opportunities both on the website and in Telegram\n"
-            "— tools for quick trade entry\n"
-            "— real-time spread scanner with no delay\n\n"
+            "- access to 4 bookmakers, 5 prediction markets and 10 sports\n"
+            "- entry calculators, filters by liquidity, profit and ROI\n"
+            "- alerts for new opportunities both on the website and in Telegram\n"
+            "- tools for quick trade entry\n"
+            "- real-time spread scanner with no delay\n\n"
             "PRO and MAX plans also include access to a private Telegram group with support, "
             "community, live streams and useful materials\n\n"
             "<b>Plans:</b>\n\n"
-            "LITE — $35 / 7 days\n"
-            "PRO — $149 / 1 month + private group\n"
-            "MAX — $359 / 3 months + private group\n\n"
+            "LITE - $35 / 7 days\n"
+            "PRO - $149 / 1 month + private group\n"
+            "MAX - $359 / 3 months + private group\n\n"
             "Choose a plan to pay"
         ),
         "subscribe_active": (
@@ -322,8 +322,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "btn_withdraw": "💸 Withdraw",
         "support_text": (
             "<b>Support</b>\n\n"
-            "For any questions about the service and beyond, you can reach us at any time — we work 24/7. "
-            "Ask a question — @wrhundred\n\n"
+            "For any questions about the service and beyond, you can reach us at any time - we work 24/7. "
+            "Ask a question - @wrhundred\n\n"
             "<i>If your question concerns payment, please send screenshots or transaction ID right away "
             "to speed things up.</i>"
         ),
@@ -342,7 +342,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "with the interface and mechanics. You can start with as little as $10, but for a more "
             "noticeable result, it's more comfortable to work with a deposit of $150 or more.\n\n"
             "<b>4. How safe is it?</b>\n\n"
-            "You control your own funds and work directly with platforms — you don't make a deposit to "
+            "You control your own funds and work directly with platforms - you don't make a deposit to "
             "our service. SubLine is an analytical tool that helps find arbitrage opportunities and "
             "calculate trades, but all operations are performed by you on your own accounts.\n\n"
             "<b>5. Are there limits on amounts?</b>\n\n"
@@ -351,7 +351,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "directly in the opportunity card, so you immediately understand how much you can enter "
             "without undue risk.\n\n"
             "<b>6. Are there any difficulties or nuances?</b>\n\n"
-            "Yes — the key point here is speed of reaction. Arbitrage opportunities appear in real time "
+            "Yes - the key point here is speed of reaction. Arbitrage opportunities appear in real time "
             "and can disappear quite quickly. Sometimes you have about a minute to open both sides of "
             "a trade. But this comes with practice: first trades may take 30–40 seconds, and over time "
             "you'll do it in a matter of seconds.\n\n"
@@ -381,7 +381,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "withdrawal_invalid_address": "Invalid EVM address. Address must start with 0x and contain 42 characters.\nPlease try again:",
         "withdrawal_success": (
             "✅ Withdrawal request for {amount}$ sent for confirmation.\n\n"
-            "Network: {network}\nAddress: {address}\n\nPlease wait — funds will be transferred within 24 hours."
+            "Network: {network}\nAddress: {address}\n\nPlease wait - funds will be transferred within 24 hours."
         ),
         "withdrawal_request_error": (
             "Error creating request. Possibly insufficient funds or an active request already exists.\n"
@@ -403,23 +403,23 @@ TEXTS: dict[str, dict[str, str]] = {
             "New expiry date: {expires} (MSK)\n\nAmount: {amount} {token}\nNetwork: {network}\n"
             "Tx: <code>{tx}</code>"
         ),
-        "payment_api_key": "\n\n🔑 Your login key for the website:\n<code>{key}</code>\n\n⚠️ Save the key — it is needed to log in to the service!",
+        "payment_api_key": "\n\n🔑 Your login key for the website:\n<code>{key}</code>\n\n⚠️ Save the key - it is needed to log in to the service!",
         "payment_api_key_error": "\n\n⚠️ Failed to get login key. Please contact support.",
         "payment_confirm_btn": "Confirm payment",
         "payment_select_sub": "Choose one of the available subscriptions:",
-        "payment_select_token": "Payment: {plan} — {price}$\n\nChoose a coin to pay with:",
-        "payment_select_network": "Payment: {plan} — {price}$\nCoin: {token}\n\nChoose a network for transfer:",
+        "payment_select_token": "Payment: {plan} - {price}$\n\nChoose a coin to pay with:",
+        "payment_select_network": "Payment: {plan} - {price}$\nCoin: {token}\n\nChoose a network for transfer:",
         "payment_instructions": (
             "Payment: {plan}\n\nSend {price}$ {token} on the {network} network to the address below:\n\n"
             "<code>{address}</code>\n\nAfter sending, click «Confirm payment» and send the transaction hash."
         ),
         # Plan button labels
-        "plan_1week": "LITE — {price}$ / 7 days",
-        "plan_1month": "PRO — {price}$ / 1 month",
-        "plan_3months": "MAX — {price}$ / 3 months",
-        "plan_1week_discount": "LITE — {price}$ / 7 days (was {orig}$, -20%)",
-        "plan_1month_discount": "PRO — {price}$ / 1 month (was {orig}$, -20%)",
-        "plan_3months_discount": "MAX — {price}$ / 3 months (was {orig}$, -20%)",
+        "plan_1week": "LITE - {price}$ / 7 days",
+        "plan_1month": "PRO - {price}$ / 1 month",
+        "plan_3months": "MAX - {price}$ / 3 months",
+        "plan_1week_discount": "LITE - {price}$ / 7 days (was {orig}$, -20%)",
+        "plan_1month_discount": "PRO - {price}$ / 1 month (was {orig}$, -20%)",
+        "plan_3months_discount": "MAX - {price}$ / 3 months (was {orig}$, -20%)",
         # Referral / free subscription messages
         "admin_granted": (
             "🎉 You have been granted <b>Admin</b> status!\n\nYour personal demo link:\n<code>{url}</code>\n\n"
@@ -435,7 +435,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "demo_access_extended": "🎉 Great!\n\n{days} days added to your subscription!\n\nNew expiry date: {expires} (MSK)",
         "free_sub_new": "🎉 Congratulations!\n\nYour free subscription for {days} days has been activated!",
         "free_sub_extended": "🎉 Great!\n\n{days} days added to your subscription!\n\nNew expiry date: {expires} (MSK)",
-        "api_key_save": "\n\n🔑 Your API key for the website:\n<code>{key}</code>\n\n⚠️ Save the key — it is needed to log in to the service!",
+        "api_key_save": "\n\n🔑 Your API key for the website:\n<code>{key}</code>\n\n⚠️ Save the key - it is needed to log in to the service!",
         "api_key_error": "\n\n⚠️ Failed to get API key. Please contact support.",
         "invite_links_header": "\n\n📱 Your one-time join links:",
         "invite_chat": "\n\n🔹 Chat:\n{link}",
@@ -777,7 +777,7 @@ async def cmd_start_with_referral(message: Message, state: FSMContext) -> None:
     is_new_user = get_user_profile(user.id) is None  # type: ignore
     update_user_profile(user.id, user.username, user.first_name, user.last_name)  # type: ignore
 
-    # Новый пользователь — сначала выбор языка
+    # Новый пользователь - сначала выбор языка
     if is_new_user:
         await state.clear()
         await state.update_data(pending_referral=referral_code)
@@ -786,7 +786,7 @@ async def cmd_start_with_referral(message: Message, state: FSMContext) -> None:
 
     lang = get_lang(user.id)  # type: ignore
 
-    # Язык уже задан — обрабатываем реферал сразу
+    # Язык уже задан - обрабатываем реферал сразу
     if referral_code:
         ref_link = get_referral_link(referral_code)
         logger.info(f"Referral link lookup: {ref_link}")
@@ -1026,7 +1026,7 @@ async def show_payment(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("confirm:"))
 async def confirm_payment_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    """Хендлер кнопки «Подтвердить оплату» — переводит в режим ожидания хэша."""
+    """Хендлер кнопки «Подтвердить оплату» - переводит в режим ожидания хэша."""
     parts = callback.data.split(":")  # type: ignore
     if len(parts) != 4:
         await callback.answer("Data format error", show_alert=True)
@@ -1217,8 +1217,8 @@ async def show_profile(callback: CallbackQuery) -> None:
 
         text = (
             f"{tx(lang, 'profile_title')}\n\n"
-            f"{tx(lang, 'admin_status')}\n"
-            f"{tx(lang, 'admin_purchases', buyers=buyers, share=f'{admin_share:.2f}', pct=commission_pct)}\n"
+            f"{tx(lang, 'admin_status')}\n\n"
+            f"{tx(lang, 'admin_purchases', buyers=buyers, share=f'{admin_share:.2f}', pct=commission_pct)}\n\n"
             f"LITE: {plan_counts.get('1week', 0)}\n"
             f"PRO: {plan_counts.get('1month', 0)}\n"
             f"MAX: {plan_counts.get('3months', 0)}\n\n"
@@ -1232,15 +1232,15 @@ async def show_profile(callback: CallbackQuery) -> None:
             bot_username = bot_info.username or "bot"
             ref_url = f"https://t.me/{bot_username}?start={own_code}"
         else:
-            ref_url = "—"
+            ref_url = "-"
 
         balance = get_referral_balance(user_id)
         paid_count = get_referral_paid_count(user_id)
 
         ref_block = (
-            f"\n\n{tx(lang, 'profile_ref_link', link=ref_url)}\n"
-            f"{tx(lang, 'profile_ref_balance', balance=f'{balance:.2f}')}\n"
-            f"{tx(lang, 'profile_ref_count', count=paid_count)}\n"
+            f"\n\n{tx(lang, 'profile_ref_link', link=ref_url)}\n\n"
+            f"{tx(lang, 'profile_ref_balance', balance=f'{balance:.2f}')}\n\n"
+            f"{tx(lang, 'profile_ref_count', count=paid_count)}\n\n"
             f"{tx(lang, 'profile_ref_percent')}\n\n"
             f"{tx(lang, 'profile_ref_invite')}"
         )
@@ -1300,7 +1300,7 @@ async def withdrawal_start(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(WithdrawalStates.waiting_for_network, F.data.startswith("withdrawal_net:"))
 async def withdrawal_network_selected(callback: CallbackQuery, state: FSMContext) -> None:
-    """Пользователь выбрал сеть — просим ввести сумму."""
+    """Пользователь выбрал сеть - просим ввести сумму."""
     network = callback.data.split(":")[1]  # type: ignore
     if network not in _WITHDRAWAL_NETWORKS:
         await callback.answer("Unknown network", show_alert=True)
@@ -1364,7 +1364,7 @@ async def process_withdrawal_amount(message: Message, state: FSMContext) -> None
 
 @router.message(WithdrawalStates.waiting_for_address, F.text)
 async def process_withdrawal_address(message: Message, state: FSMContext, bot: Bot) -> None:
-    """Обработка EVM-адреса — создаём запрос и отправляем уведомление админам."""
+    """Обработка EVM-адреса - создаём запрос и отправляем уведомление админам."""
     import re
 
     user_id = message.from_user.id  # type: ignore
@@ -1442,7 +1442,7 @@ async def process_withdrawal_address(message: Message, state: FSMContext, bot: B
 
 @router.callback_query(F.data.startswith("confirm_withdrawal:"))
 async def confirm_withdrawal_admin(callback: CallbackQuery) -> None:
-    """Администратор подтверждает вывод — отправляем USDC пользователю."""
+    """Администратор подтверждает вывод - отправляем USDC пользователю."""
     raw_id = callback.data.split(":")[1]  # type: ignore
     if not raw_id.isdigit():
         await callback.answer("Неверный формат запроса", show_alert=True)
@@ -1462,7 +1462,7 @@ async def confirm_withdrawal_admin(callback: CallbackQuery) -> None:
     if callback.message and hasattr(callback.message, "edit_text"):
         try:
             await callback.message.edit_text(  # type: ignore
-                "Запрос на вывод подтверждается — ожидание...",
+                "Запрос на вывод подтверждается - ожидание...",
                 reply_markup=None,
             )
         except Exception:
@@ -1508,7 +1508,7 @@ async def confirm_withdrawal_admin(callback: CallbackQuery) -> None:
         if callback.message and hasattr(callback.message, "edit_text"):
             try:
                 await callback.message.edit_text(  # type: ignore
-                    f"Запрос на вывод для {user_display} успешно подтвержден — средства отправлены!\n"
+                    f"Запрос на вывод для {user_display} успешно подтвержден - средства отправлены!\n"
                     f"Адрес получателя: {evm_address}\n"
                     f"Сеть: {net_name}\n"
                     f"Tx_Hash: {tx_hash}"

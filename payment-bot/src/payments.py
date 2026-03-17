@@ -346,7 +346,7 @@ def _init_withdrawal_wallet() -> None:
     """Сохраняет публичный EVM-адрес кошелька вывода в БД (приватник только в .env)."""
     wallet_key = os.getenv("WITHDRAWAL_WALLET_KEY", "").strip()
     if not wallet_key:
-        return  # Не настроено — пропускаем
+        return  # Не настроено - пропускаем
 
     conn = _get_connection()
     cursor = conn.cursor()
@@ -363,7 +363,7 @@ def _init_withdrawal_wallet() -> None:
         conn.close()
         return
 
-    # Приватный ключ в БД не хранится — только публичный EVM-адрес
+    # Приватный ключ в БД не хранится - только публичный EVM-адрес
     cursor.execute(
         "INSERT INTO withdrawal_wallets (wallet_address, encrypted_private_key) VALUES (?, '')",
         (evm_address,),
@@ -515,7 +515,7 @@ def create_withdrawal_request(user_id: int, amount: float, evm_address: str, net
         return None
 
     # Атомарно списываем баланс: UPDATE выполняется только если referral_balance >= amount.
-    # Проверка и списание — один SQL-statement, race condition невозможен.
+    # Проверка и списание - один SQL-statement, race condition невозможен.
     cursor.execute(
         "UPDATE user_profiles SET referral_balance = referral_balance - ? "
         "WHERE user_id = ? AND referral_balance >= ?",
@@ -523,7 +523,7 @@ def create_withdrawal_request(user_id: int, amount: float, evm_address: str, net
     )
     if cursor.rowcount == 0:
         conn.close()
-        logger.warning(f"Пользователь {user_id} запросил вывод {amount}$ — недостаточно средств (атомарная проверка)")
+        logger.warning(f"Пользователь {user_id} запросил вывод {amount}$ - недостаточно средств (атомарная проверка)")
         return None
 
     # Создаём запрос
@@ -1197,7 +1197,7 @@ def get_user_subscription(user_id: int) -> dict | None:
         conn.close()
         return None
 
-    # Ленивая проверка: если подписка истекла — деактивируем
+    # Ленивая проверка: если подписка истекла - деактивируем
     if row["expires_at"]:
         expires = datetime.fromisoformat(row["expires_at"])
         if expires <= datetime.now(timezone.utc):
@@ -1273,7 +1273,7 @@ def deactivate_expired_subscriptions() -> list[dict]:
 def _credit_referral_reward(user_id: int, payment_amount: float) -> None:
     """Начисляет реферальное вознаграждение владельцу ссылки пользователя.
 
-    Если у ссылки задан admin_commission_percent — использует его;
+    Если у ссылки задан admin_commission_percent - использует его;
     иначе применяет ступенчатую систему (20/25/30%).
     """
     referral_code = get_user_referral_code(user_id)
