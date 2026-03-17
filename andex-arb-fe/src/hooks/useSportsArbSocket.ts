@@ -58,10 +58,6 @@ export function useSportsArbSocket(options?: UseSportsArbSocketOptions) {
     socket.on('connect', () => {
       setIsConnected(true)
       setAuthError(null)
-      if (!isFirstConnect.current) {
-        // Missed updates while disconnected — refetch
-        refetchAll()
-      }
       isFirstConnect.current = false
     })
 
@@ -104,10 +100,7 @@ export function useSportsArbSocket(options?: UseSportsArbSocketOptions) {
         (old) => {
           if (!old) return old
           const index = old.items.findIndex((item) => item.id === data.id)
-          if (index === -1) {
-            refetchAll()
-            return old
-          }
+          if (index === -1) return old
           const prev = old.items[index]
           const updatedItems = [...old.items]
           updatedItems[index] = {
@@ -129,15 +122,12 @@ export function useSportsArbSocket(options?: UseSportsArbSocketOptions) {
       )
     })
 
-    // Full snapshot every 10s — replaces entire cache to fix stale prices
+    // Full snapshot on connect + every 5s — initializes or replaces entire cache
     socket.on('sports:snapshot', (data: SportsOpportunity[]) => {
       if (pausedRef.current) return
       queryClient.setQueryData<SportsOpportunitiesResponse>(
         queryKeys.sportsOpportunities,
-        (old) => {
-          if (!old) return old
-          return { ...old, items: data, total: data.length }
-        },
+        (old) => ({ ...(old ?? { items: [], total: 0 }), items: data, total: data.length }),
       )
     })
 

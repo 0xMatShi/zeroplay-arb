@@ -194,9 +194,9 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.cloudbetAdapter.clearCache();
   }
 
-  // ── Cron: Snapshot every 10 seconds ──────────────────────────
+  // ── Cron: Snapshot every 5 seconds ───────────────────────────
 
-  @Cron('*/10 * * * * *')
+  @Cron('*/5 * * * * *')
   handleSnapshotCron(): void {
     if (!this.gateway || this.currentOpportunities.length === 0) return;
     const matchMap = new Map(this.currentMatches.map((m) => [m.id, m]));
@@ -353,8 +353,12 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
             this.gateway.emitNew(opp, matchMap);
           } else {
             const prev = prevById.get(opp.id)!;
-            const delta = Math.abs(prev.profitPercent - opp.profitPercent);
-            if (delta > 0.01) {
+            const profitChanged = Math.abs(prev.profitPercent - opp.profitPercent) > 0.001;
+            const oddsChanged = opp.legs.some((leg, i) => {
+              const prevLeg = prev.legs[i];
+              return prevLeg && Math.abs(prevLeg.decimalOdds - leg.decimalOdds) > 0.001;
+            });
+            if (profitChanged || oddsChanged) {
               this.gateway.emitUpdated(opp, matchMap);
             }
           }

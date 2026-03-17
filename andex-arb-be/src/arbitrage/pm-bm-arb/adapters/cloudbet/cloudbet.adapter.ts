@@ -310,8 +310,8 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
     this.eventLastSeen.set(eventId, now);
 
     if (!market) {
-      // No usable moneyline yet — remove from eventCache if present
-      this.eventCache.delete(eventId);
+      // Market temporarily unavailable (suspended / no valid selections) —
+      // keep last known good state so the scanner doesn't lose the reference.
       return;
     }
 

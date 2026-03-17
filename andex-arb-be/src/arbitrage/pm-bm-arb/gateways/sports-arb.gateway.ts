@@ -34,6 +34,8 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
   @WebSocketServer()
   server: Server;
 
+  private snapshotCache: ReturnType<typeof this.mapOpportunity>[] = []
+
   constructor(
     private readonly usersService: UsersService,
     private readonly subscriptionsService: SubscriptionsService,
@@ -54,6 +56,9 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
     const adminKey = this.configService.get<string>('ADMIN_API_KEY');
     if (adminKey && apiKey === adminKey) {
       this.logger.log(`Admin client connected: ${client.id}`);
+      if (this.snapshotCache.length > 0) {
+        client.emit('sports:snapshot', this.snapshotCache);
+      }
       return;
     }
 
@@ -74,6 +79,9 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
     }
 
     this.logger.log(`Client connected: ${client.id} (user: ${user.id})`);
+    if (this.snapshotCache.length > 0) {
+      client.emit('sports:snapshot', this.snapshotCache);
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -205,7 +213,8 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
   }
 
   emitSnapshot(opps: SportsArbitrageOpportunity[], matchMap: Map<string, SportsMatch>): void {
-    this.server.emit('sports:snapshot', opps.map((opp) => this.mapOpportunity(opp, matchMap)));
+    this.snapshotCache = opps.map((opp) => this.mapOpportunity(opp, matchMap));
+    this.server.emit('sports:snapshot', this.snapshotCache);
   }
 
   getConnectedCount(): number {

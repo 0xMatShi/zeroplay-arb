@@ -459,7 +459,7 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
           }
           if (wsMarkets.length === 0) continue;
 
-          this.mergeFixtureMarkets(fixture, wsMarkets, /* isSnapshot */ true);
+          this.mergeFixtureMarkets(fixture, wsMarkets, true, /* pruneStale */ true);
           if (this.eventCache.has(fixture.id)) populated++;
         }
       } catch (e: any) {
@@ -630,12 +630,15 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Update or create the stable DexSportsEvent for this fixture.
-   * First message is a complete snapshot; subsequent messages are partial updates.
+   * pruneStale=true removes markets absent from the update (safe only during HTTP
+   * prefetch when currentMatches is empty). WS calls must never prune — doing so
+   * could orphan DexMarket references already stored in SportsMatch objects.
    */
   private mergeFixtureMarkets(
     fixture: StakeFixture,
     wsMarkets: StakeWsMarket[],
-    isSnapshot: boolean,
+    _isSnapshot: boolean,
+    pruneStale = false,
   ): void {
     const now = Date.now();
     this.eventLastSeen.set(fixture.id, now);
@@ -678,20 +681,20 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
       const updated = newById.get(cached.marketId);
       if (!updated) continue;
 
-      // Update outcomes in-place — only overwrite prices that are valid in the incoming data
-      for (let i = 0; i < cached.outcomes.length && i < updated.outcomes.length; i++) {
-        const newPrice = updated.outcomes[i].price;
-        if (isFinite(newPrice) && newPrice > 1) {
-          if (cached.outcomes[i].price !== newPrice) {
-            if (this.trackedMarketIds.has(cached.marketId)) {
-              const arrow = newPrice > cached.outcomes[i].price ? '↑' : '↓';
-              changes.push(
-                `[${cached.name}] ${cached.outcomes[i].name}: ` +
-                `${cached.outcomes[i].price?.toFixed(3)} → ${newPrice.toFixed(3)} ${arrow}`,
-              );
-            }
-            cached.outcomes[i] = { ...cached.outcomes[i], price: newPrice };
+      // Update outcomes in-place — match by name to avoid index-order issues
+      for (let i = 0; i < cached.outcomes.length; i++) {
+        const updatedOutcome = updated.outcomes.find((o) => o.name === cached.outcomes[i].name);
+        if (!updatedOutcome) continue;
+        const newPrice = updatedOutcome.price;
+        if (isFinite(newPrice) && newPrice > 1 && cached.outcomes[i].price !== newPrice) {
+          if (this.trackedMarketIds.has(cached.marketId)) {
+            const arrow = newPrice > cached.outcomes[i].price ? '↑' : '↓';
+            changes.push(
+              `[${cached.name}] ${cached.outcomes[i].name}: ` +
+              `${cached.outcomes[i].price?.toFixed(3)} → ${newPrice.toFixed(3)} ${arrow}`,
+            );
           }
+          cached.outcomes[i] = { ...cached.outcomes[i], price: newPrice };
         }
       }
       newById.delete(cached.marketId);
@@ -702,8 +705,10 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
       existing.markets.push(m);
     }
 
-    // On full snapshot: remove markets that are no longer present
-    if (isSnapshot) {
+    // Prune markets absent from the update — only safe during HTTP prefetch
+    // (when currentMatches is empty). Never prune from WS: would orphan DexMarket
+    // references held by SportsMatch objects, freezing prices until the next reset.
+    if (pruneStale) {
       const updatedIds = new Set(newMarkets.map((m) => m.marketId));
       for (let i = existing.markets.length - 1; i >= 0; i--) {
         if (!updatedIds.has(existing.markets[i].marketId)) {
