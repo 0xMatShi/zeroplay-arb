@@ -63,6 +63,12 @@ export class BotService {
       }));
   }
 
+  async verifyApiKey(apiKey: string, telegramUserId: number): Promise<boolean> {
+    const user = await this.userRepository.findOne({ where: { apiKey } });
+    if (!user || user.telegramUserId == null) return false;
+    return Number(user.telegramUserId) === telegramUserId;
+  }
+
   async deactivateSubscriptions(telegramUserIds: number[]): Promise<void> {
     for (const telegramUserId of telegramUserIds) {
       const user = await this.userRepository.findOne({ where: { telegramUserId } });

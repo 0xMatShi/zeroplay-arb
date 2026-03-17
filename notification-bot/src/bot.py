@@ -13,17 +13,22 @@ from telegram.ext import (
     filters,
 )
 
+from src.backend_client import verify_api_key
 from src.db import (
     create_preset,
     get_preset_by_id,
     get_presets,
     get_subscribed_users_with_active_presets,
+    get_user_language,
     has_subscription,
     init_db,
     register_user,
+    set_user_language,
+    set_user_verified,
     toggle_preset_active,
     update_preset_by_id,
 )
+from src.i18n import PROFIT_FIELD_KEYS, t
 from src.ws_client import ArbitrageWSClient
 
 load_dotenv()
@@ -40,19 +45,14 @@ ADMIN_API_KEY: str = os.environ["ADMIN_API_KEY"]
 
 EXCHANGES = ["Polymarket", "Probable", "Kalshi", "Predict.fun", "Opinion"]
 
-PROFIT_LABELS = {
-    "min_usd": "Min Profit($)",
-    "max_usd": "Max Profit($)",
-    "min_pct": "Min Profit(%)",
-    "max_pct": "Max Profit(%)",
-}
-
-_START_TEXT = "Главное меню"
-
 
 # ---------------------------------------------------------------------------
-# Вспомогательные функции
+# Helpers
 # ---------------------------------------------------------------------------
+
+def _get_lang(context: ContextTypes.DEFAULT_TYPE) -> str:
+    return context.user_data.get("lang", "ru")
+
 
 def _fmt_val(val: float | None, suffix: str = "") -> str:
     return f"{val:.2f}{suffix}" if val is not None else "—"
@@ -82,16 +82,25 @@ def _preset_to_draft(preset: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Клавиатуры
+# Keyboards
 # ---------------------------------------------------------------------------
 
-def _start_keyboard(show_presets: bool = True) -> InlineKeyboardMarkup:
+def _language_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🇷🇺 Русский", callback_data="lang:ru")],
+        [InlineKeyboardButton("🇬🇧 English", callback_data="lang:en")],
+    ])
+
+
+def _start_keyboard(lang: str, show_presets: bool = True) -> InlineKeyboardMarkup:
+    rows = []
     if show_presets:
-        return InlineKeyboardMarkup([[InlineKeyboardButton("Пресеты", callback_data="menu:presets")]])
-    return InlineKeyboardMarkup([])
+        rows.append([InlineKeyboardButton(t(lang, "btn_presets"), callback_data="menu:presets")])
+    rows.append([InlineKeyboardButton(t(lang, "btn_change_lang"), callback_data="menu:lang")])
+    return InlineKeyboardMarkup(rows)
 
 
-def _presets_list_keyboard(presets: list[dict]) -> InlineKeyboardMarkup:
+def _presets_list_keyboard(lang: str, presets: list[dict]) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(
             f"{'🟢' if p['is_active'] else '🔴'} {p['name']}",
@@ -99,52 +108,52 @@ def _presets_list_keyboard(presets: list[dict]) -> InlineKeyboardMarkup:
         )]
         for p in presets
     ]
-    rows.append([InlineKeyboardButton("➕ Создать пресет", callback_data="presets:create")])
-    rows.append([InlineKeyboardButton("← Назад", callback_data="menu:back")])
+    rows.append([InlineKeyboardButton(t(lang, "btn_create_preset"), callback_data="presets:create")])
+    rows.append([InlineKeyboardButton(t(lang, "btn_back"), callback_data="menu:back")])
     return InlineKeyboardMarkup(rows)
 
 
-def _draft_keyboard(draft: dict, mode: str) -> InlineKeyboardMarkup:
-    name = draft.get("name") or "не задано"
-    save_label = "✅ Создать пресет" if mode == "create" else "✅ Применить изменения"
-    cancel_label = "❌ Отменить создание" if mode == "create" else "❌ Отменить изменения"
+def _draft_keyboard(lang: str, draft: dict, mode: str) -> InlineKeyboardMarkup:
+    name = draft.get("name") or t(lang, "not_set")
+    save_label = t(lang, "btn_save_create") if mode == "create" else t(lang, "btn_save_edit")
+    cancel_label = t(lang, "btn_cancel_create") if mode == "create" else t(lang, "btn_cancel_edit")
 
     rows = []
     if mode == "edit":
         is_active = draft.get("is_active", False)
-        toggle_label = "🔴 Деактивировать пресет" if is_active else "🟢 Активировать пресет"
+        toggle_label = t(lang, "btn_deactivate") if is_active else t(lang, "btn_activate")
         rows.append([InlineKeyboardButton(toggle_label, callback_data="draft:toggle_active")])
 
     rows += [
-        [InlineKeyboardButton(f"Название: {name}", callback_data="draft:name")],
+        [InlineKeyboardButton(t(lang, "field_name", name), callback_data="draft:name")],
         [
             InlineKeyboardButton(
-                f"Min Profit($): {_fmt_val(draft.get('min_usd'))}",
+                t(lang, "field_min_usd", _fmt_val(draft.get("min_usd"))),
                 callback_data="draft:min_usd",
             ),
             InlineKeyboardButton(
-                f"Max Profit($): {_fmt_val(draft.get('max_usd'))}",
+                t(lang, "field_max_usd", _fmt_val(draft.get("max_usd"))),
                 callback_data="draft:max_usd",
             ),
         ],
         [
             InlineKeyboardButton(
-                f"Min Profit(%): {_fmt_val(draft.get('min_pct'), '%')}",
+                t(lang, "field_min_pct", _fmt_val(draft.get("min_pct"), "%")),
                 callback_data="draft:min_pct",
             ),
             InlineKeyboardButton(
-                f"Max Profit(%): {_fmt_val(draft.get('max_pct'), '%')}",
+                t(lang, "field_max_pct", _fmt_val(draft.get("max_pct"), "%")),
                 callback_data="draft:max_pct",
             ),
         ],
-        [InlineKeyboardButton("Биржи", callback_data="draft:exchanges")],
+        [InlineKeyboardButton(t(lang, "btn_exchanges"), callback_data="draft:exchanges")],
         [InlineKeyboardButton(save_label, callback_data="draft:save")],
         [InlineKeyboardButton(cancel_label, callback_data="draft:cancel")],
     ]
     return InlineKeyboardMarkup(rows)
 
 
-def _draft_exchanges_keyboard(disabled: list[str]) -> InlineKeyboardMarkup:
+def _draft_exchanges_keyboard(lang: str, disabled: list[str]) -> InlineKeyboardMarkup:
     rows = []
     for i in range(0, len(EXCHANGES), 2):
         row = []
@@ -152,80 +161,128 @@ def _draft_exchanges_keyboard(disabled: list[str]) -> InlineKeyboardMarkup:
             circle = "🔴" if ex in disabled else "🟢"
             row.append(InlineKeyboardButton(f"{circle} {ex}", callback_data=f"draft:exchange:{ex}"))
         rows.append(row)
-    rows.append([InlineKeyboardButton("← Назад", callback_data="draft:exchange:back")])
+    rows.append([InlineKeyboardButton(t(lang, "btn_back"), callback_data="draft:exchange:back")])
     return InlineKeyboardMarkup(rows)
 
 
-def _cancel_input_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[InlineKeyboardButton("Отмена", callback_data="draft:input:cancel")]])
+def _cancel_input_keyboard(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang, "btn_cancel_input"), callback_data="draft:input:cancel")]])
 
 
 # ---------------------------------------------------------------------------
-# Команды бота
+# Commands
 # ---------------------------------------------------------------------------
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     is_new = await register_user(user.id, user.username, user.first_name)
 
+    lang = await get_user_language(user.id)
+    context.user_data["lang"] = lang
+
     if is_new:
-        text = (
-            f"Привет, {user.first_name}! Вы зарегистрированы.\n\n"
-            "Как только вам будет активирована подписка, вы начнёте получать "
-            "уведомления об арбитражных возможностях в реальном времени."
+        logger.info("New user: id=%s username=%s", user.id, user.username)
+        # Show language selection for new users
+        await update.message.reply_text(
+            "Выберите язык / Choose language:",
+            reply_markup=_language_keyboard(),
         )
-        logger.info("Новый пользователь: id=%s username=%s", user.id, user.username)
-    else:
-        text = f"Вы уже зарегистрированы, {user.first_name}."
+        return
 
     subscribed = await has_subscription(user.id)
-    await update.message.reply_text(text, reply_markup=_start_keyboard(show_presets=subscribed))
+    if not subscribed:
+        # Existing user but not verified yet — restart onboarding
+        await update.message.reply_text(
+            "Выберите язык / Choose language:",
+            reply_markup=_language_keyboard(),
+        )
+        return
+
+    # Verified user — show main menu
+    context.user_data.pop("awaiting", None)
+    await update.message.reply_text(
+        t(lang, "main_menu"),
+        reply_markup=_start_keyboard(lang, show_presets=True),
+    )
 
 
 # ---------------------------------------------------------------------------
-# Callback-обработчики
+# Callback handlers
 # ---------------------------------------------------------------------------
+
+async def cb_lang(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles language selection (both onboarding and change from main menu)."""
+    query = update.callback_query
+    await query.answer()
+    lang = query.data.split(":")[1]
+
+    await set_user_language(query.from_user.id, lang)
+    context.user_data["lang"] = lang
+
+    subscribed = await has_subscription(query.from_user.id)
+    if subscribed:
+        # Language change from main menu — just update and return to menu
+        await query.edit_message_text(
+            t(lang, "main_menu"),
+            reply_markup=_start_keyboard(lang, show_presets=True),
+        )
+        return
+
+    # Onboarding — ask for API key
+    context.user_data["awaiting"] = "api_key"
+    await query.edit_message_text(t(lang, "enter_api_key"))
+
 
 async def cb_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     action = query.data.split(":")[1]
+    lang = _get_lang(context)
 
     if action == "presets":
         presets = await get_presets(query.from_user.id)
-        text = "Ваши пресеты:" if presets else "У вас пока нет пресетов."
-        await query.edit_message_text(text, reply_markup=_presets_list_keyboard(presets))
+        text = t(lang, "presets_header") if presets else t(lang, "no_presets")
+        await query.edit_message_text(text, reply_markup=_presets_list_keyboard(lang, presets))
+    elif action == "lang":
+        await query.edit_message_text(
+            "Выберите язык / Choose language:",
+            reply_markup=_language_keyboard(),
+        )
     elif action == "back":
         subscribed = await has_subscription(query.from_user.id)
-        await query.edit_message_text(_START_TEXT, reply_markup=_start_keyboard(show_presets=subscribed))
+        await query.edit_message_text(
+            t(lang, "main_menu"),
+            reply_markup=_start_keyboard(lang, show_presets=subscribed),
+        )
 
 
 async def cb_presets(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     parts = query.data.split(":")
+    lang = _get_lang(context)
 
     if parts[1] == "create":
         context.user_data["mode"] = "create"
         context.user_data["draft"] = _empty_draft()
         context.user_data["preset_msg_id"] = query.message.message_id
         await query.edit_message_text(
-            "Создание нового пресета",
-            reply_markup=_draft_keyboard(context.user_data["draft"], "create"),
+            t(lang, "preset_create_title"),
+            reply_markup=_draft_keyboard(lang, context.user_data["draft"], "create"),
         )
     elif parts[1] == "open":
         preset_id = int(parts[2])
         preset = await get_preset_by_id(preset_id)
         if not preset:
-            await query.answer("Пресет не найден.", show_alert=True)
+            await query.answer("Preset not found.", show_alert=True)
             return
         context.user_data["mode"] = "edit"
         context.user_data["editing_id"] = preset_id
         context.user_data["draft"] = _preset_to_draft(preset)
         context.user_data["preset_msg_id"] = query.message.message_id
         await query.edit_message_text(
-            f"Редактирование пресета «{preset['name']}»",
-            reply_markup=_draft_keyboard(context.user_data["draft"], "edit"),
+            t(lang, "preset_edit_title", preset["name"]),
+            reply_markup=_draft_keyboard(lang, context.user_data["draft"], "edit"),
         )
 
 
@@ -234,48 +291,49 @@ async def cb_draft(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await query.answer()
     parts = query.data.split(":")
     action = parts[1]
+    lang = _get_lang(context)
 
     draft = context.user_data.get("draft", _empty_draft())
     mode = context.user_data.get("mode", "create")
 
     def _draft_title() -> str:
         if mode == "create":
-            return "Создание нового пресета"
-        return f"Редактирование пресета «{draft.get('name', '')}»"
+            return t(lang, "preset_create_title")
+        return t(lang, "preset_edit_title", draft.get("name", ""))
 
     if action == "toggle_active":
         preset_id = context.user_data.get("editing_id")
         new_state = await toggle_preset_active(preset_id)
         draft["is_active"] = new_state
         context.user_data["draft"] = draft
-        await query.edit_message_reply_markup(reply_markup=_draft_keyboard(draft, mode))
+        await query.edit_message_reply_markup(reply_markup=_draft_keyboard(lang, draft, mode))
 
     elif action == "name":
         context.user_data["awaiting"] = "name"
         await query.edit_message_text(
-            "Введите название пресета:", reply_markup=_cancel_input_keyboard()
+            t(lang, "enter_name"), reply_markup=_cancel_input_keyboard(lang)
         )
 
-    elif action in PROFIT_LABELS:
-        label = PROFIT_LABELS[action]
+    elif action in PROFIT_FIELD_KEYS:
+        label_key = PROFIT_FIELD_KEYS[action]
         context.user_data["awaiting"] = action
         await query.edit_message_text(
-            f"Введите значение для <b>{label}</b>:\n\nОтправьте число (или 0 для отключения фильтра)",
+            t(lang, "enter_value", t(lang, label_key)),
             parse_mode="HTML",
-            reply_markup=_cancel_input_keyboard(),
+            reply_markup=_cancel_input_keyboard(lang),
         )
 
     elif action == "exchanges":
         await query.edit_message_text(
-            "Выберите биржи для отслеживания:",
-            reply_markup=_draft_exchanges_keyboard(draft.get("disabled_exchanges", [])),
+            t(lang, "exchanges_title"),
+            reply_markup=_draft_exchanges_keyboard(lang, draft.get("disabled_exchanges", [])),
         )
 
     elif action == "exchange":
         exchange = parts[2]
         if exchange == "back":
             await query.edit_message_text(
-                _draft_title(), reply_markup=_draft_keyboard(draft, mode)
+                _draft_title(), reply_markup=_draft_keyboard(lang, draft, mode)
             )
         else:
             disabled = draft.get("disabled_exchanges", [])
@@ -286,16 +344,15 @@ async def cb_draft(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             draft["disabled_exchanges"] = disabled
             context.user_data["draft"] = draft
             await query.edit_message_reply_markup(
-                reply_markup=_draft_exchanges_keyboard(disabled)
+                reply_markup=_draft_exchanges_keyboard(lang, disabled)
             )
 
     elif action == "input":
-        # отмена ввода текста/числа
         context.user_data.pop("awaiting", None)
-        await query.edit_message_text(_draft_title(), reply_markup=_draft_keyboard(draft, mode))
+        await query.edit_message_text(_draft_title(), reply_markup=_draft_keyboard(lang, draft, mode))
 
     elif action == "save":
-        name = (draft.get("name") or "").strip() or "Без названия"
+        name = (draft.get("name") or "").strip() or "—"
         if mode == "create":
             await create_preset(
                 query.from_user.id,
@@ -318,14 +375,14 @@ async def cb_draft(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
         _clear_draft(context)
         presets = await get_presets(query.from_user.id)
-        text = "Ваши пресеты:" if presets else "У вас пока нет пресетов."
-        await query.edit_message_text(text, reply_markup=_presets_list_keyboard(presets))
+        text = t(lang, "presets_header") if presets else t(lang, "no_presets")
+        await query.edit_message_text(text, reply_markup=_presets_list_keyboard(lang, presets))
 
     elif action == "cancel":
         _clear_draft(context)
         presets = await get_presets(query.from_user.id)
-        text = "Ваши пресеты:" if presets else "У вас пока нет пресетов."
-        await query.edit_message_text(text, reply_markup=_presets_list_keyboard(presets))
+        text = t(lang, "presets_header") if presets else t(lang, "no_presets")
+        await query.edit_message_text(text, reply_markup=_presets_list_keyboard(lang, presets))
 
 
 def _clear_draft(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -335,6 +392,39 @@ def _clear_draft(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def on_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     awaiting = context.user_data.get("awaiting")
+    lang = _get_lang(context)
+
+    # --- API key verification flow ---
+    if awaiting == "api_key":
+        api_key = update.message.text.strip()
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
+        result = await verify_api_key(api_key, update.effective_user.id)
+        if result is None:
+            await update.effective_chat.send_message(t(lang, "api_key_error"))
+            return
+        if not result:
+            await update.effective_chat.send_message(
+                t(lang, "api_key_invalid"),
+            )
+            return
+
+        # Valid key
+        await set_user_verified(update.effective_user.id)
+        context.user_data.pop("awaiting", None)
+        await update.effective_chat.send_message(
+            t(lang, "api_key_valid"),
+        )
+        await update.effective_chat.send_message(
+            t(lang, "main_menu"),
+            reply_markup=_start_keyboard(lang, show_presets=True),
+        )
+        return
+
+    # --- Draft field input ---
     if not awaiting:
         return
 
@@ -348,7 +438,7 @@ async def on_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             raw = float(update.message.text.replace(",", "."))
             draft[awaiting] = raw if raw > 0 else None
         except ValueError:
-            await update.message.reply_text("Пожалуйста, введите число.")
+            await update.message.reply_text(t(lang, "invalid_number"))
             return
 
     context.user_data["draft"] = draft
@@ -362,23 +452,23 @@ async def on_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     msg_id = context.user_data.get("preset_msg_id")
     if msg_id:
         title = (
-            "Создание нового пресета"
+            t(lang, "preset_create_title")
             if mode == "create"
-            else f"Редактирование пресета «{draft.get('name', '')}»"
+            else t(lang, "preset_edit_title", draft.get("name", ""))
         )
         await context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=msg_id,
             text=title,
-            reply_markup=_draft_keyboard(draft, mode),
+            reply_markup=_draft_keyboard(lang, draft, mode),
         )
 
 
 # ---------------------------------------------------------------------------
-# Форматирование уведомлений
+# Opportunity formatting
 # ---------------------------------------------------------------------------
 
-def _format_opportunity(data: dict, preset_name: str | None = None) -> str:
+def _format_opportunity(data: dict, lang: str, preset_name: str | None = None) -> str:
     profit_pct = float(data.get("profitPercentage", 0))
     total_cost = float(data.get("totalCost", 0))
     gross_profit = data.get("totalGrossProfit")
@@ -390,15 +480,15 @@ def _format_opportunity(data: dict, preset_name: str | None = None) -> str:
         f"{leg.get('eventTitle') or '—'} ({leg.get('platformName', '')})"
         for leg in legs
     )
-    preset_line = f"Пресет: «{preset_name}»\n" if preset_name else ""
+    preset_line = t(lang, "opp_preset", preset_name) + "\n" if preset_name else ""
     profit_usd_line = (
-        f"Прибыль($): <b>${float(gross_profit):.2f}</b>\n" if gross_profit is not None else ""
+        t(lang, "opp_profit_usd", float(gross_profit)) + "\n" if gross_profit is not None else ""
     )
     investment_line = (
-        f"Затраты: <b>${float(total_investment):.2f}</b>\n" if total_investment is not None else ""
+        t(lang, "opp_investment", float(total_investment)) + "\n" if total_investment is not None else ""
     )
     shares_line = (
-        f"Купить акций: <b>{float(total_shares):.2f}</b>\n" if total_shares is not None else ""
+        t(lang, "opp_shares", float(total_shares)) + "\n" if total_shares is not None else ""
     )
 
     legs_lines = []
@@ -409,26 +499,26 @@ def _format_opportunity(data: dict, preset_name: str | None = None) -> str:
         url = leg.get("url", "")
         line = f"  • <b>{outcome}</b> @ {platform}: <code>{price:.4f}</code>"
         if url:
-            line += f'\n    <a href="{url}">Открыть событие</a>'
+            line += f'\n    <a href="{url}">{t(lang, "opp_open_event")}</a>'
         legs_lines.append(line)
 
     legs_text = "\n".join(legs_lines) if legs_lines else "  —"
 
     return (
-        f"🔔 <b>Новая арбитражная возможность</b>\n"
+        f"{t(lang, 'opp_title')}\n"
         f"{preset_line}\n"
-        f"📊 <b>Событие:</b>\n{event_lines}\n\n"
-        f"Total Avg: <code>{total_cost:.4f}</code>\n"
-        f"Прибыль(%): <b>{profit_pct:.2f}%</b>\n"
+        f"{t(lang, 'opp_event')}\n{event_lines}\n\n"
+        f"{t(lang, 'opp_total_avg', total_cost)}\n"
+        f"{t(lang, 'opp_profit_pct', profit_pct)}\n"
         f"{profit_usd_line}"
         f"{investment_line}"
         f"{shares_line}"
-        f"\n<b>Ноги:</b>\n{legs_text}"
+        f"\n{t(lang, 'opp_legs')}\n{legs_text}"
     )
 
 
 # ---------------------------------------------------------------------------
-# Фильтрация по пресетам
+# Preset filtering
 # ---------------------------------------------------------------------------
 
 def _matches_preset(data: dict, preset: dict) -> bool:
@@ -452,26 +542,26 @@ def _matches_preset(data: dict, preset: dict) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Рассылка
+# Broadcast
 # ---------------------------------------------------------------------------
 
 async def broadcast_opportunity(app: Application, data: dict) -> None:
-    """Рассылает новую возможность только пользователям с активным пресетом, который совпал."""
+    """Broadcasts new opportunity only to users with a matching active preset."""
     users = await get_subscribed_users_with_active_presets()
     if not users:
         return
 
-    for telegram_id, active_presets in users:
+    for telegram_id, lang, active_presets in users:
         if not active_presets:
-            logger.debug("Пропуск %s: нет активных пресетов", telegram_id)
+            logger.debug("Skip %s: no active presets", telegram_id)
             continue
 
         matched = next((p for p in active_presets if _matches_preset(data, p)), None)
         if matched is None:
-            logger.debug("Пропуск %s: ни один пресет не совпал", telegram_id)
+            logger.debug("Skip %s: no matching preset", telegram_id)
             continue
 
-        text = _format_opportunity(data, preset_name=matched["name"])
+        text = _format_opportunity(data, lang, preset_name=matched["name"])
         try:
             await app.bot.send_message(
                 chat_id=telegram_id,
@@ -480,11 +570,11 @@ async def broadcast_opportunity(app: Application, data: dict) -> None:
                 disable_web_page_preview=True,
             )
         except Exception as exc:
-            logger.warning("Не удалось отправить сообщение %s: %s", telegram_id, exc)
+            logger.warning("Failed to send message to %s: %s", telegram_id, exc)
 
 
 # ---------------------------------------------------------------------------
-# Точка входа
+# Entry point
 # ---------------------------------------------------------------------------
 
 async def main() -> None:
@@ -492,13 +582,14 @@ async def main() -> None:
 
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CallbackQueryHandler(cb_lang, pattern="^lang:"))
     app.add_handler(CallbackQueryHandler(cb_menu, pattern="^menu:"))
     app.add_handler(CallbackQueryHandler(cb_presets, pattern="^presets:"))
     app.add_handler(CallbackQueryHandler(cb_draft, pattern="^draft:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text_input))
 
     await app.bot.set_my_commands([
-        BotCommand("start", "Зарегистрироваться и получать уведомления"),
+        BotCommand("start", "Start / Начать"),
     ])
 
     async def on_new(data: dict) -> None:
@@ -513,7 +604,7 @@ async def main() -> None:
     async with app:
         await app.start()
         await app.updater.start_polling(drop_pending_updates=True)
-        logger.info("Бот запущен. Подключаемся к WebSocket...")
-        await ws_client.run_forever()  # блокирует до остановки
+        logger.info("Bot started. Connecting to WebSocket...")
+        await ws_client.run_forever()
         await app.updater.stop()
         await app.stop()

@@ -5,6 +5,7 @@ import { BotGuard } from './bot.guard';
 import { BotService } from './bot.service';
 import { ActivateSubscriptionDto } from './dto/activate-subscription.dto';
 import { DeactivateSubscriptionsDto } from './dto/deactivate-subscriptions.dto';
+import { VerifyApiKeyDto } from './dto/verify-api-key.dto';
 
 @ApiTags('bot')
 @Controller('bot')
@@ -33,5 +34,13 @@ export class BotController {
   async deactivateSubscriptions(@Body() dto: DeactivateSubscriptionsDto) {
     await this.botService.deactivateSubscriptions(dto.telegramUserIds);
     return { deactivated: dto.telegramUserIds.length };
+  }
+
+  @Post('verify-key')
+  @ApiOperation({ summary: 'Verify that an API key belongs to the given Telegram user' })
+  @ApiResponse({ status: 200, description: 'Returns {valid: boolean}' })
+  async verifyApiKey(@Body() dto: VerifyApiKeyDto) {
+    const valid = await this.botService.verifyApiKey(dto.apiKey, dto.telegramUserId);
+    return { valid };
   }
 }

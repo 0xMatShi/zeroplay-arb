@@ -12,6 +12,7 @@ async def init_db() -> None:
                 username         TEXT,
                 first_name       TEXT,
                 has_subscription INTEGER NOT NULL DEFAULT 0,
+                language         TEXT NOT NULL DEFAULT 'ru',
                 created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -31,23 +32,31 @@ async def init_db() -> None:
         """)
         await db.commit()
 
-    # Миграции: добавляем колонки, которых могло не быть в старой схеме
+    # Migrations: add columns that may be missing from older schemas
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("PRAGMA table_info(presets)")
-        columns = {row[1] for row in await cursor.fetchall()}
-        if "is_active" not in columns:
+        preset_cols = {row[1] for row in await cursor.fetchall()}
+        if "is_active" not in preset_cols:
             await db.execute(
                 "ALTER TABLE presets ADD COLUMN is_active INTEGER NOT NULL DEFAULT 0"
             )
             await db.commit()
 
+        cursor = await db.execute("PRAGMA table_info(telegram_users)")
+        user_cols = {row[1] for row in await cursor.fetchall()}
+        if "language" not in user_cols:
+            await db.execute(
+                "ALTER TABLE telegram_users ADD COLUMN language TEXT NOT NULL DEFAULT 'ru'"
+            )
+            await db.commit()
+
 
 # ---------------------------------------------------------------------------
-# Пользователи
+# Users
 # ---------------------------------------------------------------------------
 
 async def register_user(telegram_id: int, username: str | None, first_name: str | None) -> bool:
-    """Регистрирует пользователя. Возвращает True если пользователь новый."""
+    """Registers user. Returns True if the user is new."""
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
             "SELECT telegram_id FROM telegram_users WHERE telegram_id = ?",
@@ -74,6 +83,35 @@ async def has_subscription(telegram_id: int) -> bool:
     return bool(row and row[0])
 
 
+async def get_user_language(telegram_id: int) -> str:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT language FROM telegram_users WHERE telegram_id = ?",
+            (telegram_id,),
+        )
+        row = await cursor.fetchone()
+    return row[0] if row else "ru"
+
+
+async def set_user_language(telegram_id: int, lang: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE telegram_users SET language = ? WHERE telegram_id = ?",
+            (lang, telegram_id),
+        )
+        await db.commit()
+
+
+async def set_user_verified(telegram_id: int) -> None:
+    """Marks user as having an active subscription (after API key verification)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE telegram_users SET has_subscription = 1 WHERE telegram_id = ?",
+            (telegram_id,),
+        )
+        await db.commit()
+
+
 async def get_subscribed_chat_ids() -> list[int]:
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
@@ -83,27 +121,27 @@ async def get_subscribed_chat_ids() -> list[int]:
         return [row[0] for row in rows]
 
 
-async def get_subscribed_users_with_active_presets() -> list[tuple[int, list[dict]]]:
-    """Возвращает [(telegram_id, [активные пресеты]), ...] для всех подписчиков."""
+async def get_subscribed_users_with_active_presets() -> list[tuple[int, str, list[dict]]]:
+    """Returns [(telegram_id, language, [active presets]), ...] for all subscribers."""
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            "SELECT telegram_id FROM telegram_users WHERE has_subscription = 1"
+            "SELECT telegram_id, language FROM telegram_users WHERE has_subscription = 1"
         )
-        user_ids = [row[0] for row in await cursor.fetchall()]
+        users = [(row[0], row[1]) for row in await cursor.fetchall()]
 
         result = []
-        for uid in user_ids:
+        for uid, lang in users:
             cursor = await db.execute(
                 f"{_SELECT_PRESET} WHERE telegram_id = ? AND is_active = 1",
                 (uid,),
             )
             rows = await cursor.fetchall()
-            result.append((uid, [_row_to_preset(r) for r in rows]))
+            result.append((uid, lang, [_row_to_preset(r) for r in rows]))
     return result
 
 
 # ---------------------------------------------------------------------------
-# Пресеты
+# Presets
 # ---------------------------------------------------------------------------
 
 def _row_to_preset(row: tuple) -> dict:
@@ -144,7 +182,7 @@ async def get_preset_by_id(preset_id: int) -> dict | None:
 
 
 async def toggle_preset_active(preset_id: int) -> bool:
-    """Переключает is_active. Возвращает новое состояние."""
+    """Toggles is_active. Returns the new state."""
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("SELECT is_active FROM presets WHERE id = ?", (preset_id,))
         row = await cursor.fetchone()
