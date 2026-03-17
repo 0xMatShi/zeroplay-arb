@@ -5,21 +5,19 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:3000")
-BOT_SECRET: str = os.getenv("BOT_SECRET", "")
-
-
 async def verify_api_key(api_key: str, telegram_user_id: int) -> bool | None:
     """
     Verifies that api_key belongs to telegram_user_id via the backend.
     Returns True if valid, False if invalid, None on server/network error.
     """
+    backend_url = os.getenv("BACKEND_URL", "http://localhost:3000")
+    bot_secret = os.getenv("BOT_SECRET", "")
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"{BACKEND_URL}/bot/verify-key",
+                f"{backend_url}/bot/verify-key",
                 json={"apiKey": api_key, "telegramUserId": telegram_user_id},
-                headers={"X-Bot-Secret": BOT_SECRET},
+                headers={"X-Bot-Secret": bot_secret},
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 if resp.status == 200:
