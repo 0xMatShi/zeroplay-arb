@@ -457,9 +457,9 @@ def get_lang(user_id: int) -> str:
     return get_user_language(user_id) or "ru"
 
 
-def tx(lang: str, key: str, **kwargs: object) -> str:
+def tx(lang: str, msg_key: str, **kwargs: object) -> str:
     """Возвращает переведённую строку для указанного языка."""
-    text = TEXTS.get(lang, TEXTS["ru"]).get(key, TEXTS["ru"].get(key, key))
+    text = TEXTS.get(lang, TEXTS["ru"]).get(msg_key, TEXTS["ru"].get(msg_key, msg_key))
     if kwargs:
         return text.format(**kwargs)  # type: ignore[return-value]
     return text  # type: ignore[return-value]
