@@ -1342,11 +1342,19 @@ def get_admin_referral_stats(user_id: int) -> dict:
         (demo_code,),
     )
     plan_rows = cursor.fetchall()
+
+    # Всего перешедших по демо-ссылке (включая тех, кто не оплатил)
+    cursor.execute(
+        "SELECT COUNT(*) as clicks FROM referral_usage WHERE referral_code = ?",
+        (demo_code,),
+    )
+    clicks_row = cursor.fetchone()
     conn.close()
 
     total_spent = float(stats["total"]) if stats and stats["total"] else 0.0
     buyers = int(stats["buyers"]) if stats and stats["buyers"] else 0
     admin_share = round(total_spent * commission_percent / 100, 2)
+    clicks = int(clicks_row["clicks"]) if clicks_row and clicks_row["clicks"] else 0
 
     plan_counts = {"1week": 0, "1month": 0, "3months": 0}
     for row in plan_rows:
@@ -1359,6 +1367,80 @@ def get_admin_referral_stats(user_id: int) -> dict:
         "admin_share": admin_share,
         "commission_percent": commission_percent,
         "plan_counts": plan_counts,
+        "clicks": clicks,
+    }
+
+
+def get_admin_buyers_list(user_id: int, page: int = 0, per_page: int = 15) -> dict:
+    """Возвращает список покупателей для личного кабинета администратора с пагинацией.
+
+    Returns:
+        {"buyers": [...], "total": int, "page": int, "total_pages": int}
+    """
+    conn = _get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT code FROM referral_links WHERE owner_user_id = ? AND is_instant = 1 AND free_days = 1 LIMIT 1",
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return {"buyers": [], "total": 0, "page": 0, "total_pages": 0}
+
+    demo_code = row["code"]
+
+    cursor.execute(
+        """
+        SELECT
+            p.user_id,
+            up.username,
+            up.first_name,
+            COUNT(p.id) as payment_count,
+            COALESCE(SUM(p.amount), 0) as total_spent,
+            GROUP_CONCAT(p.plan, ',') as plans
+        FROM payments p
+        JOIN referral_usage ru ON p.user_id = ru.user_id
+        LEFT JOIN user_profiles up ON up.user_id = p.user_id
+        WHERE ru.referral_code = ? AND p.status = 'confirmed'
+        GROUP BY p.user_id
+        ORDER BY total_spent DESC
+        """,
+        (demo_code,),
+    )
+    all_buyers = cursor.fetchall()
+    conn.close()
+
+    total = len(all_buyers)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(0, min(page, total_pages - 1))
+
+    start = page * per_page
+    page_buyers = all_buyers[start:start + per_page]
+
+    buyers = []
+    for b in page_buyers:
+        plans_raw = b["plans"] or ""
+        plan_list = [p for p in plans_raw.split(",") if p]
+        plan_counts = {"1week": 0, "1month": 0, "3months": 0}
+        for plan in plan_list:
+            if plan in plan_counts:
+                plan_counts[plan] += 1
+        buyers.append({
+            "user_id": b["user_id"],
+            "username": b["username"],
+            "first_name": b["first_name"],
+            "payment_count": int(b["payment_count"]),
+            "total_spent": float(b["total_spent"]),
+            "plan_counts": plan_counts,
+        })
+
+    return {
+        "buyers": buyers,
+        "total": total,
+        "page": page,
+        "total_pages": total_pages,
     }
 
 

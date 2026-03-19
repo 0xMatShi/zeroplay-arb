@@ -53,6 +53,7 @@ from src.payments import (
     is_user_admin,
     ensure_admin_demo_link,
     get_admin_referral_stats,
+    get_admin_buyers_list,
     get_user_language,
     set_user_language,
 )
@@ -129,8 +130,13 @@ TEXTS: dict[str, dict[str, str]] = {
         "profile_ref_percent": "Ваш процент: 20%",
         "profile_ref_invite": "Приглашайте друзей и получайте 20% от суммы их оплаты ежемесячно!",
         "admin_status": "Статус: <b>Admin</b>",
+        "admin_clicks": "Переходов по демо-ссылке: {clicks}",
         "admin_purchases": "Покупок: {buyers} | {share}$({pct}%)",
         "admin_demo_link": "Ваша демо-ссылка:",
+        "btn_admin_buyers": "👥 Покупатели",
+        "admin_buyers_title": "👥 Покупатели ({total})",
+        "admin_buyers_empty": "Пока никто не оплатил через вашу демо-ссылку.",
+        "admin_buyers_page": "Страница {page}/{total}",
         "btn_withdraw": "💸 Вывод",
         "support_text": (
             "<b>Поддержка</b>\n\n"
@@ -317,8 +323,13 @@ TEXTS: dict[str, dict[str, str]] = {
         "profile_ref_percent": "Your percentage: 20%",
         "profile_ref_invite": "Invite friends and earn 20% of their payment amount monthly!",
         "admin_status": "Status: <b>Admin</b>",
+        "admin_clicks": "Demo link clicks: {clicks}",
         "admin_purchases": "Purchases: {buyers} | {share}$({pct}%)",
         "admin_demo_link": "Your demo link:",
+        "btn_admin_buyers": "👥 Buyers",
+        "admin_buyers_title": "👥 Buyers ({total})",
+        "admin_buyers_empty": "No one has paid via your demo link yet.",
+        "admin_buyers_page": "Page {page}/{total}",
         "btn_withdraw": "💸 Withdraw",
         "support_text": (
             "<b>Support</b>\n\n"
@@ -583,11 +594,13 @@ def back_kb(lang: str, callback_data: str = "back_to_main") -> InlineKeyboardMar
     ])
 
 
-def profile_kb(lang: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=tx(lang, "btn_withdraw"), callback_data="withdrawal_start")],
-        [InlineKeyboardButton(text=tx(lang, "btn_back"), callback_data="back_to_main")],
-    ])
+def profile_kb(lang: str, is_admin: bool = False) -> InlineKeyboardMarkup:
+    buttons = []
+    if is_admin:
+        buttons.append([InlineKeyboardButton(text=tx(lang, "btn_admin_buyers"), callback_data="admin_buyers:0")])
+    buttons.append([InlineKeyboardButton(text=tx(lang, "btn_withdraw"), callback_data="withdrawal_start")])
+    buttons.append([InlineKeyboardButton(text=tx(lang, "btn_back"), callback_data="back_to_main")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def support_kb(lang: str) -> InlineKeyboardMarkup:
@@ -1214,10 +1227,12 @@ async def show_profile(callback: CallbackQuery) -> None:
         admin_share = stats["admin_share"]
         commission_pct = stats["commission_percent"]
         plan_counts = stats.get("plan_counts", {"1week": 0, "1month": 0, "3months": 0})
+        clicks = stats.get("clicks", 0)
 
         text = (
             f"{tx(lang, 'profile_title')}\n\n"
             f"{tx(lang, 'admin_status')}\n\n"
+            f"{tx(lang, 'admin_clicks', clicks=clicks)}\n"
             f"{tx(lang, 'admin_purchases', buyers=buyers, share=f'{admin_share:.2f}', pct=commission_pct)}\n\n"
             f"LITE: {plan_counts.get('1week', 0)}\n"
             f"PRO: {plan_counts.get('1month', 0)}\n"
@@ -1253,7 +1268,85 @@ async def show_profile(callback: CallbackQuery) -> None:
     logger.info(f"User {user_id} opened profile")
     await safe_edit_message(
         callback, text,
-        reply_markup=profile_kb(lang),
+        reply_markup=profile_kb(lang, is_admin=is_user_admin(user_id)),
+        parse_mode=ParseMode.HTML,
+    )
+    await callback.answer()
+
+
+_ADMIN_BUYERS_PLAN_LABELS = {"1week": "LITE", "1month": "PRO", "3months": "MAX"}
+
+
+@router.callback_query(F.data.startswith("admin_buyers:"))
+async def admin_buyers_list(callback: CallbackQuery) -> None:
+    """Список покупателей для личного кабинета администратора."""
+    user_id = callback.from_user.id
+    lang = get_lang(user_id)
+
+    if not is_user_admin(user_id):
+        await callback.answer("Access denied", show_alert=True)
+        return
+
+    page = int(callback.data.split(":")[1])  # type: ignore
+    result = get_admin_buyers_list(user_id, page=page)
+
+    buyers = result["buyers"]
+    total = result["total"]
+    current_page = result["page"]
+    total_pages = result["total_pages"]
+
+    title = tx(lang, "admin_buyers_title", total=total)
+
+    if total == 0:
+        text = f"<b>{title}</b>\n\n{tx(lang, 'admin_buyers_empty')}"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=tx(lang, "btn_back"), callback_data="profile")],
+        ])
+        await safe_edit_message(callback, text, reply_markup=kb, parse_mode=ParseMode.HTML)
+        await callback.answer()
+        return
+
+    lines = [f"<b>{title}</b>"]
+    if total_pages > 1:
+        lines.append(f"<i>{tx(lang, 'admin_buyers_page', page=current_page + 1, total=total_pages)}</i>")
+    lines.append("")
+
+    for i, b in enumerate(buyers, start=current_page * 15 + 1):
+        if b["username"]:
+            user_display = f"@{b['username']}"
+        elif b["first_name"]:
+            user_display = b["first_name"]
+        else:
+            user_display = str(b["user_id"])
+
+        plans_str = " | ".join(
+            f"{_ADMIN_BUYERS_PLAN_LABELS[k]}×{v}"
+            for k, v in b["plan_counts"].items()
+            if v > 0
+        ) or "—"
+
+        lines.append(
+            f"{i}. {user_display}\n"
+            f"   Оплат: {b['payment_count']} · ${b['total_spent']:.2f}\n"
+            f"   {plans_str}"
+        )
+
+    text = "\n".join(lines)
+
+    nav_buttons = []
+    if current_page > 0:
+        nav_buttons.append(InlineKeyboardButton(text="◀", callback_data=f"admin_buyers:{current_page - 1}"))
+    if current_page < total_pages - 1:
+        nav_buttons.append(InlineKeyboardButton(text="▶", callback_data=f"admin_buyers:{current_page + 1}"))
+
+    buttons = []
+    if nav_buttons:
+        buttons.append(nav_buttons)
+    buttons.append([InlineKeyboardButton(text=tx(lang, "btn_back"), callback_data="profile")])
+
+    await safe_edit_message(
+        callback, text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
         parse_mode=ParseMode.HTML,
     )
     await callback.answer()
