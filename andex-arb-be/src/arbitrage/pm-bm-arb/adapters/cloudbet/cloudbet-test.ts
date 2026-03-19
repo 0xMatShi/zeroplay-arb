@@ -16,9 +16,10 @@
  *
  * Подтверждённые факты:
  *   - Pusher app key: c065c29ae4b4b2f23f53 (ws-eu.pusher.com)
- *   - Каналы: ПУБЛИЧНЫЕ, auth="" — работают с любым UUID
+ *   - Каналы технически ПУБЛИЧНЫЕ (auth=""), но сервер рассылает обновления ТОЛЬКО на UUID из аккаунта
+ *   - UUID берётся из JWT клейма `uuid` в CLOUDBET_API_KEY (не randomUUID!)
  *   - WS данные: base64(gzip({uuid, index, chunk, final})) → base64(inner JSON)
- *   - Топики: event_v6_main_{id}, metadata_{id}, v6_live_events_list_update
+ *   - Топики: event_v6_main_{id} (odds), metadata_{id} (score), v6_live_events_list_update (list)
  */
 
 import axios from 'axios';
@@ -33,11 +34,25 @@ const REST_BASE    = 'https://sports-api.cloudbet.com/pub/v2/odds';
 const PUSHER_KEY   = 'c065c29ae4b4b2f23f53';
 const PUSHER_WS    = `wss://ws-eu.pusher.com/app/${PUSHER_KEY}?protocol=7&client=js&version=8.4.0&flash=false`;
 
-/** Генерируем случайный UUID — Pusher каналы публичные, любой UUID работает */
-const PLAYER_UUID  = crypto.randomUUID();
-
+/**
+ * UUID должен совпадать с `uuid` клеймом в JWT-токене API ключа.
+ * Каналы технически публичные, но сервер рассылает обновления только на UUID из аккаунта.
+ * Случайный UUID → 0 обновлений. UUID из JWT → сотни обновлений в минуту.
+ */
 /** API key из env или пустая строка (получите на affiliates.cloudbet.com) */
 const API_KEY      = process.env.CLOUDBET_API_KEY ?? '';
+
+function extractUuidFromJwt(apiKey: string): string {
+  try {
+    const parts = apiKey.split('.');
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+      if (payload.uuid) return payload.uuid as string;
+    }
+  } catch { /* ignore */ }
+  return crypto.randomUUID();
+}
+const PLAYER_UUID  = extractUuidFromJwt(API_KEY);
 
 /** Лимит событий на спорт (REST запрос) */
 const EVENTS_LIMIT = 50;
@@ -53,7 +68,6 @@ const PING_INTERVAL_MS = 25_000;
  * submarket  — ключ субмаркета в котором ищем home/away outcomes.
  */
 const TARGET_SPORTS: SportsConfig[] = [
-  { sportKey: 'soccer',               marketKey: 'soccer.match_odds',           submarket: 'period=ft'                 },
   { sportKey: 'basketball',           marketKey: 'basketball.moneyline',         submarket: 'period=ot&period=ft'       },
   { sportKey: 'tennis',               marketKey: 'tennis.winner',               submarket: 'period=default'            },
   { sportKey: 'ice-hockey',           marketKey: 'ice_hockey.winner',            submarket: 'period=ot&period=ft&period=penalties' },
@@ -62,7 +76,6 @@ const TARGET_SPORTS: SportsConfig[] = [
   { sportKey: 'dota-2',              marketKey: 'dota_2.winner',               submarket: 'period=default'            },
   { sportKey: 'league-of-legends',    marketKey: 'league_of_legends.winner',    submarket: 'period=default'            },
   { sportKey: 'esport-valorant',      marketKey: 'esport_valorant.winner',      submarket: 'period=default'            },
-  { sportKey: 'esport-fifa',          marketKey: 'esport_fifa.match_odds',      submarket: 'period=ft'                 },
 ];
 
 // ── Types ──────────────────────────────────────────────────────────────────────

@@ -52,6 +52,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   private pinnacleReady = false;
   private stakeReady = false;
   private cloudbetReady = false;
+  private pmReady = false;
 
   /**
    * PM token IDs for currently matched markets (updated after each match cycle).
@@ -94,24 +95,26 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       this.cloudbetReady = true;
     }
 
-    const allReady = () => this.dexReady && this.pinnacleReady && this.stakeReady && this.cloudbetReady;
+    // Start fetching PM events immediately — in parallel with bookmaker WS initialisation.
+    // By the time all bookmakers signal ready, PM data will already be available.
+    this.startPmFetch();
 
-    // Fire match cycle once all bookmaker adapters have signalled ready.
+    // Fire match cycle once all bookmaker adapters AND PM have signalled ready.
     this.dexAdapter.onAllMarketsReady = () => {
       this.dexReady = true;
-      if (allReady()) this.onBookmakerMarketsReady('dexsport');
+      this.checkAndTriggerMatchCycle('dexsport');
     };
     this.pinnacleAdapter.onAllMarketsReady = () => {
       this.pinnacleReady = true;
-      if (allReady()) this.onBookmakerMarketsReady('pinnacle');
+      this.checkAndTriggerMatchCycle('pinnacle');
     };
     this.stakeAdapter.onAllMarketsReady = () => {
       this.stakeReady = true;
-      if (allReady()) this.onBookmakerMarketsReady('stake');
+      this.checkAndTriggerMatchCycle('stake');
     };
     this.cloudbetAdapter.onAllMarketsReady = () => {
       this.cloudbetReady = true;
-      if (allReady()) this.onBookmakerMarketsReady('cloudbet');
+      this.checkAndTriggerMatchCycle('cloudbet');
     };
   }
 
@@ -157,6 +160,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.pinnacleReady = false;
     this.stakeReady = false;
     this.cloudbetReady = false;
+    this.pmReady = false;
 
     // If Pinnacle credentials are missing it will never fire onAllMarketsReady — skip it
     if (!process.env.PINNACLE_USERNAME || !process.env.PINNACLE_PASSWORD) {
@@ -170,6 +174,9 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.polyAdapter.clearCache();
     this.pinnacleAdapter.clearCache();
     this.dexAdapter.clearCache(); // also triggers WS reconnect → full rediscovery
+
+    // Start PM fetch immediately — runs in parallel with the slow bookmaker re-logins below.
+    this.startPmFetch();
 
     // Close existing Pinnacle + Stake WS connections BEFORE login so they don't
     // receive messages against a cleared cache during the Chrome login window.
@@ -224,6 +231,22 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
    * Called when both bookmaker adapters have signalled they are ready.
    * Fetches fresh PM events and runs a full match cycle.
    */
+  private startPmFetch(): void {
+    this.polyAdapter.forceFetch()
+      .then(() => {
+        this.pmReady = true;
+        this.logger.log('PM events fetch complete');
+        this.checkAndTriggerMatchCycle('polymarket');
+      })
+      .catch((err: any) => this.logger.error(`PM events fetch failed: ${err.message}`));
+  }
+
+  private checkAndTriggerMatchCycle(source: string): void {
+    if (this.dexReady && this.pinnacleReady && this.stakeReady && this.cloudbetReady && this.pmReady) {
+      this.onBookmakerMarketsReady(source);
+    }
+  }
+
   private async onBookmakerMarketsReady(source: string): Promise<void> {
     if (this.matchingInProgress) {
       this.logger.warn(`${source} ready signal received but match cycle already in progress, skipping`);
@@ -231,8 +254,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     }
     this.matchingInProgress = true;
     try {
-      this.logger.log(`Both bookmakers ready (triggered by ${source}) — fetching PM events and running match cycle`);
-      await this.polyAdapter.forceFetch();
+      this.logger.log(`All bookmakers + PM ready (triggered by ${source}) — running match cycle`);
       await this.runMatchCycle();
     } catch (err: any) {
       this.logger.error(`Match cycle failed after ${source} ready signal: ${err.message}`);

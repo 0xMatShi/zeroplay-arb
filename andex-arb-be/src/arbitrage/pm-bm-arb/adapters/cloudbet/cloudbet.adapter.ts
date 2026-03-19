@@ -78,8 +78,8 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
   private readonly eventLastSeen = new Map<string, number>();
 
   // ── Pusher WS ──────────────────────────────────────────────────────────────
-  /** Random UUID for Pusher channel name prefix (public channels — any UUID works) */
-  private readonly playerUuid = crypto.randomUUID();
+  /** Player UUID extracted from API key JWT — must match account UUID for per-event channels to deliver updates */
+  private readonly playerUuid = CloudbetAdapter.extractUuidFromJwt(process.env.CLOUDBET_API_KEY ?? '');
   private ws: any = null;
   /** eventId → Pusher channel name */
   private readonly subscribedOdds = new Map<number, string>();
@@ -374,6 +374,23 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
   }
 
   // ── Pusher channel helpers ─────────────────────────────────────────────────
+
+  /**
+   * Extracts the `uuid` claim from the Cloudbet API key JWT without signature verification.
+   * The per-event Pusher channels only deliver updates when the channel prefix matches
+   * the account UUID embedded in the API key.
+   * Falls back to a random UUID if parsing fails (e.g. key not set).
+   */
+  private static extractUuidFromJwt(apiKey: string): string {
+    try {
+      const parts = apiKey.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+        if (payload.uuid) return payload.uuid as string;
+      }
+    } catch { /* ignore */ }
+    return crypto.randomUUID();
+  }
 
   private makeChannel(topic: string): string {
     const hash = crypto.createHash('md5').update(topic).digest('hex');

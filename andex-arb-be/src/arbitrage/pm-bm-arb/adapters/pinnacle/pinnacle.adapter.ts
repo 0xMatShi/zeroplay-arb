@@ -25,8 +25,6 @@ const KEEPALIVE_INTERVAL_MS = 30_000;
 const EVICT_INTERVAL_MS = 60_000;
 /** Delay before attempting WS reconnect after close */
 const WS_RECONNECT_DELAY_MS = 5_000;
-/** Delay between UNSUBSCRIBE and next SUBSCRIBE in the poll cycle */
-const POLL_INTERVAL_MS = 3_000;
 
 /** Sports to track: sportId → sportKey (for regular sports) */
 const REGULAR_SPORTS: Array<{ sportId: number; sportKey: string }> = [
@@ -107,7 +105,6 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
   // ── Timers ────────────────────────────────────────────────────
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private evictTimer: ReturnType<typeof setInterval> | null = null;
-  private nextPollTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
 
   constructor() {
@@ -156,7 +153,6 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     this.leagueSportKey.clear();
     this.cycleFullOddsReceived.clear();
     this.initialFetchFired = false;
-    if (this.nextPollTimer) { clearTimeout(this.nextPollTimer); this.nextPollTimer = null; }
   }
 
   /** Close existing WS connections and reconnect (after login() to get fresh URL). */
@@ -394,33 +390,6 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Unsubscribe from all active WS connections. */
-  private sendUnsubscribeAll(): void {
-    for (const [sportId, ws] of this.wsConnections) {
-      if (ws.readyState !== 1 /* OPEN */) continue;
-      if (sportId === ESPORTS_SPORT_ID) {
-        ws.send(JSON.stringify({ type: 'UNSUBSCRIBE', destination: 'HLE_EURO_ODDS' }));
-        ws.send(JSON.stringify({ type: 'UNSUBSCRIBE', destination: 'LIVE_EURO_ODDS' }));
-      } else {
-        ws.send(JSON.stringify({ type: 'UNSUBSCRIBE', destination: 'MATCHUPS_EURO_ODDS' }));
-        ws.send(JSON.stringify({ type: 'UNSUBSCRIBE', destination: 'LIVE_EURO_ODDS' }));
-      }
-    }
-  }
-
-  /** Schedule the next subscribe cycle after POLL_INTERVAL_MS. */
-  private schedulePollCycle(): void {
-    if (this.nextPollTimer) { clearTimeout(this.nextPollTimer); this.nextPollTimer = null; }
-    this.nextPollTimer = setTimeout(() => {
-      this.nextPollTimer = null;
-      if (this.destroyed) return;
-      for (const [sportId, ws] of this.wsConnections) {
-        if (ws.readyState === 1 /* OPEN */) {
-          this.sendSubscribesToWs(ws, sportId);
-        }
-      }
-    }, POLL_INTERVAL_MS);
-  }
 
   // ── Message handling ──────────────────────────────────────────
 
@@ -444,7 +413,9 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         for (const league of odds.leagues ?? []) {
           this.cacheLeagueSportKey(league);
           for (const event of league.events ?? []) {
-            const changes = this.mergeEvent(event, league);
+            // pruneStale=true only before initialFetchFired — currentMatches is still empty,
+            // so splice cannot orphan any references yet.
+            const changes = this.mergeEvent(event, league, false, !this.initialFetchFired);
             this.eventLastSeen.set(String(event.id), Date.now());
             totalEvents++;
             if (changes.length) changedEvents++;
@@ -456,18 +427,15 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
           `(${this.cycleFullOddsReceived.size}/${EXPECTED_FULL_ODDS})`,
         );
 
-        // All FULL_ODDS for this cycle received — fire callback, unsubscribe, schedule next poll
+        // All FULL_ODDS for this cycle received — fire callback, stay subscribed for UPDATE_ODDS
         if (this.cycleFullOddsReceived.size >= EXPECTED_FULL_ODDS) {
-          this.logger.log(`[Pinnacle WS] Cycle complete — ${this.eventCache.size} events in cache`);
+          this.logger.log(`[Pinnacle WS] Initial FULL_ODDS complete — ${this.eventCache.size} events in cache`);
+          this.cycleFullOddsReceived.clear();
           if (!this.initialFetchFired) {
             this.initialFetchFired = true;
             this.onAllMarketsReady?.();
-          } else {
-            this.onPriceUpdate?.();
           }
-          this.sendUnsubscribeAll();
-          this.cycleFullOddsReceived.clear();
-          this.schedulePollCycle();
+          // Stay subscribed — subsequent price changes arrive via UPDATE_ODDS
         }
       }
       return;
@@ -508,7 +476,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
 
   // ── Merge ─────────────────────────────────────────────────────
 
-  private mergeEvent(event: PinnacleEvent, league: PinnacleLeague, isPartial = false): string[] {
+  private mergeEvent(event: PinnacleEvent, league: PinnacleLeague, isPartial = false, pruneStale = false): string[] {
     const eventId = String(event.id);
     const sportKey = this.resolveSportKey(league);
     if (!sportKey) return [];
@@ -567,17 +535,14 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
 
     const changes: string[] = [];
 
-    // For UPDATE_ODDS: evict markets that are now offline.
-    // Offline markets are skipped by addPeriodMarkets so they won't appear in markets[],
-    // and partial mode doesn't do a full sweep — explicit removal is required.
+    // For UPDATE_ODDS: log offline markets but keep them in cache with last known prices.
+    // Removing them here would orphan the reference held by currentMatches — same bug as
+    // Cloudbet/Stake adapters. When the market comes back online it is updated in-place below.
     if (isPartial) {
       const offlineIds = this.collectOfflineMarketIds(event);
-      if (offlineIds.size > 0) {
-        for (let i = existing.markets.length - 1; i >= 0; i--) {
-          if (offlineIds.has(existing.markets[i].marketId)) {
-            changes.push(`[${existing.markets[i].name}] offline`);
-            existing.markets.splice(i, 1);
-          }
+      for (const cached of existing.markets) {
+        if (offlineIds.has(cached.marketId)) {
+          changes.push(`[${cached.name}] offline (kept in cache)`);
         }
       }
     }
@@ -599,10 +564,12 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     for (const cached of existing.markets) {
       const updated = newById.get(cached.marketId);
       if (updated) {
-        // Update outcomes individually — only replace prices that are valid in the new data.
+        // Update outcomes in-place — match by name to avoid index-order issues.
         // This handles partial UPDATE_ODDS where only one price (e.g. awayPrice) is sent.
-        for (let i = 0; i < cached.outcomes.length && i < updated.outcomes.length; i++) {
-          const newPrice = updated.outcomes[i].price;
+        for (let i = 0; i < cached.outcomes.length; i++) {
+          const updatedOutcome = updated.outcomes.find((o) => o.name === cached.outcomes[i].name);
+          if (!updatedOutcome) continue;
+          const newPrice = updatedOutcome.price;
           if (isFinite(newPrice) && newPrice > 0 && cached.outcomes[i].price !== newPrice) {
             const arrow = newPrice > cached.outcomes[i].price ? '↑' : '↓';
             changes.push(
@@ -621,9 +588,11 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       changes.push(`[${newMarket.name}] online`);
     }
 
-    // Remove markets that disappeared — only for FULL_ODDS (complete snapshot).
-    // UPDATE_ODDS only includes changed markets; absent markets are unchanged, not removed.
-    if (!isPartial) {
+    // Remove markets that disappeared — only during the initial FULL_ODDS sweep (pruneStale=true),
+    // when currentMatches is guaranteed empty and splice cannot orphan any references.
+    // After initialFetchFired, markets absent from FULL_ODDS are kept with last known prices;
+    // the event-level eviction timer handles true stale cleanup.
+    if (!isPartial && pruneStale) {
       const updatedIds = new Set(markets.map((m) => m.marketId));
       for (let i = existing.markets.length - 1; i >= 0; i--) {
         if (!updatedIds.has(existing.markets[i].marketId)) {
@@ -755,7 +724,6 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
   private stopTimers(): void {
     if (this.keepAliveTimer) { clearInterval(this.keepAliveTimer); this.keepAliveTimer = null; }
     if (this.evictTimer) { clearInterval(this.evictTimer); this.evictTimer = null; }
-    if (this.nextPollTimer) { clearTimeout(this.nextPollTimer); this.nextPollTimer = null; }
   }
 
   private async sendKeepAlive(): Promise<void> {
