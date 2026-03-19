@@ -269,6 +269,29 @@ function SportsOpportunityCard({
   const secsAgo = Math.floor((Date.now() - new Date(opp.lastValidatedAt).getTime()) / 1000)
   const displayMarketType = opp.dexMarketName || formatMarketType(opp.marketType)
 
+  const openTab = (url: string) => {
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    a.click()
+  }
+
+  const handleOpenAll = () => {
+    void openCalcWindow({
+      pmOutcome: pmLeg?.outcomeName ?? '',
+      dexOutcome: dexLeg?.outcomeName ?? '',
+      pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
+      dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
+      pmAmount: pmCalcAmount.toFixed(2),
+      dexAmount: dexCalcAmount.toFixed(2),
+      dexPlatform: dexLeg?.platform,
+      marketType: displayMarketType,
+    })
+    if (pmLeg?.url) openTab(pmLeg.url)
+    if (dexLeg?.url) openTab(dexLeg.url)
+  }
+
   let cardClass = 'opportunity-card sports-card'
   if (isPinned && !isStale) cardClass += ' sports-card--pinned'
   else if (isPinned && isStale) cardClass += ' sports-card--pinned-stale'
@@ -277,9 +300,10 @@ function SportsOpportunityCard({
   return (
     <div
       className={cardClass}
-      style={{ animationDelay: `${index * 0.05}s` }}
+      style={{ animationDelay: `${index * 0.05}s`, cursor: 'pointer' }}
       onMouseEnter={() => setExpanded(true)}
       onMouseLeave={() => setExpanded(false)}
+      onClick={handleOpenAll}
     >
       {/* Main row */}
       <div className="sports-card-main">
@@ -413,25 +437,7 @@ function SportsOpportunityCard({
           className="sports-action-btn sports-action-btn--open"
           onClick={(e) => {
             e.stopPropagation()
-            const openTab = (url: string) => {
-              const a = document.createElement('a')
-              a.href = url
-              a.target = '_blank'
-              a.rel = 'noopener noreferrer'
-              a.click()
-            }
-            void openCalcWindow({
-              pmOutcome: pmLeg?.outcomeName ?? '',
-              dexOutcome: dexLeg?.outcomeName ?? '',
-              pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
-              dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
-              pmAmount: pmCalcAmount.toFixed(2),
-              dexAmount: dexCalcAmount.toFixed(2),
-              dexPlatform: dexLeg?.platform,
-              marketType: displayMarketType,
-            })
-            if (pmLeg?.url) openTab(pmLeg.url)
-            if (dexLeg?.url) openTab(dexLeg.url)
+            handleOpenAll()
           }}
         >
           <ExternalLink size={28} />
