@@ -140,8 +140,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "btn_withdraw": "💸 Вывод",
         "support_text": (
             "<b>Поддержка</b>\n\n"
-            "По любому вопросу касательно сервиса и не только вы можете обратиться к нам в любое время, "
-            "работаем 24/7. Задать вопрос - @wrhundred\n\n"
+            "По вопросам сервиса, оплатам и техническим моментам - @wrhundred\n\n"
+            "По вопросам сотрудничества - @aNd3x\n\n"
+            "Вы можете обратиться к нам в любое время, работаем 24/7.\n\n"
             "<i>Если вопрос касается оплаты, пожалуйста, сразу присылайте скриншоты или ID транзакции "
             "для ускорения работы.</i>"
         ),
@@ -333,8 +334,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "btn_withdraw": "💸 Withdraw",
         "support_text": (
             "<b>Support</b>\n\n"
-            "For any questions about the service and beyond, you can reach us at any time - we work 24/7. "
-            "Ask a question - @wrhundred\n\n"
+            "For questions about the service, payments, and technical issues — @wrhundred\n\n"
+            "For partnership inquiries — @aNd3x\n\n"
+            "You can reach us at any time, we work 24/7.\n\n"
             "<i>If your question concerns payment, please send screenshots or transaction ID right away "
             "to speed things up.</i>"
         ),
