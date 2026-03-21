@@ -237,14 +237,14 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
         }
       }
       existing.status = raw.status ?? existing.status;
-      // Preserve startTime from REST if it was missing (e.g. event first seen via WS)
-      if (raw.startTime && !existing.startTime) existing.startTime = raw.startTime;
+      // Preserve cutoffTime as startTime proxy from REST if it was missing (e.g. event first seen via WS)
+      if (raw.cutoffTime && !existing.startTime) existing.startTime = raw.cutoffTime;
     } else {
       this.rawCache.set(id, {
         id,
         name:            raw.name ?? '',
         status:          raw.status ?? 'TRADING',
-        startTime:       raw.startTime ?? '',
+        startTime:       raw.cutoffTime ?? '',  // API does not return startTime — cutoffTime is the closest proxy
         cutoffTime:      raw.cutoffTime ?? '',
         home:            raw.home ?? null,
         away:            raw.away ?? null,
@@ -533,7 +533,7 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
               id,
               name:            ev.name ?? `${ev.home?.name} v ${ev.away?.name}`,
               status:          'TRADING_LIVE',
-              startTime:       ev.startTime ?? '',
+              startTime:       ev.cutoffTime ?? '',  // API does not return startTime — cutoffTime is the closest proxy
               cutoffTime:      ev.cutoffTime ?? '',
               home:            ev.home ?? null,
               away:            ev.away ?? null,

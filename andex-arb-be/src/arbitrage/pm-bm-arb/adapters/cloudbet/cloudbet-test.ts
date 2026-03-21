@@ -531,7 +531,7 @@ async function main() {
     if (!ml) continue;
     const oddsStr = ml.map(o => `${o.name}:${o.price.toFixed(3)}`).join(' / ');
     const isLive = event.status === 'TRADING_LIVE' ? '[LIVE]' : '';
-    console.log(`  ${isLive.padEnd(7)} ${cfg.sportKey.padEnd(20)} ${event.name} — ${oddsStr}`);
+    console.log(`  ${isLive.padEnd(7)} ${cfg.sportKey.padEnd(20)} cutoff=${event.cutoffTime || 'N/A'} ${event.name} — ${oddsStr}`);
     if (++shown >= 30) { console.log(`  ... (${allEvents.length - shown} more)`); break; }
   }
 
