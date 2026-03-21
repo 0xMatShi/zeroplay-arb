@@ -831,14 +831,46 @@ export function Scanner() {
   }, [arbMode, filteredOpportunities, pinnedOpps, pmbmQuery.data])
 
 
-  // Play sound when a pm-bm card appears in the filtered list (wasn't visible before)
+  // Play sound when a pm-bm card has been visible for at least 1 second
   const visiblePmBmIdsRef = useRef<Set<string>>(new Set())
+  const pendingBmSoundTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   useEffect(() => {
-    if (arbMode !== 'pm-bm' || !soundEnabledPmBm || isPaused) return
+    const clearAllPending = () => {
+      pendingBmSoundTimers.current.forEach(timer => clearTimeout(timer))
+      pendingBmSoundTimers.current.clear()
+    }
+
+    if (arbMode !== 'pm-bm' || !soundEnabledPmBm || isPaused) {
+      clearAllPending()
+      // Don't reset visiblePmBmIdsRef so cards already seen aren't treated as new on unpause
+      return () => clearAllPending()
+    }
+
     const currentIds = new Set(filteredOpportunities.map(o => o.id))
+
+    // Cancel pending timers for cards that disappeared
+    for (const [id, timer] of pendingBmSoundTimers.current) {
+      if (!currentIds.has(id)) {
+        clearTimeout(timer)
+        pendingBmSoundTimers.current.delete(id)
+      }
+    }
+
+    // Schedule 1-second delayed sound for newly appeared cards
     const newIds = [...currentIds].filter(id => !visiblePmBmIdsRef.current.has(id))
-    if (newIds.length > 0) playBmSound()
+    for (const id of newIds) {
+      if (!pendingBmSoundTimers.current.has(id)) {
+        const timer = setTimeout(() => {
+          pendingBmSoundTimers.current.delete(id)
+          if (visiblePmBmIdsRef.current.has(id)) playBmSound()
+        }, 1000)
+        pendingBmSoundTimers.current.set(id, timer)
+      }
+    }
+
     visiblePmBmIdsRef.current = currentIds
+
+    return () => clearAllPending()
   }, [filteredOpportunities, arbMode, soundEnabledPmBm, isPaused, playBmSound])
 
   const locale = i18n.language === 'ru' ? 'ru' : 'en'
