@@ -834,16 +834,21 @@ export function Scanner() {
   // Play sound when a pm-bm card has been visible for at least 1 second
   const visiblePmBmIdsRef = useRef<Set<string>>(new Set())
   const pendingBmSoundTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  // Clear all timers on unmount
   useEffect(() => {
-    const clearAllPending = () => {
+    return () => {
       pendingBmSoundTimers.current.forEach(timer => clearTimeout(timer))
       pendingBmSoundTimers.current.clear()
     }
+  }, [])
 
+  useEffect(() => {
     if (arbMode !== 'pm-bm' || !soundEnabledPmBm || isPaused) {
-      clearAllPending()
+      pendingBmSoundTimers.current.forEach(timer => clearTimeout(timer))
+      pendingBmSoundTimers.current.clear()
       // Don't reset visiblePmBmIdsRef so cards already seen aren't treated as new on unpause
-      return () => clearAllPending()
+      return
     }
 
     const currentIds = new Set(filteredOpportunities.map(o => o.id))
@@ -869,8 +874,6 @@ export function Scanner() {
     }
 
     visiblePmBmIdsRef.current = currentIds
-
-    return () => clearAllPending()
   }, [filteredOpportunities, arbMode, soundEnabledPmBm, isPaused, playBmSound])
 
   const locale = i18n.language === 'ru' ? 'ru' : 'en'
