@@ -237,6 +237,8 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
         }
       }
       existing.status = raw.status ?? existing.status;
+      // Preserve startTime from REST if it was missing (e.g. event first seen via WS)
+      if (raw.startTime && !existing.startTime) existing.startTime = raw.startTime;
     } else {
       this.rawCache.set(id, {
         id,
@@ -342,6 +344,11 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
     const prevMarket = existing.markets[0];
     existing.isLive   = raw.status === 'TRADING_LIVE';
     existing.updatedAt = now;
+    // Backfill startTime if it was unknown when the event was first added (WS-discovered event)
+    if (!existing.startTime && raw.startTime) {
+      const ms = Date.parse(raw.startTime);
+      if (!isNaN(ms)) existing.startTime = Math.floor(ms / 1000);
+    }
 
     const changes: string[] = [];
     if (prevMarket) {

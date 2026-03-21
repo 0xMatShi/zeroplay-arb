@@ -460,8 +460,10 @@ export class SportsMatcher {
 
           const bm = bmList.find((d) => d.eventId === bmId)!;
 
-          // Filter by startTime if both platforms have it (within 3 hours — same match)
-          if (pm.startTime !== undefined && bm.startTime !== undefined && bm.startTime > 0) {
+          // Filter by startTime: if PM has a date but BM doesn't — skip (can't verify it's the same match).
+          // If both have dates — require them to be within 3 hours of each other.
+          if (pm.startTime !== undefined) {
+            if (!bm.startTime || bm.startTime <= 0) continue;
             const bmMs = bm.startTime * 1000;
             if (Math.abs(pm.startTime - bmMs) > 3 * 3_600_000) continue;
           }
