@@ -216,17 +216,32 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         await page.authenticate({ username: proxyUser, password: proxyPass });
       }
 
-      // Intercept WebSocket URL via JS injection
+      // Intercept WebSocket URL via JS injection.
+      // IMPORTANT: return a fake WS object instead of creating a real connection.
+      // If we let the browser open a real WS with the token, the token gets "consumed"
+      // by that connection. When the browser closes, the server-side session dies and
+      // our subsequent Node.js connection receives nothing (token is dead).
+      // By returning a fake WS the page JS gets a valid-looking object but no real
+      // connection is established, so the token stays fresh for our Node.js WS.
       let wsUrl: string | null = null;
       await (page as any).evaluateOnNewDocument(`
         (() => {
           const OrigWS = window.WebSocket;
           window.WebSocket = function(url, protocols) {
-            const ws = protocols ? new OrigWS(url, protocols) : new OrigWS(url);
             if (url.includes('sports-websocket')) {
               console.log('[WS_URL]' + url);
+              // Return a fake WS — keeps the token fresh for Node.js reuse
+              const fake = Object.create(OrigWS.prototype);
+              fake.url = url;
+              fake.readyState = 0; // CONNECTING — never transitions
+              fake.send = function() {};
+              fake.close = function() { fake.readyState = 3; };
+              fake.addEventListener = function() {};
+              fake.removeEventListener = function() {};
+              fake.dispatchEvent = function() { return true; };
+              return fake;
             }
-            return ws;
+            return protocols ? new OrigWS(url, protocols) : new OrigWS(url);
           };
           window.WebSocket.prototype = OrigWS.prototype;
           window.WebSocket.CONNECTING = OrigWS.CONNECTING;
@@ -278,9 +293,10 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       const cookieMap = Object.fromEntries(cookies.map((c) => [c.name, c.value]));
       this.dpJCA = cookieMap['dpJCA'] ?? 'h1ft';
 
-      // Build cookie string for HTTP keep-alive calls
+      // Build cookie string — send all cookies, not just a subset.
+      // Pinnacle no longer sets JSESSIONID/dpJCA; filtering to those names
+      // left only 'u' and 'custid', which was insufficient for WS auth.
       this.sessionCookie = cookies
-        .filter((c) => ['JSESSIONID', 'u', 'custid', 'dpJCA', 'lang'].includes(c.name))
         .map((c) => `${c.name}=${c.value}`)
         .join('; ');
 
