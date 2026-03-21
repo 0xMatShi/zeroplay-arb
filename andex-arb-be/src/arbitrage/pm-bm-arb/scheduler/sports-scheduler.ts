@@ -47,6 +47,19 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   /** Guard against concurrent books fetches */
   private booksFetchInProgress = false;
 
+  /**
+   * Timestamp of the last Puppeteer re-login to Pinnacle.
+   * Initialized to Date.now() so the first check starts counting from startup.
+   */
+  private lastPinnacleLoginAt: number = Date.now();
+
+  /**
+   * Minimum interval before a Pinnacle re-login is eligible (1 hour in ms).
+   * If elapsed time >= PINNACLE_RELOGIN_MAX_MS, re-login is forced.
+   */
+  private readonly PINNACLE_RELOGIN_MIN_MS = 60 * 60_000;   // 1 hour
+  private readonly PINNACLE_RELOGIN_MAX_MS = 120 * 60_000;  // 2 hours
+
   /** Track which adapters have completed at least one full fetch */
   private dexReady = false;
   private pinnacleReady = false;
@@ -178,19 +191,45 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     // Start PM fetch immediately — runs in parallel with the slow bookmaker re-logins below.
     this.startPmFetch();
 
+    // ── Pinnacle: decide whether to re-login via Puppeteer ───────
+    // Re-login is expensive (~20s). We skip it most cycles and only do it
+    // randomly once per 1–2 hours (aligned to the 10-minute reset tick).
+    //
+    // Rules (checked on each 10-min tick):
+    //   < 60 min since last login  → never re-login
+    //   60–120 min                 → re-login with probability that ensures
+    //                                it happens within the window (P=0.5/tick,
+    //                                ~6 ticks → P(never) ≈ 1.5%)
+    //   ≥ 120 min                  → force re-login (hard cap)
+    const pinnacleElapsedMs = Date.now() - this.lastPinnacleLoginAt;
+    const shouldReloginPinnacle =
+      pinnacleElapsedMs >= this.PINNACLE_RELOGIN_MAX_MS ||
+      (pinnacleElapsedMs >= this.PINNACLE_RELOGIN_MIN_MS && Math.random() < 0.5);
+
+    this.logger.log(
+      `Pinnacle re-login decision: elapsed=${Math.round(pinnacleElapsedMs / 60_000)}min, ` +
+      `relogin=${shouldReloginPinnacle}`,
+    );
+
     // Close existing Pinnacle + Stake WS connections BEFORE login so they don't
     // receive messages against a cleared cache during the Chrome login window.
     this.pinnacleAdapter.closeAll();
     this.stakeAdapter.closeAll();
 
-    // Re-login: Pinnacle needs fresh session + WS URL; Stake needs fresh cf_clearance.
-    // Run in parallel to save time.
-    await Promise.all([
-      this.pinnacleAdapter.login(),
-      this.stakeAdapter.login(),
-    ]);
+    if (shouldReloginPinnacle) {
+      // Full re-login: re-run Puppeteer to get fresh session + WS URL.
+      // Run in parallel with Stake login to save time.
+      await Promise.all([
+        this.pinnacleAdapter.login().then(() => { this.lastPinnacleLoginAt = Date.now(); }),
+        this.stakeAdapter.login(),
+      ]);
+    } else {
+      // Skip Puppeteer — reuse existing session cookies and WS URL.
+      // Stake still needs a fresh cf_clearance cookie.
+      await this.stakeAdapter.login();
+    }
 
-    // Pinnacle: reconnect WS with fresh session
+    // Pinnacle: reconnect WS (with fresh or reused session)
     this.pinnacleAdapter.resetPhaseState();
 
     // Stake: full reset — clear caches, re-fetch fixtures + initial odds, reconnect WS

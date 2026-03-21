@@ -512,15 +512,16 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
       const marketName = data.name ?? existingMarket?.name ?? '';
       const pubMarket = pub.markets.find((m) => m.marketId === marketId);
 
-      if (allFrozen) {
-        // All outcomes frozen — betting closed, remove market from public event
-        if (pubMarket) {
-          pub.markets = pub.markets.filter((m) => m.marketId !== marketId);
-        }
-      } else if (pubMarket) {
+      if (pubMarket) {
+        // Always update in-place — never remove the market object from the array.
+        // Removing it would orphan the reference held by currentMatches, causing the
+        // scheduler to read stale prices for the rest of the 10-minute cycle (same bug
+        // that was fixed in Pinnacle/Stake/Cloudbet adapters).
+        // When allFrozen, outcomes becomes [] — the scanner won't find valid prices
+        // and won't generate arb opportunities until the market unfreezes.
         if (data.name) pubMarket.name = data.name;
         pubMarket.outcomes = outcomes;
-      } else if (marketName && outcomes.length > 0) {
+      } else if (!allFrozen && marketName && outcomes.length > 0) {
         pub.markets.push({ marketId, name: marketName, outcomes });
       }
 
