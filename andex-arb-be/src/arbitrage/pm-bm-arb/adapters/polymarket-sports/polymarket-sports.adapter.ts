@@ -109,6 +109,10 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
           // seriesSlug required to filter non-match events
           if (!raw.seriesSlug) continue;
 
+          // Skip even-BO series (BO2, BO4, ...) — no clear winner possible
+          const boMatch = raw.title.match(/\(BO(\d+)\)/i);
+          if (boMatch && Number(boMatch[1]) % 2 === 0) continue;
+
           // Determine sport from tags
           const tags = (raw.tags ?? []).map((t) => t.slug);
           let sportKey: string | undefined;
