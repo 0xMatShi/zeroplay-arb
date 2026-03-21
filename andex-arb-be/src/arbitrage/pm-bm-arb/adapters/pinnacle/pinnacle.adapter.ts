@@ -49,7 +49,7 @@ const ALL_SPORT_IDS = [...REGULAR_SPORTS.map((s) => s.sportId), ESPORTS_SPORT_ID
 const EXPECTED_FULL_ODDS = ALL_SPORT_IDS.length * 2;
 
 const WS_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
   'Origin': BASE_URL,
 };
 
