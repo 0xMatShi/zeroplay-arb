@@ -9,7 +9,9 @@ import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { UsersService } from '../../../users/users.service';
 import { SubscriptionsService } from '../../../subscriptions/subscriptions.service';
-import { SportsArbitrageOpportunity, SportsMatch } from '../interfaces/sports-arb.types';
+import { SportsArbitrageOpportunity, SportsMatch, BmBmMatch } from '../interfaces/sports-arb.types';
+
+type AnyMatch = SportsMatch | BmBmMatch;
 
 /**
  * WebSocket gateway for real-time sports arbitrage (PM vs DexSport) notifications.
@@ -101,7 +103,7 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
     valorant:   'esports/games/valorant',
   };
 
-  private buildBookmakerUrl(match: SportsMatch | undefined): string | undefined {
+  private buildBookmakerUrl(match: { bookmakerPlatform: string; dexEvent: import('../interfaces/sports-arb.types').DexSportsEvent } | undefined): string | undefined {
     if (!match) return undefined;
     const { bookmakerPlatform, dexEvent } = match;
 
@@ -137,17 +139,25 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       : undefined;
   }
 
-  private mapOpportunity(opp: SportsArbitrageOpportunity, matchMap: Map<string, SportsMatch>) {
+  private mapOpportunity(opp: SportsArbitrageOpportunity, matchMap: Map<string, AnyMatch>) {
     const match = matchMap.get(opp.matchId);
-    const pmSlug = match?.pmEvent.slug ?? '';
+    const isBmBm = match != null && !('pmEvent' in match);
+
+    const pmSlug = !isBmBm ? (match as SportsMatch | undefined)?.pmEvent.slug ?? '' : '';
     const dexSportKey = match?.dexEvent.sportKey ?? opp.sportKey;
     const tournamentName = match?.dexEvent.tournamentName ?? null;
     const pmUrl = pmSlug ? `https://polymarket.com/event/${pmSlug}` : undefined;
-    const bookmakerUrl = this.buildBookmakerUrl(match);
+
+    // For bm-bm: build separate URLs for each platform
+    const dexUrl  = isBmBm ? this.buildBookmakerUrl({ bookmakerPlatform: 'dexsport',                  dexEvent: match!.dexEvent }) : undefined;
+    const bm2Url  = isBmBm ? this.buildBookmakerUrl({ bookmakerPlatform: (match as BmBmMatch).bmPlatform, dexEvent: (match as BmBmMatch).bmEvent }) : undefined;
+    const bookmakerUrl = !isBmBm ? this.buildBookmakerUrl(match as SportsMatch | undefined) : undefined;
 
     const platformName = (platform: string) => {
       if (platform === 'polymarket') return 'Polymarket';
       if (platform === 'pinnacle') return 'Pinnacle';
+      if (platform === 'stake') return 'Stake';
+      if (platform === 'cloudbet') return 'Cloudbet';
       return 'DexSport';
     };
 
@@ -167,7 +177,9 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
         outcomeExternalId: '',
         outcomeName: leg.outcomeName,
         price: leg.probability,
-        url: leg.platform === 'polymarket' ? pmUrl : bookmakerUrl,
+        url: isBmBm
+          ? (leg.platform === 'dexsport' ? dexUrl : bm2Url)
+          : (leg.platform === 'polymarket' ? pmUrl : bookmakerUrl),
       })),
       isLive: opp.isLive,
       maxInvestment: opp.maxInvestment,
@@ -181,23 +193,27 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       tournamentName,
       marketType: opp.marketType,
       dexMarketName: opp.dexMarketName,
-      startTime: match?.pmEvent.startTime ?? match?.dexEvent.startTime ?? null,
+      startTime: isBmBm
+        ? ((match as BmBmMatch).dexEvent.startTime != null ? (match as BmBmMatch).dexEvent.startTime! * 1000 : null)
+        : ((match as SportsMatch | undefined)?.pmEvent.startTime ?? match?.dexEvent.startTime ?? null),
       sportsLegs: opp.legs.map((leg) => ({
         platform: leg.platform,
         outcomeName: leg.outcomeName,
         probability: leg.probability,
         decimalOdds: leg.decimalOdds,
         pmBestAskQty: leg.pmBestAskQty ?? 0,
-        url: leg.platform === 'polymarket' ? pmUrl : bookmakerUrl,
+        url: isBmBm
+          ? (leg.platform === 'dexsport' ? dexUrl : bm2Url)
+          : (leg.platform === 'polymarket' ? pmUrl : bookmakerUrl),
       })),
     };
   }
 
-  emitNew(opp: SportsArbitrageOpportunity, matchMap: Map<string, SportsMatch>): void {
+  emitNew(opp: SportsArbitrageOpportunity, matchMap: Map<string, AnyMatch>): void {
     this.server.emit('sports:new', this.mapOpportunity(opp, matchMap));
   }
 
-  emitUpdated(opp: SportsArbitrageOpportunity, matchMap: Map<string, SportsMatch>): void {
+  emitUpdated(opp: SportsArbitrageOpportunity, matchMap: Map<string, AnyMatch>): void {
     const mapped = this.mapOpportunity(opp, matchMap);
     this.server.emit('sports:updated', {
       id: mapped.id,
@@ -213,7 +229,7 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
     this.server.emit('sports:expired', { id });
   }
 
-  emitSnapshot(opps: SportsArbitrageOpportunity[], matchMap: Map<string, SportsMatch>): void {
+  emitSnapshot(opps: SportsArbitrageOpportunity[], matchMap: Map<string, AnyMatch>): void {
     this.snapshotCache = opps.map((opp) => this.mapOpportunity(opp, matchMap));
     this.server.emit('sports:snapshot', this.snapshotCache);
   }

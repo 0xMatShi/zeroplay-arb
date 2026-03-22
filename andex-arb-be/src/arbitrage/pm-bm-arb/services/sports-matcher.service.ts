@@ -12,6 +12,8 @@ import {
   PmMarket,
   DexSportsEvent,
   DexMarket,
+  BmBmMatch,
+  BmBmMarketPair,
 } from '../interfaces/sports-arb.types';
 import {
   SPORTS,
@@ -364,6 +366,63 @@ function matchMarketsForPair(pm: PmSportsEvent, dex: DexSportsEvent, sportKey: s
   return results;
 }
 
+/**
+ * Match a single typed (pinnacle/stake/cloudbet) market against dexsport name-based markets.
+ * Mirror of matchMarket() but treats the typed bookmaker as the "known type" side.
+ */
+function matchTypedToDex(typedMarket: DexMarket, dexMarkets: DexMarket[], sportKey: string): DexMarket | null {
+  const type = typedMarket.marketType;
+  if (!type) return null;
+
+  if (type === 'child_moneyline') {
+    const numMatch = typedMarket.name.match(/(?:Map|Game)\s+(\d+)/i);
+    if (!numMatch) return null;
+    const n = numMatch[1];
+    const pattern = new RegExp(`^winner\\.\\s*(map|game)\\s+${n}(\\s*\\(with\\s+overtime\\))?$`, 'i');
+    return dexMarkets.find((dex) => pattern.test(dex.name.trim())) ?? null;
+  }
+
+  const sportMap = MARKET_MAP[sportKey] ?? {};
+  const candidates: string[] = sportMap[type] ?? [];
+  if (candidates.length === 0) return null;
+
+  const nameMatches = dexMarkets.filter((dex) =>
+    candidates.some((c) => dexNameMatchesCandidate(dex.name, c)),
+  );
+  if (nameMatches.length === 0) return null;
+
+  if (VALUE_TYPES.has(type)) {
+    const typedValue = extractDexValue(typedMarket.outcomes);
+    if (typedValue !== null) {
+      return nameMatches.find((dex) => {
+        const dexValue = extractDexValue(dex.outcomes);
+        return dexValue !== null && Math.abs(typedValue - dexValue) < 0.01;
+      }) ?? null;
+    }
+  }
+
+  return nameMatches[0];
+}
+
+function matchDexMarketsForBmPair(bmEvent: DexSportsEvent, dexEvent: DexSportsEvent, sportKey: string): BmBmMarketPair[] {
+  const results: BmBmMarketPair[] = [];
+  const usedDex = new Set<string>();
+
+  for (const bmMarket of bmEvent.markets) {
+    if (bmMarket.marketType !== 'moneyline') continue;
+    const dexMarket = matchTypedToDex(
+      bmMarket,
+      dexEvent.markets.filter((d) => !usedDex.has(d.name)),
+      sportKey,
+    );
+    if (!dexMarket) continue;
+    usedDex.add(dexMarket.name);
+    results.push({ marketType: bmMarket.marketType, dexMarket, bmMarket });
+  }
+
+  return results;
+}
+
 // ── Service ──────────────────────────────────────────────────
 
 @Injectable()
@@ -394,6 +453,126 @@ export class SportsMatcher {
       ` → ${all.length} matched events, ${totalMarkets} matched markets`,
     );
     return all;
+  }
+
+  findBmBmMatches(): BmBmMatch[] {
+    const dexEvents = this.dexAdapter.getEvents();
+
+    const pinnacleMatches = this.matchDexToBookmakerEvents(this.pinnacleAdapter.getEvents(), dexEvents, 'pinnacle');
+    const stakeMatches    = this.matchDexToBookmakerEvents(this.stakeAdapter.getEvents(),    dexEvents, 'stake');
+    const cloudbetMatches = this.matchDexToBookmakerEvents(this.cloudbetAdapter.getEvents(), dexEvents, 'cloudbet');
+
+    const all = [...pinnacleMatches, ...stakeMatches, ...cloudbetMatches];
+    const totalMarkets = all.reduce((s, p) => s + p.matchedMarkets.length, 0);
+    this.logger.log(
+      `SportsMatcher BM-BM: dex=${dexEvents.length} events | pinnacle=${pinnacleMatches.length}` +
+      ` stake=${stakeMatches.length} cloudbet=${cloudbetMatches.length}` +
+      ` → ${all.length} matched pairs, ${totalMarkets} matched markets`,
+    );
+    return all;
+  }
+
+  private matchDexToBookmakerEvents(
+    bmEvents: DexSportsEvent[],
+    dexEvents: DexSportsEvent[],
+    bmPlatform: 'pinnacle' | 'stake' | 'cloudbet',
+  ): BmBmMatch[] {
+    // Resolve dexsport sport slugs to canonical sport keys
+    const dexMapped = dexEvents.map((e) => ({
+      ...e,
+      sportKey: DEX_SLUG_TO_SPORT.get(e.sportKey) ?? e.sportKey,
+    }));
+
+    const pairs: BmBmMatch[] = [];
+
+    const dexBySport = new Map<string, DexSportsEvent[]>();
+    const bmBySport  = new Map<string, DexSportsEvent[]>();
+
+    for (const e of dexMapped) {
+      if (!dexBySport.has(e.sportKey)) dexBySport.set(e.sportKey, []);
+      dexBySport.get(e.sportKey)!.push(e);
+    }
+    for (const e of bmEvents) {
+      if (!bmBySport.has(e.sportKey)) bmBySport.set(e.sportKey, []);
+      bmBySport.get(e.sportKey)!.push(e);
+    }
+
+    for (const sportKey of Object.keys(SPORTS)) {
+      const dexList = dexBySport.get(sportKey) ?? [];
+      const bmList  = bmBySport.get(sportKey) ?? [];
+
+      if (dexList.length === 0 || bmList.length === 0) continue;
+
+      // Build inverted index over BM events
+      const invertedIndex = new Map<string, DexSportsEvent[]>();
+      for (const bm of bmList) {
+        for (const word of normalizeText(bm.name)) {
+          if (!invertedIndex.has(word)) invertedIndex.set(word, []);
+          invertedIndex.get(word)!.push(bm);
+        }
+      }
+
+      const usedBm = new Set<string>();
+
+      for (const dex of dexList) {
+        const dexWords = normalizeText(dex.name);
+
+        const sharedCount = new Map<string, number>();
+        for (const word of dexWords) {
+          for (const bm of invertedIndex.get(word) ?? []) {
+            sharedCount.set(bm.eventId, (sharedCount.get(bm.eventId) ?? 0) + 1);
+          }
+        }
+
+        let bestSim = MATCH_THRESHOLD;
+        let bestBm: DexSportsEvent | null = null;
+
+        for (const [bmId, count] of sharedCount) {
+          if (count < MIN_SHARED_WORDS) continue;
+          if (usedBm.has(bmId)) continue;
+
+          const bm = bmList.find((d) => d.eventId === bmId)!;
+
+          // Mirror pm-bm logic: if dex has a date but bm doesn't — skip (can't verify same match).
+          // If both have dates — require within 3 hours.
+          if (dex.startTime && dex.startTime > 0) {
+            if (!bm.startTime || bm.startTime <= 0) continue;
+            if (Math.abs(dex.startTime - bm.startTime) > 3 * 3600) continue;
+          }
+
+          const sim = computeSimilarity(dex.name, bm.name);
+          const isBetter =
+            sim > bestSim ||
+            (sim === bestSim && Number(bm.eventId) > Number(bestBm?.eventId ?? '0'));
+          if (isBetter) {
+            bestSim = sim;
+            bestBm = bm;
+          }
+        }
+
+        if (bestBm) {
+          usedBm.add(bestBm.eventId);
+          const matchedMarkets = matchDexMarketsForBmPair(bestBm, dex, sportKey);
+          const id = createHash('sha256')
+            .update(`bmbm:${bmPlatform}:${dex.eventId}:${bestBm.eventId}`)
+            .digest('hex')
+            .slice(0, 16);
+
+          pairs.push({
+            id,
+            sportKey,
+            dexEvent: dex,
+            bmEvent: bestBm,
+            bmPlatform,
+            similarity: bestSim,
+            matchedMarkets,
+            matchedAt: Date.now(),
+          });
+        }
+      }
+    }
+
+    return pairs;
   }
 
   private matchBookmakerEvents(

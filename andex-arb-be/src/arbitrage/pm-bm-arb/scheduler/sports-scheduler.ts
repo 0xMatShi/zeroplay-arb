@@ -7,7 +7,9 @@ import { StakeAdapter } from '../adapters/stake/stake.adapter';
 import { CloudbetAdapter } from '../adapters/cloudbet/cloudbet.adapter';
 import { SportsMatcher } from '../services/sports-matcher.service';
 import { SportsArbScanner } from '../services/sports-arb-scanner.service';
-import { SportsMatch, SportsArbitrageOpportunity } from '../interfaces/sports-arb.types';
+import { SportsMatch, SportsArbitrageOpportunity, BmBmMatch } from '../interfaces/sports-arb.types';
+
+type AnyMatch = SportsMatch | BmBmMatch;
 import { SportsArbGateway } from '../gateways/sports-arb.gateway';
 
 /**
@@ -31,6 +33,9 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   /** Current matched pairs — updated by match cycle, read by reactive scan */
   private currentMatches: SportsMatch[] = [];
 
+  /** BM-BM matched pairs (dexsport ↔ pinnacle/stake/cloudbet) */
+  private currentBmBmMatches: BmBmMatch[] = [];
+
   /** Latest detected opportunities */
   private currentOpportunities: SportsArbitrageOpportunity[] = [];
 
@@ -53,12 +58,8 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
    */
   private lastPinnacleLoginAt: number = Date.now();
 
-  /**
-   * Minimum interval before a Pinnacle re-login is eligible (1 hour in ms).
-   * If elapsed time >= PINNACLE_RELOGIN_MAX_MS, re-login is forced.
-   */
-  private readonly PINNACLE_RELOGIN_MIN_MS = 60 * 60_000;   // 1 hour
-  private readonly PINNACLE_RELOGIN_MAX_MS = 120 * 60_000;  // 2 hours
+  /** Fixed re-login interval for Pinnacle — token expires in ~1 hour. */
+  private readonly PINNACLE_RELOGIN_INTERVAL_MS = 60 * 60_000;  // 1 hour
 
   /** Track which adapters have completed at least one full fetch */
   private dexReady = false;
@@ -164,6 +165,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
 
     // Reset scheduler state
     this.currentMatches = [];
+    this.currentBmBmMatches = [];
     this.currentOpportunities = [];
     this.firstSeenMap.clear();
     this.matchedPmTokenIds = [];
@@ -192,19 +194,10 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.startPmFetch();
 
     // ── Pinnacle: decide whether to re-login via Puppeteer ───────
-    // Re-login is expensive (~20s). We skip it most cycles and only do it
-    // randomly once per 1–2 hours (aligned to the 10-minute reset tick).
-    //
-    // Rules (checked on each 10-min tick):
-    //   < 60 min since last login  → never re-login
-    //   60–120 min                 → re-login with probability that ensures
-    //                                it happens within the window (P=0.5/tick,
-    //                                ~6 ticks → P(never) ≈ 1.5%)
-    //   ≥ 120 min                  → force re-login (hard cap)
+    // Re-login is expensive (~20s). Token expires in ~1 hour, so we re-login
+    // on a fixed 1-hour interval aligned to the 10-minute reset tick.
     const pinnacleElapsedMs = Date.now() - this.lastPinnacleLoginAt;
-    const shouldReloginPinnacle =
-      pinnacleElapsedMs >= this.PINNACLE_RELOGIN_MAX_MS ||
-      (pinnacleElapsedMs >= this.PINNACLE_RELOGIN_MIN_MS && Math.random() < 0.5);
+    const shouldReloginPinnacle = pinnacleElapsedMs >= this.PINNACLE_RELOGIN_INTERVAL_MS;
 
     this.logger.log(
       `Pinnacle re-login decision: elapsed=${Math.round(pinnacleElapsedMs / 60_000)}min, ` +
@@ -245,7 +238,10 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   @Cron('*/5 * * * * *')
   handleSnapshotCron(): void {
     if (!this.gateway || this.currentOpportunities.length === 0) return;
-    const matchMap = new Map(this.currentMatches.map((m) => [m.id, m]));
+    const matchMap = new Map<string, AnyMatch>([
+      ...this.currentMatches.map((m) => [m.id, m] as [string, AnyMatch]),
+      ...this.currentBmBmMatches.map((m) => [m.id, m] as [string, AnyMatch]),
+    ]);
     this.gateway.emitSnapshot(this.currentOpportunities, matchMap);
   }
 
@@ -307,6 +303,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   async runMatchCycle(): Promise<void> {
     try {
       this.currentMatches = this.matcher.findMatches();
+      this.currentBmBmMatches = this.matcher.findBmBmMatches();
 
       const liveCount = this.currentMatches.filter((m) => m.dexEvent.isLive).length;
       const totalMarkets = this.currentMatches.reduce((s, m) => s + m.matchedMarkets.length, 0);
@@ -393,11 +390,17 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   private runScanNow(): void {
-    if (this.currentMatches.length === 0) return;
+    if (this.currentMatches.length === 0 && this.currentBmBmMatches.length === 0) return;
 
     try {
-      const scanned = this.scanner.scan(this.currentMatches);
-      const matchMap = new Map(this.currentMatches.map((m) => [m.id, m]));
+      const scanned = [
+        ...this.scanner.scan(this.currentMatches),
+        ...this.scanner.scanBmBm(this.currentBmBmMatches),
+      ];
+      const matchMap = new Map<string, AnyMatch>([
+        ...this.currentMatches.map((m) => [m.id, m] as [string, AnyMatch]),
+        ...this.currentBmBmMatches.map((m) => [m.id, m] as [string, AnyMatch]),
+      ]);
 
       const now = Date.now();
       const prevById = new Map(this.currentOpportunities.map((o) => [o.id, o]));
@@ -448,6 +451,10 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
 
   getMatches(): SportsMatch[] {
     return this.currentMatches;
+  }
+
+  getBmBmMatches(): BmBmMatch[] {
+    return this.currentBmBmMatches;
   }
 
   getOpportunities(): SportsArbitrageOpportunity[] {

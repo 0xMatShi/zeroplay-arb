@@ -523,7 +523,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     // Without them we'd store '?' in the market — reject instead and wait for FULL_ODDS.
     if (!existing && (!homeName || !awayName)) return [];
 
-    const markets = this.buildMarkets(event, homeName, awayName);
+    const markets = this.buildMarkets(event, homeName, awayName, sportKey);
 
     // Brand-new event: need participant names to create an entry.
     // We cache even with empty markets (all offline) so that when UPDATE_ODDS later
@@ -631,8 +631,20 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     const ids = new Set<string>();
     for (const [periodStr, period] of Object.entries(event.periods ?? {})) {
       const periodNum = Number(periodStr);
-      if ((period as PinnaclePeriod).moneyLine?.offline) {
+      if (period.moneyLine?.offline) {
         ids.add(`${event.id}_p${periodNum}_ml`);
+      }
+      if (periodNum === 0) {
+        for (const entry of period.overUnder ?? []) {
+          if ('lineId' in entry && (entry as any).offline) {
+            ids.add(`${event.id}_p0_ou_${(entry as any).lineId}`);
+          }
+        }
+        for (const entry of period.handicap ?? []) {
+          if ('lineId' in entry && (entry as any).offline) {
+            ids.add(`${event.id}_p0_hdp_${(entry as any).lineId}`);
+          }
+        }
       }
     }
     return ids;
@@ -654,13 +666,14 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     event: PinnacleEvent,
     homeName: string | null,
     awayName: string | null,
+    sportKey: string,
   ): DexMarket[] {
     if (!homeName || !awayName) return [];
 
     const markets: DexMarket[] = [];
     for (const [periodStr, period] of Object.entries(event.periods)) {
       const periodNum = Number(periodStr);
-      this.addPeriodMarkets(markets, event.id, periodNum, period, homeName, awayName);
+      this.addPeriodMarkets(markets, event.id, periodNum, period, homeName, awayName, sportKey, event.resultingUnit);
     }
     return markets;
   }
@@ -672,6 +685,8 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     data: PinnaclePeriod,
     home: string,
     away: string,
+    sportKey: string,
+    resultingUnit?: string,
   ): void {
     // ── Money line ─────────────────────────────────────────────
     const ml = data.moneyLine;
@@ -702,6 +717,91 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         marketType: period === 0 ? 'moneyline' : 'child_moneyline',
         outcomes,
       });
+    }
+
+    // ── Totals and Handicap — period 0 (full match/series) only ───
+    if (period !== 0) return;
+
+    const { totalsType, handicapType } = this.resolveTypedMarketTypes(sportKey, resultingUnit);
+
+    // ── Over/Under (totals) ────────────────────────────────────
+    if (totalsType && data.overUnder?.length) {
+      for (const entry of data.overUnder) {
+        if (!('points' in entry)) continue;               // { unavailable: true } sentinel
+        const ou = entry as import('./pinnacle.types').PinnacleOverUnder;
+        if (ou.unavailable || ou.offline) continue;
+        const points   = parseFloat(ou.points);
+        const overOdds = parseFloat(ou.overOdds);
+        const underOdds = parseFloat(ou.underOdds);
+        if (!isFinite(points) || !isFinite(overOdds) || !isFinite(underOdds)) continue;
+        if (overOdds <= 0 || underOdds <= 0) continue;
+        markets.push({
+          marketId:   `${eventId}_p0_ou_${ou.lineId}`,
+          marketType: totalsType,
+          name:       totalsType,
+          outcomes: [
+            { name: `Over ${ou.points}`,  price: overOdds },
+            { name: `Under ${ou.points}`, price: underOdds },
+          ],
+        });
+      }
+    }
+
+    // ── Handicap (spreads) ─────────────────────────────────────
+    if (handicapType && data.handicap?.length) {
+      for (const entry of data.handicap) {
+        if (!('homeSpread' in entry)) continue;           // { unavailable: true } sentinel
+        const hdp = entry as import('./pinnacle.types').PinnacleHandicap;
+        if (hdp.unavailable || hdp.offline) continue;
+        const homeSpreadNum = parseFloat(hdp.homeSpread);
+        const awaySpreadNum = parseFloat(hdp.awaySpread);
+        const homeOdds      = parseFloat(hdp.homeOdds);
+        const awayOdds      = parseFloat(hdp.awayOdds);
+        if (!isFinite(homeSpreadNum) || !isFinite(awaySpreadNum) ||
+            !isFinite(homeOdds) || !isFinite(awayOdds)) continue;
+        if (homeOdds <= 0 || awayOdds <= 0) continue;
+        // Normalise spread strings: always include explicit sign (+/-)
+        const homeSpreadStr = homeSpreadNum >= 0 ? `+${homeSpreadNum}` : `${homeSpreadNum}`;
+        const awaySpreadStr = awaySpreadNum >= 0 ? `+${awaySpreadNum}` : `${awaySpreadNum}`;
+        markets.push({
+          marketId:   `${eventId}_p0_hdp_${hdp.lineId}`,
+          marketType: handicapType,
+          name:       handicapType,
+          outcomes: [
+            { name: `${home} ${homeSpreadStr}`, price: homeOdds },
+            { name: `${away} ${awaySpreadStr}`, price: awayOdds },
+          ],
+        });
+      }
+    }
+  }
+
+  /**
+   * Returns the pipeline marketType strings for period-0 totals and handicap markets.
+   * Tennis uses resultingUnit to distinguish game totals ("Games" event) from
+   * set totals/handicap ("Sets" event). Other sports use sportKey only.
+   */
+  private resolveTypedMarketTypes(
+    sportKey: string,
+    resultingUnit?: string,
+  ): { totalsType: string | null; handicapType: string | null } {
+    switch (sportKey) {
+      case 'basketball':
+      case 'hockey':
+        return { totalsType: 'totals', handicapType: 'spreads' };
+      case 'baseball':
+        return { totalsType: null, handicapType: null };
+      case 'csgo':
+      case 'dota2':
+      case 'lol':
+      case 'valorant':
+        return { totalsType: 'totals', handicapType: 'map_handicap' };
+      case 'tennis':
+        if (resultingUnit === 'Games') return { totalsType: 'tennis_match_totals', handicapType: null };
+        if (resultingUnit === 'Sets')  return { totalsType: 'tennis_set_totals',   handicapType: 'tennis_set_handicap' };
+        return { totalsType: null, handicapType: null };
+      default:
+        return { totalsType: null, handicapType: null };
     }
   }
 

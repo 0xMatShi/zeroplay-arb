@@ -6,6 +6,8 @@ import {
   SportsArbLeg,
   MatchedMarketPair,
   AskLevel,
+  BmBmMatch,
+  BmBmMarketPair,
 } from '../interfaces/sports-arb.types';
 
 /**
@@ -33,6 +35,19 @@ export class SportsArbScanner {
     for (const match of matches) {
       for (const mp of match.matchedMarkets) {
         const opps = this.analyzeMarketPair(match, mp);
+        opportunities.push(...opps);
+      }
+    }
+
+    return opportunities;
+  }
+
+  scanBmBm(matches: BmBmMatch[]): SportsArbitrageOpportunity[] {
+    const opportunities: SportsArbitrageOpportunity[] = [];
+
+    for (const match of matches) {
+      for (const mp of match.matchedMarkets) {
+        const opps = this.analyzeBmBmMarketPair(match, mp);
         opportunities.push(...opps);
       }
     }
@@ -229,6 +244,97 @@ export class SportsArbScanner {
     }
 
     return { maxInvestment, maxProfit };
+  }
+
+  private analyzeBmBmMarketPair(match: BmBmMatch, mp: BmBmMarketPair): SportsArbitrageOpportunity[] {
+    const { dexMarket, bmMarket } = mp;
+
+    const dexOutcomes = dexMarket.outcomes.map((o) => ({
+      name: o.name,
+      probability: o.price > 0 ? 1 / o.price : 0,
+      decimalOdds: o.price,
+    }));
+
+    const bmOutcomes = bmMarket.outcomes.map((o) => ({
+      name: o.name,
+      probability: o.price > 0 ? 1 / o.price : 0,
+      decimalOdds: o.price,
+    }));
+
+    if (dexOutcomes.length < 2 || bmOutcomes.length < 2) return [];
+
+    // Pair each dexsport outcome with the corresponding bm outcome by name
+    const pairs: Array<{
+      dexOut: { name: string; probability: number; decimalOdds: number };
+      bmOut:  { name: string; probability: number; decimalOdds: number };
+    }> = [];
+
+    for (const dexOut of dexOutcomes) {
+      const bmOut = this.findMatchingOutcome(dexOut.name, bmOutcomes);
+      if (!bmOut) return [];
+      pairs.push({ dexOut, bmOut });
+    }
+
+    const n = pairs.length;
+    const opportunities: SportsArbitrageOpportunity[] = [];
+
+    // Enumerate cross-platform assignments (mask bit i: 0=dexsport, 1=bm)
+    for (let mask = 1; mask < (1 << n) - 1; mask++) {
+      const legs: SportsArbLeg[] = [];
+      let totalCost = 0;
+
+      for (let i = 0; i < n; i++) {
+        const { dexOut, bmOut } = pairs[i];
+        const useBm = (mask >> i) & 1;
+
+        if (!useBm) {
+          legs.push({
+            platform: 'dexsport',
+            outcomeName: dexOut.name,
+            probability: dexOut.probability,
+            decimalOdds: dexOut.decimalOdds,
+          });
+          totalCost += dexOut.probability;
+        } else {
+          legs.push({
+            platform: match.bmPlatform,
+            outcomeName: bmOut.name,
+            probability: bmOut.probability,
+            decimalOdds: bmOut.decimalOdds,
+          });
+          totalCost += bmOut.probability;
+        }
+      }
+
+      const profitPercent = totalCost > 0 ? ((1 - totalCost) / totalCost) * 100 : -100;
+      if (profitPercent < this.MIN_PROFIT_PCT) continue;
+
+      const id = createHash('sha256')
+        .update(`bmbm:${match.id}:${mp.marketType}:${dexMarket.marketId}:${bmMarket.marketId}:${mask}`)
+        .digest('hex')
+        .slice(0, 16);
+
+      opportunities.push({
+        id,
+        matchId: match.id,
+        sportKey: match.sportKey,
+        eventName: match.dexEvent.name,
+        marketType: mp.marketType,
+        pmQuestion: bmMarket.name,
+        dexMarketName: dexMarket.name,
+        legs,
+        totalCost,
+        profitPercent,
+        maxInvestment: 0,
+        maxProfit: 0,
+        detectedAt: Date.now(),
+        firstDetectedAt: Date.now(),
+        isLive: match.dexEvent.isLive ||
+          (match.dexEvent.startTime != null && Date.now() > match.dexEvent.startTime * 1000),
+      });
+    }
+
+    return opportunities;
   }
 
   /**

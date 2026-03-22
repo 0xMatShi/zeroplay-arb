@@ -11,6 +11,24 @@ export interface CalcParams {
   dexAmount: string
   dexPlatform?: string
   marketType?: string
+  /** When provided, calculator switches to bm-bm mode (both sides are bookmakers) */
+  leftOdds?: string
+  leftPlatform?: string
+}
+
+function platformLabel(platform: string | undefined): string {
+  if (platform === 'pinnacle') return 'PINNACLE'
+  if (platform === 'stake') return 'STAKE'
+  if (platform === 'cloudbet') return 'CLOUDBET'
+  if (platform === 'dexsport') return 'DEXSPORT'
+  return 'DEXSPORT'
+}
+
+function platformClass(platform: string | undefined): string {
+  if (platform === 'pinnacle') return 'pinnacle'
+  if (platform === 'stake') return 'stake'
+  if (platform === 'cloudbet') return 'cloudbet'
+  return 'dex'
 }
 
 export function CalculatorContent({
@@ -22,14 +40,25 @@ export function CalculatorContent({
   dexAmount: initDexAmount,
   dexPlatform,
   marketType,
+  leftOdds: initLeftOdds,
+  leftPlatform,
 }: CalcParams) {
+  const isBmBm = !!initLeftOdds
+
+  // ── PM-BM state ──────────────────────────────────────────────
   const [pmPrice, setPmPrice] = useState(initPmPrice)
+  const [qtyCopied, setQtyCopied] = useState(false)
+
+  // ── Shared state ─────────────────────────────────────────────
   const [dexOddsVal, setDexOddsVal] = useState(initDexOdds)
   const [pmAmount, setPmAmount] = useState(initPmAmount)
   const [dexAmount, setDexAmount] = useState(initDexAmount)
   const [lastEdited, setLastEdited] = useState<'pm' | 'dex' | null>(null)
-  const [qtyCopied, setQtyCopied] = useState(false)
 
+  // ── BM-BM state ──────────────────────────────────────────────
+  const [leftOddsVal, setLeftOddsVal] = useState(initLeftOdds ?? '')
+
+  // ── PM-BM math ───────────────────────────────────────────────
   const pmProb = parseFloat(pmPrice) / 100
   const dexO = parseFloat(dexOddsVal)
 
@@ -45,8 +74,34 @@ export function CalculatorContent({
     return ''
   }
 
-  const handlePmAmount = (v: string) => { setPmAmount(v); setLastEdited('pm'); setDexAmount(calcDexFromPm(v)) }
-  const handleDexAmount = (v: string) => { setDexAmount(v); setLastEdited('dex'); setPmAmount(calcPmFromDex(v)) }
+  // ── BM-BM math ───────────────────────────────────────────────
+  const leftO = parseFloat(leftOddsVal)
+  const rightO = parseFloat(dexOddsVal)
+
+  const calcRightFromLeft = (left: string, lo = leftO, ro = rightO) => {
+    const s = parseFloat(left)
+    if (!isNaN(s) && s > 0 && lo > 0 && ro > 0) return (s * lo / ro).toFixed(2)
+    return ''
+  }
+
+  const calcLeftFromRight = (right: string, lo = leftO, ro = rightO) => {
+    const s = parseFloat(right)
+    if (!isNaN(s) && s > 0 && lo > 0 && ro > 0) return (s * ro / lo).toFixed(2)
+    return ''
+  }
+
+  // ── Handlers ─────────────────────────────────────────────────
+  const handlePmAmount = (v: string) => {
+    setPmAmount(v)
+    setLastEdited('pm')
+    setDexAmount(isBmBm ? calcRightFromLeft(v) : calcDexFromPm(v))
+  }
+
+  const handleDexAmount = (v: string) => {
+    setDexAmount(v)
+    setLastEdited('dex')
+    setPmAmount(isBmBm ? calcLeftFromRight(v) : calcPmFromDex(v))
+  }
 
   const handlePmPrice = (v: string) => {
     setPmPrice(v)
@@ -58,18 +113,45 @@ export function CalculatorContent({
   const handleDexOdds = (v: string) => {
     setDexOddsVal(v)
     const o = parseFloat(v)
-    if (lastEdited === 'dex' && dexAmount) setPmAmount(calcPmFromDex(dexAmount, pmProb, o))
-    else if (lastEdited === 'pm' && pmAmount) setDexAmount(calcDexFromPm(pmAmount, pmProb, o))
+    if (isBmBm) {
+      if (lastEdited === 'dex' && dexAmount) setPmAmount(calcLeftFromRight(dexAmount, leftO, o))
+      else if (lastEdited === 'pm' && pmAmount) setDexAmount(calcRightFromLeft(pmAmount, leftO, o))
+    } else {
+      if (lastEdited === 'dex' && dexAmount) setPmAmount(calcPmFromDex(dexAmount, pmProb, o))
+      else if (lastEdited === 'pm' && pmAmount) setDexAmount(calcDexFromPm(pmAmount, pmProb, o))
+    }
   }
 
+  const handleLeftOdds = (v: string) => {
+    setLeftOddsVal(v)
+    const lo = parseFloat(v)
+    if (lastEdited === 'dex' && dexAmount) setPmAmount(calcLeftFromRight(dexAmount, lo, rightO))
+    else if (lastEdited === 'pm' && pmAmount) setDexAmount(calcRightFromLeft(pmAmount, lo, rightO))
+  }
+
+  // ── Profit calc ──────────────────────────────────────────────
   const pmAmt = parseFloat(pmAmount) || 0
   const dexAmt = parseFloat(dexAmount) || 0
   const totalCost = pmAmt + dexAmt
-  const totalImplied = pmProb > 0 && dexO > 0 ? pmProb + 1 / dexO : 0
-  const profitPct = totalImplied > 0 ? ((1 - totalImplied) / totalImplied) * 100 : 0
-  const pmQty = pmAmt > 0 && pmProb > 0 ? Math.round(pmAmt / pmProb) : 0
-  const pmWinProfit = pmAmt > 0 && pmProb > 0 && totalCost > 0 ? pmAmt / pmProb - totalCost : 0
-  const dexWinProfit = dexAmt > 0 && dexO > 0 && totalCost > 0 ? dexAmt * dexO - totalCost : 0
+
+  let totalImplied: number
+  let profitPct: number
+  let pmWinProfit: number
+  let dexWinProfit: number
+
+  if (isBmBm) {
+    totalImplied = leftO > 0 && rightO > 0 ? 1 / leftO + 1 / rightO : 0
+    profitPct = totalImplied > 0 ? ((1 - totalImplied) / totalImplied) * 100 : 0
+    pmWinProfit = pmAmt > 0 && leftO > 0 && totalCost > 0 ? pmAmt * leftO - totalCost : 0
+    dexWinProfit = dexAmt > 0 && rightO > 0 && totalCost > 0 ? dexAmt * rightO - totalCost : 0
+  } else {
+    totalImplied = pmProb > 0 && dexO > 0 ? pmProb + 1 / dexO : 0
+    profitPct = totalImplied > 0 ? ((1 - totalImplied) / totalImplied) * 100 : 0
+    pmWinProfit = pmAmt > 0 && pmProb > 0 && totalCost > 0 ? pmAmt / pmProb - totalCost : 0
+    dexWinProfit = dexAmt > 0 && dexO > 0 && totalCost > 0 ? dexAmt * dexO - totalCost : 0
+  }
+
+  const pmQty = !isBmBm && pmAmt > 0 && pmProb > 0 ? Math.round(pmAmt / pmProb) : 0
 
   const handleCopyQty = () => {
     const text = String(pmQty)
@@ -97,9 +179,11 @@ export function CalculatorContent({
   return (
     <div className="calc-page">
       <div className="calc-boxes">
-        {/* PM box */}
-        <div className="calc-box calc-box--pm">
-          <div className="calc-box-label calc-box-label--pm">POLYMARKET</div>
+        {/* Left box */}
+        <div className={`calc-box calc-box--${isBmBm ? platformClass(leftPlatform) : 'pm'}`}>
+          <div className={`calc-box-label calc-box-label--${isBmBm ? platformClass(leftPlatform) : 'pm'}`}>
+            {isBmBm ? platformLabel(leftPlatform) : 'POLYMARKET'}
+          </div>
           <div className="calc-outcome">{pmOutcome || '—'}</div>
           <div className="calc-field">
             <div className="calc-input-wrap">
@@ -108,32 +192,44 @@ export function CalculatorContent({
                 value={pmAmount} onChange={(e) => handlePmAmount(e.target.value)} />
             </div>
           </div>
-          <div className="calc-field">
-            <div className="calc-input-wrap">
-              <span className="calc-input-prefix">¢</span>
-              <input className="calc-input calc-input--prefixed" type="number" min="1" max="99" step="1"
-                value={pmPrice} onChange={(e) => handlePmPrice(e.target.value)} />
+          {isBmBm ? (
+            <div className="calc-field">
+              <div className="calc-input-wrap">
+                <span className="calc-input-prefix">×</span>
+                <input className="calc-input calc-input--prefixed" type="number" min="1" step="0.01"
+                  value={leftOddsVal} onChange={(e) => handleLeftOdds(e.target.value)} />
+              </div>
             </div>
-          </div>
-          {pmQty > 0 && (
-            <div className={`calc-qty${qtyCopied ? ' calc-qty--copied' : ''}`} title="Click to copy" onClick={handleCopyQty}>
-              <span className="calc-qty-state" style={{ opacity: qtyCopied ? 0 : 1 }}>
-                <Copy size={13} strokeWidth={2.5} style={{ color: '#00F0FF', flexShrink: 0 }} />
-                <span className="calc-qty-label">QTY</span>
-                <span className="calc-qty-val">{pmQty}</span>
-              </span>
-              <span className="calc-qty-state calc-qty-state--copied" style={{ opacity: qtyCopied ? 1 : 0 }}>
-                <Check size={14} strokeWidth={2.5} style={{ color: '#4ade80', flexShrink: 0 }} />
-                <span className="calc-qty-label calc-qty-label--copied">COPIED</span>
-              </span>
-            </div>
+          ) : (
+            <>
+              <div className="calc-field">
+                <div className="calc-input-wrap">
+                  <span className="calc-input-prefix">¢</span>
+                  <input className="calc-input calc-input--prefixed" type="number" min="1" max="99" step="1"
+                    value={pmPrice} onChange={(e) => handlePmPrice(e.target.value)} />
+                </div>
+              </div>
+              {pmQty > 0 && (
+                <div className={`calc-qty${qtyCopied ? ' calc-qty--copied' : ''}`} title="Click to copy" onClick={handleCopyQty}>
+                  <span className="calc-qty-state" style={{ opacity: qtyCopied ? 0 : 1 }}>
+                    <Copy size={13} strokeWidth={2.5} style={{ color: '#00F0FF', flexShrink: 0 }} />
+                    <span className="calc-qty-label">QTY</span>
+                    <span className="calc-qty-val">{pmQty}</span>
+                  </span>
+                  <span className="calc-qty-state calc-qty-state--copied" style={{ opacity: qtyCopied ? 1 : 0 }}>
+                    <Check size={14} strokeWidth={2.5} style={{ color: '#4ade80', flexShrink: 0 }} />
+                    <span className="calc-qty-label calc-qty-label--copied">COPIED</span>
+                  </span>
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        {/* DEX box */}
-        <div className={`calc-box calc-box--${dexPlatform === 'pinnacle' ? 'pinnacle' : dexPlatform === 'stake' ? 'stake' : dexPlatform === 'cloudbet' ? 'cloudbet' : 'dex'}`}>
-          <div className={`calc-box-label calc-box-label--${dexPlatform === 'pinnacle' ? 'pinnacle' : dexPlatform === 'stake' ? 'stake' : dexPlatform === 'cloudbet' ? 'cloudbet' : 'dex'}`}>
-            {dexPlatform === 'pinnacle' ? 'PINNACLE' : dexPlatform === 'stake' ? 'STAKE' : dexPlatform === 'cloudbet' ? 'CLOUDBET' : 'DEXSPORT'}
+        {/* Right box */}
+        <div className={`calc-box calc-box--${platformClass(dexPlatform)}`}>
+          <div className={`calc-box-label calc-box-label--${platformClass(dexPlatform)}`}>
+            {platformLabel(dexPlatform)}
           </div>
           <div className="calc-outcome">{dexOutcome || '—'}</div>
           <div className="calc-field">

@@ -522,6 +522,57 @@ async function main() {
 
   console.log(`\n[REST] Total unique events: ${allEvents.length}`);
 
+  // ── Step 1b: Сканируем все доступные маркеты для одного события на спорт ──
+  // Цель: найти ключи маркетов для тоталей и гандикапов
+  const SCAN_SPORTS_CB = ['basketball', 'ice-hockey', 'tennis', 'baseball',
+                          'counter-strike', 'dota-2', 'league-of-legends'];
+  const MARKET_KEYWORDS = /total|spread|handicap|over|under|asian|line|maps/i;
+
+  console.log('\n[MARKET SCAN] Fetching all market keys for one event per sport...');
+  const scannedSports = new Set<string>();
+  for (const event of allEvents) {
+    if (!SCAN_SPORTS_CB.includes(event.sportKey)) continue;
+    if (scannedSports.has(event.sportKey)) continue;
+    scannedSports.add(event.sportKey);
+
+    try {
+      // Запрашиваем событие без фильтра по маркетам — получаем все маркеты
+      const res = await restGet('/events', {
+        sport: event.sportKey,
+        live: event.status === 'TRADING_LIVE' ? 'true' : 'false',
+        limit: '1',
+      });
+      const rawEvent = res.data?.competitions?.[0]?.events?.[0];
+      if (!rawEvent?.markets) {
+        console.log(`  [${event.sportKey}] no markets found`);
+        continue;
+      }
+
+      const interesting = Object.entries(rawEvent.markets as Record<string, any>)
+        .filter(([key]) => MARKET_KEYWORDS.test(key));
+
+      console.log(`\n  [${event.sportKey.toUpperCase()}] ${event.name}:`);
+      if (interesting.length === 0) {
+        console.log('    (no totals/handicap market keys found)');
+      } else {
+        for (const [key, mkt] of interesting) {
+          const submarkets = Object.keys((mkt as any).submarkets ?? {});
+          const firstSm = Object.values((mkt as any).submarkets ?? {})[0] as any;
+          const selections = (firstSm?.selections ?? [])
+            .filter((s: any) => s.status === 'SELECTION_ENABLED' && s.side === 'BACK')
+            .map((s: any) => `${s.outcome}(${s.params}):${s.price}`)
+            .join(' | ');
+          console.log(`    market="${key}"`);
+          console.log(`      submarkets: [${submarkets.slice(0, 5).join(', ')}${submarkets.length > 5 ? ` +${submarkets.length - 5} more` : ''}]`);
+          if (selections) console.log(`      first submarket selections: ${selections}`);
+        }
+      }
+    } catch (e: any) {
+      console.warn(`  [${event.sportKey}] scan failed: ${e.message}`);
+    }
+  }
+  console.log('');
+
   // ── Step 2: Показываем снапшот ────────────────────────────────────────────
   console.log('\n[SNAPSHOT] Live/Prematch events with moneyline odds:');
   let shown = 0;

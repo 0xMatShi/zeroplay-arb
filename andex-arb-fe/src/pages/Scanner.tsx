@@ -240,23 +240,34 @@ function SportsOpportunityCard({
   const [expanded, setExpanded] = useState(false)
 
   const pmLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'polymarket')
-  const dexLeg: SportsOpportunityLeg | undefined = opp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle' || l.platform === 'stake' || l.platform === 'cloudbet')
+  const isBmBm = !pmLeg
+
+  // For bm-bm: left=dexsport, right=other bm. For pm-bm: left=polymarket, right=bookmaker.
+  const leftLeg: SportsOpportunityLeg | undefined = isBmBm
+    ? opp.sportsLegs?.find(l => l.platform === 'dexsport')
+    : pmLeg
+  const rightLeg: SportsOpportunityLeg | undefined = isBmBm
+    ? opp.sportsLegs?.find(l => l.platform !== 'dexsport')
+    : opp.sportsLegs?.find(l => l.platform !== 'polymarket')
+  const dexLeg = rightLeg
 
   const totalCost = opp.totalCost
   const profitPct = opp.profitPercentage
   const isNegative = profitPct <= 0
 
   // Perfect amounts (proportional to leg probability)
-  const pmPerfect = pmLeg ? perfectAmount * (pmLeg.probability / totalCost) : 0
-  const dexPerfect = dexLeg ? perfectAmount * (dexLeg.probability / totalCost) : 0
+  const pmPerfect = leftLeg ? perfectAmount * (leftLeg.probability / totalCost) : 0
+  const dexPerfect = rightLeg ? perfectAmount * (rightLeg.probability / totalCost) : 0
 
-  // Real amounts (limited by PM best ask qty)
-  const pmQty = pmLeg?.pmBestAskQty ?? 0
+  // Real amounts (limited by PM best ask qty; bm-bm has no order book)
+  const pmQty = isBmBm ? 0 : (pmLeg?.pmBestAskQty ?? 0)
   const pmReal = pmLeg ? pmQty * pmLeg.probability : 0
-  const dexReal = dexLeg ? pmQty * dexLeg.probability : 0
+  const dexReal = rightLeg ? pmQty * rightLeg.probability : 0
   const realTotal = pmQty * totalCost
   const effectiveTotal = realTotal > 0 ? Math.min(realTotal, perfectAmount) : 0
-  const profitUsd = effectiveTotal > 0 ? effectiveTotal * (profitPct / 100) : 0
+  const profitUsd = isBmBm
+    ? perfectAmount * (profitPct / 100)
+    : effectiveTotal > 0 ? effectiveTotal * (profitPct / 100) : 0
 
   // Effective amounts for calculator (same min logic as profitUsd)
   const useRealForCalc = realTotal > 0 && realTotal <= perfectAmount
@@ -279,17 +290,18 @@ function SportsOpportunityCard({
 
   const handleOpenAll = () => {
     void openCalcWindow({
-      pmOutcome: pmLeg?.outcomeName ?? '',
-      dexOutcome: dexLeg?.outcomeName ?? '',
-      pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
-      dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
+      pmOutcome: leftLeg?.outcomeName ?? '',
+      dexOutcome: rightLeg?.outcomeName ?? '',
+      pmPrice: leftLeg ? (leftLeg.probability * 100).toFixed(0) : '50',
+      dexOdds: rightLeg ? rightLeg.decimalOdds.toFixed(2) : '2.00',
       pmAmount: pmCalcAmount.toFixed(2),
       dexAmount: dexCalcAmount.toFixed(2),
-      dexPlatform: dexLeg?.platform,
+      dexPlatform: rightLeg?.platform,
       marketType: displayMarketType,
+      ...(isBmBm && leftLeg ? { leftOdds: leftLeg.decimalOdds.toFixed(2), leftPlatform: leftLeg.platform } : {}),
     })
-    if (pmLeg?.url) openTab(pmLeg.url)
-    if (dexLeg?.url) openTab(dexLeg.url)
+    if (leftLeg?.url) openTab(leftLeg.url)
+    if (rightLeg?.url) openTab(rightLeg.url)
   }
 
   let cardClass = 'opportunity-card sports-card'
@@ -339,32 +351,40 @@ function SportsOpportunityCard({
 
         {/* Center: platform boxes */}
         <div className="sports-card-platforms">
-          {/* Polymarket box */}
+          {/* Left platform box (Polymarket for pm-bm, DexSport for bm-bm) */}
           <div className="sports-platform-box">
-            <div className="sports-platform-label sports-platform-label--pm">POLYMARKET</div>
-            <div className="sports-outcome-name">{pmLeg?.outcomeName ?? '—'}</div>
+            <div className={`sports-platform-label ${isBmBm ? 'sports-platform-label--dex' : 'sports-platform-label--pm'}`}>
+              {isBmBm ? 'DEXSPORT' : 'POLYMARKET'}
+            </div>
+            <div className="sports-outcome-name">{leftLeg?.outcomeName ?? '—'}</div>
             <div className="sports-amounts-inline">
               <span className="sports-amount-key">B:</span>
               <span className="sports-amount-val">${pmPerfect.toFixed(0)}</span>
-              <span className="sports-amounts-sep">|</span>
-              <span className="sports-amount-key">L:</span>
-              <span className="sports-amount-val">${pmReal.toFixed(0)}</span>
+              {!isBmBm && (
+                <>
+                  <span className="sports-amounts-sep">|</span>
+                  <span className="sports-amount-key">L:</span>
+                  <span className="sports-amount-val">${pmReal.toFixed(0)}</span>
+                </>
+              )}
             </div>
             <div className="sports-price-row">
-              {pmLeg ? (
+              {leftLeg ? (
                 <>
-                  <span className={`sports-cents ${pmDisplayMode === 'odds' ? 'sports-cents--muted' : ''}`}>
-                    {(pmLeg.probability * 100).toFixed(0)}¢
-                  </span>
-                  <span className={`sports-odds ${pmDisplayMode === 'shares' ? 'sports-odds--muted' : ''}`}>
-                    {pmLeg.decimalOdds.toFixed(2)}x
+                  {!isBmBm && (
+                    <span className={`sports-cents ${pmDisplayMode === 'odds' ? 'sports-cents--muted' : ''}`}>
+                      {(leftLeg.probability * 100).toFixed(0)}¢
+                    </span>
+                  )}
+                  <span className={`sports-odds ${!isBmBm && pmDisplayMode === 'shares' ? 'sports-odds--muted' : ''}`}>
+                    {leftLeg.decimalOdds.toFixed(2)}x
                   </span>
                 </>
               ) : <span className="sports-cents">—</span>}
             </div>
           </div>
 
-          {/* Bookmaker box */}
+          {/* Right platform box (bookmaker) */}
           <div className="sports-platform-box">
             <div className={`sports-platform-label sports-platform-label--${dexLeg?.platform === 'pinnacle' ? 'pinnacle' : dexLeg?.platform === 'stake' ? 'stake' : dexLeg?.platform === 'cloudbet' ? 'cloudbet' : 'dex'}`}>
               {dexLeg?.platform === 'pinnacle' ? 'PINNACLE' : dexLeg?.platform === 'stake' ? 'STAKE' : dexLeg?.platform === 'cloudbet' ? 'CLOUDBET' : 'DEXSPORT'}
@@ -373,14 +393,18 @@ function SportsOpportunityCard({
             <div className="sports-amounts-inline">
               <span className="sports-amount-key">B:</span>
               <span className="sports-amount-val">${dexPerfect.toFixed(0)}</span>
-              <span className="sports-amounts-sep">|</span>
-              <span className="sports-amount-key">L:</span>
-              <span className="sports-amount-val">${dexReal.toFixed(0)}</span>
+              {!isBmBm && (
+                <>
+                  <span className="sports-amounts-sep">|</span>
+                  <span className="sports-amount-key">L:</span>
+                  <span className="sports-amount-val">${dexReal.toFixed(0)}</span>
+                </>
+              )}
             </div>
             <div className="sports-price-row">
               {dexLeg ? (
                 <>
-                  <span className="sports-cents sports-cents--muted">{(dexLeg.probability * 100).toFixed(0)}¢</span>
+                  {!isBmBm && <span className="sports-cents sports-cents--muted">{(dexLeg.probability * 100).toFixed(0)}¢</span>}
                   <span className="sports-odds">{dexLeg.decimalOdds.toFixed(2)}x</span>
                 </>
               ) : <span className="sports-cents">—</span>}
@@ -420,14 +444,15 @@ function SportsOpportunityCard({
           onClick={(e) => {
             e.stopPropagation()
             void openCalcWindow({
-              pmOutcome: pmLeg?.outcomeName ?? '',
-              dexOutcome: dexLeg?.outcomeName ?? '',
-              pmPrice: pmLeg ? (pmLeg.probability * 100).toFixed(0) : '50',
-              dexOdds: dexLeg ? dexLeg.decimalOdds.toFixed(2) : '2.00',
+              pmOutcome: leftLeg?.outcomeName ?? '',
+              dexOutcome: rightLeg?.outcomeName ?? '',
+              pmPrice: leftLeg ? (leftLeg.probability * 100).toFixed(0) : '50',
+              dexOdds: rightLeg ? rightLeg.decimalOdds.toFixed(2) : '2.00',
               pmAmount: pmCalcAmount.toFixed(2),
               dexAmount: dexCalcAmount.toFixed(2),
-              dexPlatform: dexLeg?.platform,
+              dexPlatform: rightLeg?.platform,
               marketType: displayMarketType,
+              ...(isBmBm && leftLeg ? { leftOdds: leftLeg.decimalOdds.toFixed(2), leftPlatform: leftLeg.platform } : {}),
             })
           }}
         >
@@ -744,8 +769,17 @@ export function Scanner() {
       // Platform pair filter
       if (arbMode === 'pm-bm' && platformPairFilter.size > 0) {
         const sOpp = opp as SportsOpportunity
-        const dexLeg = sOpp.sportsLegs?.find(l => l.platform === 'dexsport' || l.platform === 'pinnacle' || l.platform === 'stake' || l.platform === 'cloudbet')
-        if (!dexLeg || !platformPairFilter.has(dexLeg.platform)) return false
+        const hasPmLeg = sOpp.sportsLegs?.some(l => l.platform === 'polymarket')
+        if (hasPmLeg) {
+          // pm-bm: filter by bookmaker platform
+          const bmLeg = sOpp.sportsLegs?.find(l => l.platform !== 'polymarket')
+          if (!bmLeg || !platformPairFilter.has(bmLeg.platform)) return false
+        } else {
+          // bm-bm: filter by compound key dexsport-<bmPlatform>
+          const bmLeg = sOpp.sportsLegs?.find(l => l.platform !== 'dexsport')
+          const pairKey = bmLeg ? `dexsport-${bmLeg.platform}` : null
+          if (!pairKey || !platformPairFilter.has(pairKey)) return false
+        }
       }
 
       // Sport filter
@@ -792,7 +826,11 @@ export function Scanner() {
           if (arbMode === 'pm-bm') {
             const sOpp = o as SportsOpportunity
             const pmLeg = sOpp.sportsLegs?.find(l => l.platform === 'polymarket')
-            const pmQty = pmLeg?.pmBestAskQty ?? 0
+            if (!pmLeg) {
+              // bm-bm: profit is based on perfectAmount (bank)
+              return perfectAmount * (Number(o.profitPercentage) || 0) / 100
+            }
+            const pmQty = pmLeg.pmBestAskQty ?? 0
             const realTotal = pmQty * o.totalCost
             const effectiveTotal = realTotal > 0 ? Math.min(realTotal, perfectAmount) : 0
             return effectiveTotal * (Number(o.profitPercentage) || 0) / 100
@@ -1208,10 +1246,13 @@ export function Scanner() {
                     <div className={`collapsible-body ${pairsOpen ? 'collapsible-body--open' : ''}`}>
                       <div className="platform-buttons">
                         {([
-                          { key: 'dexsport',  label: 'Polymarket → Dexsport'  },
-                          { key: 'pinnacle',  label: 'Polymarket → Pinnacle'  },
-                          { key: 'stake',     label: 'Polymarket → Stake'     },
-                          { key: 'cloudbet',  label: 'Polymarket → Cloudbet'  },
+                          { key: 'dexsport',          label: 'Polymarket → Dexsport'  },
+                          { key: 'pinnacle',          label: 'Polymarket → Pinnacle'  },
+                          { key: 'stake',             label: 'Polymarket → Stake'     },
+                          { key: 'cloudbet',          label: 'Polymarket → Cloudbet'  },
+                          { key: 'dexsport-pinnacle', label: 'Dexsport → Pinnacle'    },
+                          { key: 'dexsport-stake',    label: 'Dexsport → Stake'       },
+                          { key: 'dexsport-cloudbet', label: 'Dexsport → Cloudbet'    },
                         ]).map(({ key, label }) => {
                           const isActive = platformPairFilter.size === 0 || platformPairFilter.has(key)
                           return (
@@ -1219,7 +1260,7 @@ export function Scanner() {
                               key={key}
                               className={`sidebar-mode-button ${isActive ? 'active' : ''}`}
                               onClick={() => setPlatformPairFilter((prev) => {
-                                const all = ['dexsport', 'pinnacle', 'stake', 'cloudbet']
+                                const all = ['dexsport', 'pinnacle', 'stake', 'cloudbet', 'dexsport-pinnacle', 'dexsport-stake', 'dexsport-cloudbet']
                                 const next = new Set(prev.size === 0 ? all : prev)
                                 if (next.has(key)) next.delete(key); else next.add(key)
                                 if (next.size === all.length) return new Set()

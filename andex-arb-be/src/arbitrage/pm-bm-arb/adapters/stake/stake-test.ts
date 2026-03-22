@@ -485,15 +485,39 @@ function handleMarketsUpdate(fixtureId: string, markets: StakeMarket[]): void {
 
   if (isInitial) {
     // Первый батч — логируем начальное состояние
-    const mainMkt = findMoneylineMarket([...byId.values()]);
+    const allMarkets = [...byId.values()];
+    const mainMkt = findMoneylineMarket(allMarkets);
     console.log(
       `[WS INIT] ${fix.sportKey.toUpperCase().padEnd(10)} | ` +
       `${fix.name} | ` +
-      `${markets.length} markets | ` +
+      `${allMarkets.length} markets | ` +
       (mainMkt
         ? mainMkt.outcomes.map(o => `${o.name}:${o.odds}`).join(' / ')
         : '(no moneyline)'),
     );
+
+    // ── Дамп всех маркетов для анализа extId/specifiers ──────────────────────
+    // Группируем по extId для компактного вывода
+    const INTERESTING_KEYWORDS = /total|handicap|spread|over|under|map|maps|hcp|ou|ah/i;
+    const interestingMarkets = allMarkets.filter(m =>
+      INTERESTING_KEYWORDS.test(m.name) ||
+      INTERESTING_KEYWORDS.test(m.specifiers ?? '') ||
+      (m.extId && !['1', '52', '186', '219', '406'].includes(m.extId) && m.specifiers === '')
+    );
+
+    if (interestingMarkets.length > 0) {
+      console.log(`         [MARKETS] ${fix.sportKey} — ${fix.name}:`);
+      for (const m of interestingMarkets) {
+        const outcomeStr = m.outcomes
+          .filter(o => o.active)
+          .map(o => `${o.name}:${o.odds}`)
+          .join(' | ');
+        console.log(
+          `           extId=${m.extId.padEnd(6)} spec="${(m.specifiers ?? '').padEnd(20)}" ` +
+          `name="${m.name}" → ${outcomeStr}`,
+        );
+      }
+    }
   } else if (changes.length > 0) {
     // Обновление кэфов
     console.log(`[WS UPD]  ${fix.name}:`);
@@ -610,6 +634,67 @@ async function main() {
         console.warn(`  ${fix.name}: ${e.message}`);
       }
     }
+  }
+
+  // 2b. HTTP-скан маркетов для одной фикстуры на каждый спорт
+  //     Без groups-фильтра — получаем ВСЕ группы (тотали, гандикапы и т.д.)
+  const SCAN_SPORTS = ['basketball', 'hockey', 'tennis', 'baseball', 'csgo', 'dota2', 'lol', 'valorant'];
+  const scanned = new Set<string>();
+  const scanFixtures: StakeFixture[] = [];
+  for (const sport of SCAN_SPORTS) {
+    // Берём только реальные матчи (не аутрайты): название должно содержать " - "
+    const fix = fixtures.find(f => f.sportKey === sport && f.status !== 'ended' && f.name.includes(' - '));
+    if (fix) { scanFixtures.push(fix); scanned.add(sport); }
+  }
+
+  if (scanFixtures.length > 0) {
+    console.log(`\n[HTTP SCAN] Fetching ALL market groups for sample fixtures...`);
+    const INTERESTING_KEYWORDS = /total|handicap|spread|over|under|hcp|ou|ah|maps|map winner|maps winner/i;
+    for (const fix of scanFixtures) {
+      try {
+        const { data } = await gql(`
+          {
+            slugFixture(fixture: "${fix.slug}") {
+              groups {
+                name
+                templates(includeEmpty: false) {
+                  markets {
+                    id name status extId specifiers
+                    outcomes { id name odds active }
+                  }
+                }
+              }
+            }
+          }
+        `);
+        const allMarkets: StakeMarket[] = [];
+        for (const g of data.slugFixture?.groups ?? []) {
+          for (const tmpl of g.templates ?? []) {
+            for (const mkt of tmpl.markets ?? []) {
+              allMarkets.push(mkt);
+            }
+          }
+        }
+        const interesting = allMarkets.filter(m =>
+          INTERESTING_KEYWORDS.test(m.name) || INTERESTING_KEYWORDS.test(m.specifiers ?? ''),
+        );
+        console.log(`\n  [${fix.sportKey.toUpperCase()}] ${fix.name} (${allMarkets.length} markets total):`);
+        if (interesting.length === 0) {
+          console.log('    (no interesting markets found)');
+        } else {
+          for (const m of interesting) {
+            const outcomes = m.outcomes.filter(o => o.active).map(o => `${o.name}:${o.odds}`).join(' | ');
+            console.log(
+              `    extId=${m.extId.padEnd(6)} spec="${(m.specifiers ?? '').padEnd(25)}" name="${m.name}"` +
+              (outcomes ? `\n      → ${outcomes}` : ''),
+            );
+          }
+        }
+      } catch (e: any) {
+        console.warn(`  [${fix.sportKey}] ${fix.name}: ${e.message}`);
+      }
+    }
+    console.log('');
   }
 
   // 3. Подключаемся к WS и подписываемся на все фикстуры

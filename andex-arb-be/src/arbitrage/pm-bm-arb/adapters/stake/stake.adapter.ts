@@ -42,6 +42,40 @@ const MONEYLINE_EXT_IDS = new Set(['52', '186', '219', '406']);
  */
 const MONEYLINE_NAME_RE = /^(match winner|winner|h2h|head.to.head|winner \(incl\. overtime\)|winner \(including overtime\))$/i;
 
+/**
+ * Betradar extId → marketType for totals markets.
+ * Specifiers must contain "total=X" (the line value).
+ *
+ *   225  Basketball — Total (Incl. Overtime)
+ *   412  Hockey     — Total (Incl. Overtime and Penalties)
+ *   3    Esports    — Total Maps
+ *   189  Tennis     — Total Games
+ *   314  Tennis     — Total Sets
+ */
+const TOTALS_EXT_ID_TO_TYPE: Record<string, string> = {
+  '225': 'totals',
+  '412': 'totals',
+  '3':   'totals',
+  '189': 'tennis_match_totals',
+  '314': 'tennis_set_totals',
+};
+
+/**
+ * Betradar extId → marketType for handicap/spread markets.
+ * Specifiers must contain "hcp=X" (the line value).
+ *
+ *   223  Basketball — Handicap (Incl. Overtime)
+ *   410  Hockey     — Handicap (Incl. Overtime and Penalties)
+ *   2    Esports    — Map Handicap
+ *   188  Tennis     — Set Handicap
+ */
+const SPREADS_EXT_ID_TO_TYPE: Record<string, string> = {
+  '223': 'spreads',
+  '410': 'spreads',
+  '2':   'map_handicap',
+  '188': 'tennis_set_handicap',
+};
+
 /** Keepalive ping interval (server disconnects after ~30s without pong) */
 const PING_INTERVAL_MS = 20_000;
 
@@ -430,7 +464,7 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
       // Build a single aliased GraphQL query for the whole batch
       const queryParts = batch.map((f, idx) => `
         f${idx}: slugFixture(fixture: "${f.slug}") {
-          markets: groups(groups: ["main"]) {
+          markets: groups {
             templates(includeEmpty: false) {
               markets {
                 id name status extId specifiers
@@ -730,18 +764,19 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
   /**
    * Maps a raw WS market to a DexMarket, or returns null if not useful for arbitrage.
    *
-   * We expose only:
-   *   - moneyline     (main match winner, whole-match, 2 outcomes)
-   *   - child_moneyline (esports: winner of Map N, specifiers="map=N")
+   * Detected market types:
+   *   - moneyline          main match winner (whole-match, 2 outcomes)
+   *   - child_moneyline    esports: winner of Map N (specifiers="map=N")
+   *   - totals             over/under total points/maps (specifiers contain "total=X")
+   *   - spreads            handicap winner (specifiers contain "hcp=X")
+   *   - map_handicap       esports: maps handicap
+   *   - tennis_match_totals / tennis_set_totals / tennis_set_handicap
    *
    * Two-layer detection:
-   *   1. extId path  — Betradar template ID reliably identifies market type.
-   *                    Requires specifiers === "" to exclude parameterised variants
-   *                    (e.g. extId "186" + specifiers "period=1" = "1st period winner").
-   *   2. Structural fallback — for Oddin-based sports (Valorant) whose extIds differ
-   *                    from Betradar. Checks name + outcome shape.
+   *   1. extId path  — Betradar template ID (see TOTALS/SPREADS/MONEYLINE constants).
+   *   2. Structural fallback — Oddin-based sports (Valorant) whose extIds differ from Betradar.
    */
-  private categorizeMarket(m: StakeWsMarket, _sportKey: string): DexMarket | null {
+  private categorizeMarket(m: StakeWsMarket, sportKey: string): DexMarket | null {
     const extId   = m.extId ?? '';
     const specs   = m.specifiers ?? '';
     const name    = m.name ?? '';
@@ -749,10 +784,10 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
 
     if (outcomes.length < 2) return null;
 
-    // ── Layer 1: Betradar extId path ───────────────────────────
+    // ── Layer 1a: Moneyline / child_moneyline ──────────────────
 
     if (MONEYLINE_EXT_IDS.has(extId)) {
-      // extId "186" with specifiers "map=1" → esports Map 1 winner (child_moneyline)
+      // extId "186" + specifiers "map=N" → esports Map N winner (child_moneyline)
       const mapMatch = specs.match(/^map=(\d+)$/i);
       if (mapMatch) {
         return {
@@ -762,19 +797,42 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
           outcomes,
         };
       }
-
-      // Require truly empty specifiers for the main moneyline.
-      // Non-empty but non-map specifiers (e.g. "period=1", "hcp=0.0") mean it is
-      // a derivative market that happens to share the same template — skip it.
+      // Require truly empty specifiers for main moneyline
       if (specs !== '') return null;
-
       return { marketId: m.id, marketType: 'moneyline', name: 'moneyline', outcomes };
+    }
+
+    // ── Layer 1b: Totals ───────────────────────────────────────
+
+    const totalsType = TOTALS_EXT_ID_TO_TYPE[extId];
+    if (totalsType) {
+      if (!specs.match(/total=([\d.]+)/i) || outcomes.length !== 2) return null;
+      return { marketId: m.id, marketType: totalsType, name: totalsType, outcomes };
+    }
+
+    // ── Layer 1c: Handicaps / Spreads ─────────────────────────
+
+    const spreadsType = SPREADS_EXT_ID_TO_TYPE[extId];
+    if (spreadsType) {
+      if (!specs.match(/hcp=([-\d.]+)/i) || outcomes.length !== 2) return null;
+      // Normalize Stake's "Team (±X.X)" format → "Team ±X.X"
+      // Ensures explicit sign on both sides so the matcher's direction checks work:
+      //   directionMatch   looks for o.name.includes('-') → negative handicap team
+      //   invertedDirection looks for o.name.includes('+') → positive handicap team
+      const normalizedOutcomes = outcomes.map((o) => ({
+        ...o,
+        name: o.name.replace(/\s*\(([+-]?[\d.]+)\)$/, (_, val) => {
+          const n = parseFloat(val);
+          return n >= 0 ? ` +${val}` : ` ${val}`;
+        }).trim(),
+      }));
+      return { marketId: m.id, marketType: spreadsType, name: spreadsType, outcomes: normalizedOutcomes };
     }
 
     // ── Layer 2: Structural fallback (Oddin / unknown extIds) ──
     //
     // Conditions for a main-match moneyline:
-    //   - No specifiers (it is the whole-match market, not period/map/set)
+    //   - No specifiers (whole-match market, not period/map/set)
     //   - Exactly 2 outcomes (2-way winner, no draw)
     //   - Market name matches known winner-market patterns
     //   - Outcome names are plain team names (no "Over"/"Under", no ±numbers)
@@ -787,6 +845,8 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
       return { marketId: m.id, marketType: 'moneyline', name: 'moneyline', outcomes };
     }
 
+    // Suppress unused-variable warning — sportKey reserved for future use
+    void sportKey;
     return null;
   }
 

@@ -92,6 +92,27 @@ export interface SportsMatch {
   bookmakerPlatform: 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet';
 }
 
+// ── BM-BM matched pair ───────────────────────────────────────
+
+export interface BmBmMarketPair {
+  marketType: string;
+  /** DexSport side (name-based market) */
+  dexMarket: DexMarket;
+  /** Pinnacle / Stake / Cloudbet side (type-based market) */
+  bmMarket: DexMarket;
+}
+
+export interface BmBmMatch {
+  id: string;
+  sportKey: string;
+  dexEvent: DexSportsEvent;
+  bmEvent: DexSportsEvent;
+  bmPlatform: 'pinnacle' | 'stake' | 'cloudbet';
+  similarity: number;
+  matchedMarkets: BmBmMarketPair[];
+  matchedAt: number;
+}
+
 // ── Arbitrage ────────────────────────────────────────────────
 
 export interface SportsArbLeg {

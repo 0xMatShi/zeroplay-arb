@@ -14,6 +14,8 @@ export interface CbSportConfig {
   marketKey: string;
   // No submarket field: each moneyline/winner market has exactly one submarket,
   // so we always take the first (and only) entry from market.submarkets.
+  /** Additional market keys to fetch and expose (totals, handicap, etc.) */
+  extraMarketKeys?: string[];
 }
 
 // ── REST API types ─────────────────────────────────────────────────────────────

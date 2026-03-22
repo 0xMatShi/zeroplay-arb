@@ -40,15 +40,62 @@ const WS_RECONNECT_DELAY_MS = 5_000;
 const TARGET_SPORTS: CbSportConfig[] = [
   // 2-way markets only (no draw possible).
   // Each moneyline/winner market key has exactly one submarket — no selection needed.
-  { sportKey: 'basketball', cbSlug: 'basketball',         marketKey: 'basketball.moneyline'    },
-  { sportKey: 'tennis',     cbSlug: 'tennis',             marketKey: 'tennis.winner'           },
-  { sportKey: 'hockey',     cbSlug: 'ice-hockey',         marketKey: 'ice_hockey.winner'       },
-  { sportKey: 'baseball',   cbSlug: 'baseball',           marketKey: 'baseball.moneyline'      },
-  { sportKey: 'csgo',       cbSlug: 'counter-strike',     marketKey: 'counter_strike.winner'   },
-  { sportKey: 'dota2',      cbSlug: 'dota-2',            marketKey: 'dota_2.winner'           },
-  { sportKey: 'lol',        cbSlug: 'league-of-legends', marketKey: 'league_of_legends.winner' },
-  { sportKey: 'valorant',   cbSlug: 'esport-valorant',   marketKey: 'esport_valorant.winner'  },
+  {
+    sportKey: 'basketball', cbSlug: 'basketball', marketKey: 'basketball.moneyline',
+    extraMarketKeys: ['basketball.totals', 'basketball.handicap'],
+  },
+  {
+    sportKey: 'tennis', cbSlug: 'tennis', marketKey: 'tennis.winner',
+    extraMarketKeys: ['tennis.total_games', 'tennis.total_sets', 'tennis.set_handicap'],
+  },
+  {
+    sportKey: 'hockey', cbSlug: 'ice-hockey', marketKey: 'ice_hockey.winner',
+    extraMarketKeys: ['ice_hockey.totals', 'ice_hockey.handicap'],
+  },
+  { sportKey: 'baseball', cbSlug: 'baseball', marketKey: 'baseball.moneyline' },
+  {
+    sportKey: 'csgo', cbSlug: 'counter-strike', marketKey: 'counter_strike.winner',
+    extraMarketKeys: ['counter_strike.total_maps', 'counter_strike.map_handicap'],
+  },
+  {
+    sportKey: 'dota2', cbSlug: 'dota-2', marketKey: 'dota_2.winner',
+    extraMarketKeys: ['dota_2.total_maps', 'dota_2.map_handicap'],
+  },
+  {
+    sportKey: 'lol', cbSlug: 'league-of-legends', marketKey: 'league_of_legends.winner',
+    extraMarketKeys: ['league_of_legends.total_maps', 'league_of_legends.map_handicap'],
+  },
+  {
+    sportKey: 'valorant', cbSlug: 'esport-valorant', marketKey: 'esport_valorant.winner',
+    extraMarketKeys: ['esport_valorant.total_maps'],
+  },
 ];
+
+/**
+ * Cloudbet market key → pipeline marketType.
+ * Used by extractTypedMarkets() to assign the correct type to each DexMarket.
+ */
+const CB_MARKET_TYPE: Record<string, string> = {
+  'basketball.totals':               'totals',
+  'basketball.handicap':             'spreads',
+  'ice_hockey.totals':               'totals',
+  'ice_hockey.handicap':             'spreads',
+  'tennis.total_games':              'tennis_match_totals',
+  'tennis.total_sets':               'tennis_set_totals',
+  'tennis.set_handicap':             'tennis_set_handicap',
+  'counter_strike.total_maps':       'totals',
+  'counter_strike.map_handicap':     'map_handicap',
+  'dota_2.total_maps':               'totals',
+  'dota_2.map_handicap':             'map_handicap',
+  'league_of_legends.total_maps':    'totals',
+  'league_of_legends.map_handicap':  'map_handicap',
+  'esport_valorant.total_maps':      'totals',
+};
+
+/** Market types that use over/under total extraction (vs home/away handicap). */
+const CB_TOTALS_TYPES = new Set([
+  'totals', 'tennis_match_totals', 'tennis_set_totals',
+]);
 
 // cbSlug → canonical sportKey
 const CB_SLUG_TO_SPORT = new Map<string, string>(TARGET_SPORTS.map((s) => [s.cbSlug, s.sportKey]));
@@ -172,6 +219,11 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
     return process.env.CLOUDBET_API_KEY ?? '';
   }
 
+  /** Comma-separated list of all market keys (moneyline + extras) for a sport config. */
+  private allMarketsParam(cfg: CbSportConfig): string {
+    return [cfg.marketKey, ...(cfg.extraMarketKeys ?? [])].join(',');
+  }
+
   private async fetchAllEvents(): Promise<void> {
     this.logger.log('Cloudbet: fetching events via REST...');
     const now = Math.floor(Date.now() / 1000);
@@ -185,7 +237,7 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
         const res = await this.restGet('/events', {
           sport: cfg.cbSlug,
           live: 'true',
-          markets: cfg.marketKey,
+          markets: this.allMarketsParam(cfg),
           limit: String(EVENTS_LIMIT),
         });
         for (const comp of (res.competitions ?? [])) {
@@ -205,7 +257,7 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
           live: 'false',
           from: String(now),
           to: String(to),
-          markets: cfg.marketKey,
+          markets: this.allMarketsParam(cfg),
           limit: String(EVENTS_LIMIT),
         });
         for (const comp of (res.competitions ?? [])) {
@@ -261,6 +313,91 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
   // ── Market helpers ─────────────────────────────────────────────────────────
 
   /**
+   * Extracts typed (totals / handicap) markets from the raw event.
+   * Returns one DexMarket per distinct line value (e.g., one for total=154.5).
+   * Groups selections by their params field (e.g., "total=154.5", "handicap=-8.5").
+   * If the same params appears in multiple submarkets (different periods), first-seen wins.
+   */
+  private extractTypedMarkets(raw: CbEventRaw): DexMarket[] {
+    const cfg = SPORT_CONFIG.get(raw.sportKey);
+    if (!cfg?.extraMarketKeys) return [];
+
+    const result: DexMarket[] = [];
+
+    for (const marketKey of cfg.extraMarketKeys) {
+      const market = raw.markets[marketKey];
+      if (!market?.submarkets) continue;
+
+      const marketType = CB_MARKET_TYPE[marketKey];
+      if (!marketType) continue;
+
+      const isTotals = CB_TOTALS_TYPES.has(marketType);
+
+      // Group enabled BACK selections by their params value across all submarkets.
+      // First-seen wins: if the same total/handicap line appears in multiple submarket
+      // periods (e.g., "period=ft" vs "period=ot&period=ft"), we keep the first one.
+      const grouped = new Map<string, { a?: { price: number }; b?: { price: number } }>();
+
+      for (const submarket of Object.values(market.submarkets)) {
+        for (const sel of (submarket.selections ?? [])) {
+          if (sel.status !== 'SELECTION_ENABLED' || sel.side !== 'BACK' || !sel.params) continue;
+          if (!isFinite(sel.price) || sel.price <= 1) continue;
+
+          if (!grouped.has(sel.params)) grouped.set(sel.params, {});
+          const group = grouped.get(sel.params)!;
+
+          if (isTotals) {
+            if (sel.outcome === 'over'  && !group.a) group.a = { price: sel.price };
+            if (sel.outcome === 'under' && !group.b) group.b = { price: sel.price };
+          } else {
+            if (sel.outcome === 'home' && !group.a) group.a = { price: sel.price };
+            if (sel.outcome === 'away' && !group.b) group.b = { price: sel.price };
+          }
+        }
+      }
+
+      for (const [params, group] of grouped) {
+        if (!group.a || !group.b) continue;
+
+        if (isTotals) {
+          const m = params.match(/total=([\d.]+)/i);
+          if (!m) continue;
+          const val = m[1];
+          result.push({
+            marketId:   `${raw.id}_${marketKey}_${params}`,
+            marketType,
+            name:       marketType,
+            outcomes: [
+              { name: `Over ${val}`,  price: group.a.price },
+              { name: `Under ${val}`, price: group.b.price },
+            ],
+          });
+        } else {
+          // Handicap: params = "handicap=X"; home gets X, away gets mirror (-X)
+          const m = params.match(/handicap=([-\d.]+)/i);
+          if (!m) continue;
+          const hcp    = parseFloat(m[1]);
+          if (!isFinite(hcp)) continue;
+          const awayHcp = -hcp;
+          const homeName = (raw.home?.name ?? 'Home') + (hcp    >= 0 ? ` +${hcp}`    : ` ${hcp}`);
+          const awayName = (raw.away?.name ?? 'Away') + (awayHcp >= 0 ? ` +${awayHcp}` : ` ${awayHcp}`);
+          result.push({
+            marketId:   `${raw.id}_${marketKey}_${params}`,
+            marketType,
+            name:       marketType,
+            outcomes: [
+              { name: homeName, price: group.a.price },
+              { name: awayName, price: group.b.price },
+            ],
+          });
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Extracts moneyline outcomes from the raw event using its sport config.
    * Looks for the target submarket key; falls back to first available.
    */
@@ -305,14 +442,15 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
     const raw = this.rawCache.get(id);
     if (!raw) return;
 
-    const market = this.extractMoneyline(raw);
-    const now = Date.now();
-    const eventId = String(id);
+    const mlMarket     = this.extractMoneyline(raw);
+    const typedMarkets = this.extractTypedMarkets(raw);
+    const now          = Date.now();
+    const eventId      = String(id);
 
     this.eventLastSeen.set(eventId, now);
 
-    if (!market) {
-      // Market temporarily unavailable (suspended / no valid selections) —
+    if (!mlMarket) {
+      // Moneyline temporarily unavailable (suspended / no valid selections) —
       // keep last known good state so the scanner doesn't lose the reference.
       return;
     }
@@ -334,15 +472,15 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
         startTime,
         tournamentName: raw.competitionName || undefined,
         url: this.buildEventUrl(raw),
-        markets: [market],
+        markets: [mlMarket, ...typedMarkets],
         updatedAt: now,
       });
       return;
     }
 
-    // Update in-place
+    // Update in-place: patch moneyline prices with change tracking, then rebuild typed markets.
     const prevMarket = existing.markets[0];
-    existing.isLive   = raw.status === 'TRADING_LIVE';
+    existing.isLive    = raw.status === 'TRADING_LIVE';
     existing.updatedAt = now;
     // Backfill startTime if it was unknown when the event was first added (WS-discovered event)
     if (!existing.startTime && raw.startTime) {
@@ -352,10 +490,10 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
 
     const changes: string[] = [];
     if (prevMarket) {
-      for (let i = 0; i < Math.min(prevMarket.outcomes.length, market.outcomes.length); i++) {
-        const np = market.outcomes[i].price;
+      for (let i = 0; i < Math.min(prevMarket.outcomes.length, mlMarket.outcomes.length); i++) {
+        const np = mlMarket.outcomes[i].price;
         if (np !== prevMarket.outcomes[i].price && isFinite(np) && np > 1) {
-          if (this.trackedMarketIds.has(market.marketId)) {
+          if (this.trackedMarketIds.has(mlMarket.marketId)) {
             const arrow = np > prevMarket.outcomes[i].price ? '↑' : '↓';
             changes.push(`${prevMarket.outcomes[i].name}: ${prevMarket.outcomes[i].price?.toFixed(3)} → ${np.toFixed(3)} ${arrow}`);
           }
@@ -363,8 +501,11 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
         }
       }
     } else {
-      existing.markets = [market];
+      existing.markets[0] = mlMarket;
     }
+
+    // Rebuild typed markets (replace all non-moneyline markets with fresh data)
+    existing.markets = [existing.markets[0] ?? mlMarket, ...typedMarkets];
 
     if (changes.length > 0) {
       this.logger.log(`[Cloudbet WS] ${existing.name}:\n  ${changes.join('\n  ')}`);
