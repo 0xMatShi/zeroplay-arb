@@ -504,12 +504,26 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
       existing.markets[0] = mlMarket;
     }
 
+    // Check if any typed market prices changed
+    let hasTypedChanges = false;
+    const prevTypedMap = new Map(existing.markets.slice(1).map((m) => [m.marketId, m]));
+    for (const tm of typedMarkets) {
+      const prev = prevTypedMap.get(tm.marketId);
+      if (!prev) { hasTypedChanges = true; break; }
+      for (let i = 0; i < Math.min(prev.outcomes.length, tm.outcomes.length); i++) {
+        if (prev.outcomes[i].price !== tm.outcomes[i].price) { hasTypedChanges = true; break; }
+      }
+      if (hasTypedChanges) break;
+    }
+
     // Rebuild typed markets (replace all non-moneyline markets with fresh data)
     existing.markets = [existing.markets[0] ?? mlMarket, ...typedMarkets];
 
     if (changes.length > 0) {
       this.logger.log(`[Cloudbet WS] ${existing.name}:\n  ${changes.join('\n  ')}`);
       if (this.initialStateFired) this.onPriceUpdate?.();
+    } else if (hasTypedChanges && this.initialStateFired) {
+      this.onPriceUpdate?.();
     }
   }
 
