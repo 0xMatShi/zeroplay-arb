@@ -636,13 +636,13 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       }
       if (periodNum === 0) {
         for (const entry of period.overUnder ?? []) {
-          if ('lineId' in entry && (entry as any).offline) {
-            ids.add(`${event.id}_p0_ou_${(entry as any).lineId}`);
+          if ('points' in entry && (entry as any).offline) {
+            ids.add(`${event.id}_p0_ou_${(entry as any).points}`);
           }
         }
         for (const entry of period.handicap ?? []) {
-          if ('lineId' in entry && (entry as any).offline) {
-            ids.add(`${event.id}_p0_hdp_${(entry as any).lineId}`);
+          if ('homeSpread' in entry && (entry as any).offline) {
+            ids.add(`${event.id}_p0_hdp_${(entry as any).homeSpread}`);
           }
         }
       }
@@ -736,7 +736,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         if (!isFinite(points) || !isFinite(overOdds) || !isFinite(underOdds)) continue;
         if (overOdds <= 0 || underOdds <= 0) continue;
         markets.push({
-          marketId:   `${eventId}_p0_ou_${ou.lineId}`,
+          marketId:   `${eventId}_p0_ou_${ou.points}`,
           marketType: totalsType,
           name:       totalsType,
           outcomes: [
@@ -764,7 +764,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         const homeSpreadStr = homeSpreadNum >= 0 ? `+${homeSpreadNum}` : `${homeSpreadNum}`;
         const awaySpreadStr = awaySpreadNum >= 0 ? `+${awaySpreadNum}` : `${awaySpreadNum}`;
         markets.push({
-          marketId:   `${eventId}_p0_hdp_${hdp.lineId}`,
+          marketId:   `${eventId}_p0_hdp_${hdp.homeSpread}`,
           marketType: handicapType,
           name:       handicapType,
           outcomes: [
