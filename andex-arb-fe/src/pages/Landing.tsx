@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useWhoami } from '../api'
 import { ApiKeyModal } from '../components/ApiKeyModal'
@@ -54,13 +54,13 @@ export function Landing() {
       {/* Header */}
       <header className="header">
         <div className="header-content">
-          <a href="/" className="logo" data-text="SubLine">
+          <Link to="/" className="logo" data-text="SubLine">
             <span>SubLine</span>
-          </a>
+          </Link>
           <nav className="header-nav">
             <div className="nav-links">
               <button onClick={() => navigate('/scanner')} className="nav-link nav-link-button" data-text={t('header.scanner')}>{t('header.scanner')}</button>
-              <a href="/pricing" className="nav-link" data-text={t('header.pricing')}>{t('header.pricing')}</a>
+              <Link to="/pricing" className="nav-link" data-text={t('header.pricing')}>{t('header.pricing')}</Link>
             </div>
             <div className="header-actions">
               <LanguageSwitcher />
@@ -375,7 +375,7 @@ export function Landing() {
 
                 <button
                   className="plan-button plan-button--primary"
-                  onClick={() => window.location.href = '/pricing'}
+                  onClick={() => navigate('/pricing')}
                 >
                   {t('pricing.buy')}
                 </button>
@@ -423,7 +423,7 @@ export function Landing() {
                 <h4 className="footer-column-title">{t('footer.product')}</h4>
                 <ul className="footer-nav">
                   <li><a href="#scanner">{t('header.scanner')}</a></li>
-                  <li><a href="/pricing">{t('header.pricing')}</a></li>
+                  <li><Link to="/pricing">{t('header.pricing')}</Link></li>
                 </ul>
               </div>
               <div className="footer-column">

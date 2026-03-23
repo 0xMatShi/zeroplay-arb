@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useWhoami } from '../api'
 import { ApiKeyModal } from '../components/ApiKeyModal'
@@ -265,13 +265,13 @@ export function Pricing() {
       {/* Header */}
       <header className="header">
         <div className="header-content">
-          <a href="/" className="logo" data-text="SubLine">
+          <Link to="/" className="logo" data-text="SubLine">
             <span>SubLine</span>
-          </a>
+          </Link>
           <nav className="header-nav">
             <div className="nav-links">
               <button onClick={() => navigate('/scanner')} className="nav-link nav-link-button" data-text={t('header.scanner')}>{t('header.scanner')}</button>
-              <a href="/pricing" className="nav-link" data-text={t('header.pricing')}>{t('header.pricing')}</a>
+              <Link to="/pricing" className="nav-link" data-text={t('header.pricing')}>{t('header.pricing')}</Link>
             </div>
             <div className="header-actions">
               <LanguageSwitcher />
@@ -424,8 +424,8 @@ export function Pricing() {
               <div className="footer-column">
                 <h4 className="footer-column-title">PRODUCT</h4>
                 <ul className="footer-nav">
-                  <li><a href="/scanner">Scanner</a></li>
-                  <li><a href="/pricing">Pricing</a></li>
+                  <li><Link to="/scanner">Scanner</Link></li>
+                  <li><Link to="/pricing">Pricing</Link></li>
                 </ul>
               </div>
               <div className="footer-column">

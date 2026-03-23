@@ -6482,3 +6482,260 @@
   border-top: 1px solid var(--border-color);
 }
 
+/* Landing-only mobile polish */
+@media (max-width: 768px) {
+  .landing .container {
+    padding: 0 16px;
+  }
+
+  .landing .header-content {
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .landing .header-nav {
+    gap: 10px;
+  }
+
+  .landing .header-actions {
+    gap: 6px;
+  }
+
+  .landing .header-button-login,
+  .landing .header-button-signup,
+  .landing .lang-switcher {
+    min-height: 34px;
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  .landing .header-social-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .landing .hero {
+    padding: 72px 16px 40px;
+  }
+
+  .landing .hero-title {
+    font-size: 30px;
+    line-height: 1.22;
+    margin-bottom: 16px;
+  }
+
+  .landing .hero-subtitle {
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 18px;
+  }
+
+  .landing .hero-actions {
+    width: 100%;
+  }
+
+  .landing .hero-actions .primary-button {
+    width: 100%;
+  }
+
+  .landing .preview-section {
+    margin-top: 0;
+    padding: 8px 0 40px;
+  }
+
+  .landing .preview-toggle {
+    width: 100%;
+  }
+
+  .landing .preview-tab {
+    flex: 1;
+    text-align: center;
+    padding: 9px 12px;
+  }
+
+  .landing .sports-card-main {
+    flex-direction: column;
+    min-height: 0;
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .landing .sports-card-info {
+    padding: 0;
+    gap: 8px;
+  }
+
+  .landing .sports-event-title {
+    font-size: 16px;
+    line-height: 1.35;
+    white-space: normal;
+  }
+
+  .landing .sports-start-time {
+    font-size: 12px;
+  }
+
+  .landing .sports-market-type {
+    font-size: 13px;
+  }
+
+  .landing .sports-card-platforms {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0;
+    gap: 10px;
+  }
+
+  .landing .sports-platform-box {
+    width: 100%;
+    border-radius: 22px;
+    padding: 10px 12px;
+  }
+
+  .landing .sports-amount-val {
+    font-size: 16px;
+  }
+
+  .landing .sports-cents,
+  .landing .sports-odds {
+    font-size: 18px;
+  }
+
+  .landing .sports-card-metrics {
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .landing .sports-metric-box {
+    flex: 1;
+    padding: 8px;
+  }
+
+  .landing .sports-metric-value {
+    font-size: 18px;
+  }
+
+  .landing .opportunity-card {
+    border-radius: 24px;
+  }
+
+  .landing .opp-header {
+    padding: 14px 16px;
+    gap: 8px;
+  }
+
+  .landing .opp-match-title {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .landing .opp-profit {
+    font-size: 14px;
+  }
+
+  .landing .opp-legs {
+    flex-direction: column;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .landing .arb-leg {
+    width: 100%;
+  }
+
+  .landing .hiw-tabs {
+    margin-top: 30px;
+  }
+
+  .landing .hiw-tabs > .hiw-toggle {
+    width: 100%;
+  }
+
+  .landing .hiw-tab {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .landing .hiw-example {
+    margin-top: 24px;
+    border-radius: 28px;
+    padding: 18px 14px;
+  }
+
+  .landing .hiw-example::before {
+    border-radius: 28px;
+  }
+
+  .landing .hiw-example-bet {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .landing .hiw-example-bet-right {
+    width: 100%;
+    gap: 8px;
+    justify-content: space-between;
+  }
+
+  .landing .hiw-bet-amount,
+  .landing .hiw-bet-result {
+    min-width: 0;
+    flex: 1;
+    padding: 7px 8px;
+    font-size: 13px;
+  }
+
+  .landing .hiw-bet-odds {
+    min-width: 0;
+    flex: 1;
+    font-size: 13px;
+  }
+
+  .landing .features-section,
+  .landing .plans-section,
+  .landing .faq-section {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .landing .plan-card {
+    border-radius: 28px;
+    padding: 22px 18px;
+  }
+
+  .landing .faq-list {
+    margin-top: 28px;
+    gap: 10px;
+  }
+
+  .landing .faq-item {
+    border-radius: 24px;
+    padding: 0 16px;
+  }
+
+  .landing .faq-item::after {
+    border-radius: 24px;
+  }
+
+  .landing .faq-question {
+    min-height: 52px;
+    font-size: 14px;
+  }
+
+  .landing .faq-answer {
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .landing .faq-answer--open {
+    padding-bottom: 14px;
+  }
+}
+

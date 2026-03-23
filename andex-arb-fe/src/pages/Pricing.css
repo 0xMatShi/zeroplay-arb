@@ -486,3 +486,200 @@
   cursor: pointer;
   border-radius: 0;
 }
+
+@media (max-width: 1024px) {
+  .pricing-page .pricing-main {
+    padding: 44px 0 56px;
+  }
+
+  .pricing-page .pricing-container {
+    padding: 0 18px;
+  }
+
+  .pricing-page .pricing-title {
+    font-size: 30px;
+  }
+
+  .pricing-page .pricing-subtitle {
+    margin-bottom: 28px;
+  }
+
+  .pricing-page .pricing-table-wrap--full {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 32px;
+  }
+
+  .pricing-page .pricing-table-wrap--full::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .pricing-page .pricing-table-wrap--full::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.22);
+    border-radius: 99px;
+  }
+
+  .pricing-page .pricing-table {
+    min-width: 920px;
+    border-radius: 32px;
+  }
+
+  .pricing-page .pricing-table-head-features {
+    padding: 18px 16px;
+  }
+
+  .pricing-page .pricing-plan-cell {
+    padding: 22px 12px;
+    gap: 10px;
+  }
+
+  .pricing-page .pricing-plan-name {
+    font-size: 16px;
+  }
+
+  .pricing-page .pricing-plan-price {
+    font-size: 30px;
+  }
+
+  .pricing-page .pricing-plan-cell .pricing-plan-btn {
+    padding: 9px 20px;
+    font-size: 13px;
+  }
+
+  .pricing-page .pricing-section-header-main {
+    padding: 12px 16px;
+  }
+
+  .pricing-page .pricing-feature-name {
+    padding: 11px 16px;
+  }
+
+  .pricing-page .pricing-feature-sub-name {
+    padding: 10px 16px 10px 28px;
+  }
+
+  .pricing-page .pricing-feature-expand-content {
+    padding: 0 16px 12px 28px;
+  }
+}
+
+@media (max-width: 768px) {
+  .pricing-page .header-content {
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .pricing-page .header-actions {
+    gap: 8px;
+  }
+
+  .pricing-page .header-button-login,
+  .pricing-page .header-button-signup,
+  .pricing-page .lang-switcher {
+    min-height: 34px;
+    font-size: 12px;
+    padding: 7px 12px;
+  }
+
+  .pricing-page .pricing-main {
+    padding: 36px 0 44px;
+  }
+
+  .pricing-page .pricing-container {
+    padding: 0 12px;
+  }
+
+  .pricing-page .pricing-title {
+    font-size: 25px;
+    line-height: 1.2;
+    margin-bottom: 10px;
+  }
+
+  .pricing-page .pricing-subtitle {
+    font-size: 14px;
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  .pricing-page .pricing-table-wrap--full {
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(8, 9, 12, 0.5);
+    padding-bottom: 4px;
+  }
+
+  .pricing-page .pricing-table {
+    min-width: 860px;
+    border-radius: 24px;
+  }
+
+  .pricing-page .pricing-table-head-features {
+    font-size: 12px;
+    padding: 14px 12px;
+  }
+
+  .pricing-page .pricing-plan-cell {
+    padding: 16px 10px;
+    gap: 8px;
+  }
+
+  .pricing-page .pricing-plan-name {
+    font-size: 14px;
+  }
+
+  .pricing-page .pricing-plan-price {
+    font-size: 24px;
+  }
+
+  .pricing-page .pricing-plan-period {
+    font-size: 12px;
+  }
+
+  .pricing-page .pricing-plan-cell .pricing-plan-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+    min-width: 110px;
+  }
+
+  .pricing-page .pricing-section-name {
+    font-size: 12px;
+  }
+
+  .pricing-page .pricing-section-desc {
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+
+  .pricing-page .pricing-feature-name {
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .pricing-page .pricing-feature-sub-name {
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 8px 12px 8px 22px;
+  }
+
+  .pricing-page .pricing-feature-expand-content {
+    font-size: 12px;
+    line-height: 1.55;
+    padding: 0 12px 10px 22px;
+  }
+
+  .pricing-page .pricing-cell-check,
+  .pricing-page .pricing-cell-cross {
+    width: 18px;
+    height: 18px;
+  }
+
+  .pricing-page .pricing-cell-instant {
+    font-size: 10px;
+  }
+
+  .pricing-page .pricing-table-footer-cell {
+    height: 32px;
+  }
+}

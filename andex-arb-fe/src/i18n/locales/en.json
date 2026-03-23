@@ -364,5 +364,10 @@
     "privacy": "Privacy Policy",
     "systemOnline": "System: Operational",
     "build": "Build"
+  },
+  "mobileNotice": {
+    "title": "Desktop recommended",
+    "message": "For a more comfortable experience, please open SubLine on desktop.",
+    "close": "Close message"
   }
 }

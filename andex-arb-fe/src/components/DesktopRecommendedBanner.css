@@ -1,0 +1,56 @@
+.desktop-recommended-banner {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .desktop-recommended-banner {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 1200;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(62, 214, 255, 0.25);
+    background: rgba(12, 14, 22, 0.92);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  }
+
+  .desktop-recommended-banner__text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .desktop-recommended-banner__text strong {
+    color: #ffffff;
+    font-size: 13px;
+    line-height: 1.35;
+    font-family: var(--font-mono);
+    letter-spacing: 0.2px;
+  }
+
+  .desktop-recommended-banner__text span {
+    color: #cbd5e1;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .desktop-recommended-banner__close {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: transparent;
+    color: #e2e8f0;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0;
+  }
+}
