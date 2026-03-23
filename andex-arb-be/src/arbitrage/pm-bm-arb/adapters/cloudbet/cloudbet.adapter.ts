@@ -509,11 +509,16 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
     const prevTypedMap = new Map(existing.markets.slice(1).map((m) => [m.marketId, m]));
     for (const tm of typedMarkets) {
       const prev = prevTypedMap.get(tm.marketId);
-      if (!prev) { hasTypedChanges = true; break; }
+      if (!prev) { hasTypedChanges = true; continue; }
       for (let i = 0; i < Math.min(prev.outcomes.length, tm.outcomes.length); i++) {
-        if (prev.outcomes[i].price !== tm.outcomes[i].price) { hasTypedChanges = true; break; }
+        if (prev.outcomes[i].price !== tm.outcomes[i].price) {
+          hasTypedChanges = true;
+          if (this.trackedMarketIds.has(tm.marketId)) {
+            const arrow = tm.outcomes[i].price > prev.outcomes[i].price ? '↑' : '↓';
+            changes.push(`[${tm.name}] ${tm.outcomes[i].name}: ${prev.outcomes[i].price?.toFixed(3)} → ${tm.outcomes[i].price.toFixed(3)} ${arrow}`);
+          }
+        }
       }
-      if (hasTypedChanges) break;
     }
 
     // Rebuild typed markets (replace all non-moneyline markets with fresh data)
