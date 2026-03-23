@@ -4,7 +4,7 @@
   font-family: 'Inter', -apple-system, monospace;
   display: inline-flex;
   flex-direction: column;
-  padding: 12px;
+  padding: 12px 12px 20px;
   gap: 10px;
 }
 
@@ -271,4 +271,28 @@
 .calc-result-val--neg {
   color: #F472B6;
   text-shadow: 0 0 10px rgba(244, 114, 182, 0.7), 0 0 20px rgba(244, 114, 182, 0.4);
+}
+
+/* Dashboard button */
+.calc-dashboard-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 32px;
+  margin: 0 auto;
+  padding: 0;
+  background: linear-gradient(135deg, #3ED6FF 0%, #F472B6 100%);
+  border: none;
+  border-radius: 60px;
+  color: #000;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.calc-dashboard-btn:hover {
+  opacity: 0.85;
+  box-shadow: 0 0 12px rgba(62, 214, 255, 0.4), 0 0 12px rgba(244, 114, 182, 0.4);
+  transform: translateY(-1px);
 }

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Landing } from './pages/Landing'
-// import { Dashboard } from './pages/Dashboard'
+import { DashboardPage } from './pages/DashboardPage'
 import { Scanner } from './pages/Scanner'
 import { Calculator } from './pages/Calculator'
 import { Pricing } from './pages/Pricing'
@@ -42,10 +42,7 @@ function App() {
         <DesktopRecommendedBanner />
         <Routes>
           <Route path="/" element={<Landing />} />
-          {/* <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-          </Route> */}
-          <Route path="/dashboard" element={<Navigate to="/scanner" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/scanner" element={<Scanner />} />
           <Route path="/calculator" element={<Calculator />} />
           <Route path="/pricing" element={<Pricing />} />

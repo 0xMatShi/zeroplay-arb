@@ -204,6 +204,87 @@ export interface ArbitrageTiersSummary {
   worstProfitPercentage: number
 }
 
+// Dashboard
+export interface DashboardProfile {
+  id: string
+  userId: string
+  nickname: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DashboardTrade {
+  id: string
+  userId: string
+  bookmaker1: string
+  bookmaker2: string
+  eventName: string
+  sport: string | null
+  outcome1: string | null
+  outcome2: string | null
+  odds1: number
+  odds2: number
+  stake1: number
+  stake2: number
+  profit: number | null
+  profitPercent: number | null
+  isPublic: boolean
+  winner: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DashboardTradeWithNickname extends DashboardTrade {
+  nickname: string
+}
+
+export interface DashboardGlobalStats {
+  totalProfit: number
+  totalTrades: number
+  bestProfit: number
+  todayProfit: number
+  todayTrades: number
+  todayBestProfit: number
+}
+
+export interface DashboardMyStats {
+  totalProfit: number
+  totalTrades: number
+  bestProfit: number
+  todayProfit: number
+  todayTrades: number
+}
+
+export interface DashboardLeaderboardEntry {
+  userId: string
+  nickname: string
+  totalTrades: number
+  totalProfit: number
+  bestProfit: number
+}
+
+export interface DashboardProfileResponse {
+  profile: DashboardProfile
+  stats: DashboardMyStats
+}
+
+export interface CreateDashboardTradeDto {
+  bookmaker1: string
+  bookmaker2: string
+  eventName: string
+  sport?: string
+  outcome1?: string
+  outcome2?: string
+  odds1: number
+  odds2: number
+  stake1: number
+  stake2: number
+  profit?: number
+  profitPercent?: number
+  isPublic?: boolean
+  winner?: string
+}
+
 export interface OrderBookAnalysisResponse {
   opportunityId: string
   matchTitle?: string

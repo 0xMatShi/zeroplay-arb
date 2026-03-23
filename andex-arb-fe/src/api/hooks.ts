@@ -5,7 +5,9 @@ import {
   subscriptionsApi,
   arbitrageApi,
   sportsArbApi,
+  dashboardApi,
 } from './client'
+import type { CreateDashboardTradeDto } from './types'
 
 /**
  * Query keys для кеширования
@@ -22,6 +24,11 @@ export const queryKeys = {
   orderBook: (id: string) => ['arbitrage', 'orderbook', id] as const,
   sportsOpportunities: ['sports-arbitrage', 'opportunities'] as const,
   sportsStats: ['sports-arbitrage', 'stats'] as const,
+  dashboardStats: ['dashboard', 'stats'] as const,
+  dashboardTrades: (limit: number, offset: number) => ['dashboard', 'trades', limit, offset] as const,
+  dashboardLeaderboard: ['dashboard', 'leaderboard'] as const,
+  dashboardProfile: ['dashboard', 'profile'] as const,
+  dashboardMyTrades: ['dashboard', 'my-trades'] as const,
 }
 
 /**
@@ -136,5 +143,90 @@ export const useOrderBook = (opportunityId: string, enabled = false) => {
     enabled: enabled && !!opportunityId,
     staleTime: 30_000,
     gcTime: 60_000,
+  })
+}
+
+/**
+ * Dashboard hooks
+ */
+export const useDashboardStats = () => {
+  return useQuery({
+    queryKey: queryKeys.dashboardStats,
+    queryFn: dashboardApi.getStats,
+    refetchInterval: 60_000,
+  })
+}
+
+export const useDashboardTrades = (limit = 50, offset = 0) => {
+  return useQuery({
+    queryKey: queryKeys.dashboardTrades(limit, offset),
+    queryFn: () => dashboardApi.getTrades(limit, offset),
+    staleTime: 30_000,
+  })
+}
+
+export const useDashboardLeaderboard = () => {
+  return useQuery({
+    queryKey: queryKeys.dashboardLeaderboard,
+    queryFn: dashboardApi.getLeaderboard,
+    staleTime: 60_000,
+  })
+}
+
+export const useDashboardProfile = () => {
+  return useQuery({
+    queryKey: queryKeys.dashboardProfile,
+    queryFn: dashboardApi.getProfile,
+    enabled: !!localStorage.getItem('apiKey'),
+    retry: false,
+  })
+}
+
+export const useDashboardMyTrades = () => {
+  return useQuery({
+    queryKey: queryKeys.dashboardMyTrades,
+    queryFn: dashboardApi.getMyTrades,
+    enabled: !!localStorage.getItem('apiKey'),
+  })
+}
+
+export const useCreateDashboardTrade = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (dto: CreateDashboardTradeDto) => dashboardApi.createTrade(dto),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export const useUpdateDashboardTrade = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: string; dto: Partial<CreateDashboardTradeDto> }) =>
+      dashboardApi.updateTrade(id, dto),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export const useDeleteDashboardTrade = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => dashboardApi.deleteTrade(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export const useUpdateDashboardNickname = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (nickname: string) => dashboardApi.updateNickname(nickname),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboardProfile })
+    },
   })
 }

@@ -10,6 +10,12 @@ import type {
   StatsResponse,
   Platform,
   OrderBookAnalysisResponse,
+  DashboardGlobalStats,
+  DashboardTradeWithNickname,
+  DashboardLeaderboardEntry,
+  DashboardProfileResponse,
+  DashboardTrade,
+  CreateDashboardTradeDto,
 } from './types'
 
 export class ApiError extends Error {
@@ -25,8 +31,9 @@ export class ApiError extends Error {
 async function handleResponse<T>(response: Response): Promise<T> {
   if (response.ok) return response.json()
 
+  const body = await response.json().catch(() => ({}))
+
   if (response.status === 401 || response.status === 403) {
-    const body = await response.json().catch(() => ({}))
     const hadSession = !!localStorage.getItem('sessionToken')
     if (hadSession) {
       localStorage.removeItem('apiKey')
@@ -37,7 +44,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
     throw new ApiError(body.message ?? response.statusText, response.status)
   }
 
-  throw new Error(`Request failed: ${response.statusText}`)
+  throw new ApiError(body.message ?? response.statusText, response.status)
 }
 
 const getBackendUrl = () => {
@@ -191,5 +198,85 @@ export const arbitrageApi = {
       { method: 'GET', headers: createHeaders(true) }
     )
     return handleResponse(response)
+  },
+}
+
+/**
+ * Dashboard API
+ */
+export const dashboardApi = {
+  getStats: async (): Promise<DashboardGlobalStats> => {
+    const response = await fetch(`${getBackendUrl()}/dashboard/stats`, {
+      method: 'GET',
+      headers: createHeaders(),
+    })
+    return handleResponse(response)
+  },
+
+  getTrades: async (limit = 50, offset = 0): Promise<{ trades: DashboardTradeWithNickname[]; total: number }> => {
+    const response = await fetch(`${getBackendUrl()}/dashboard/trades?limit=${limit}&offset=${offset}`, {
+      method: 'GET',
+      headers: createHeaders(),
+    })
+    return handleResponse(response)
+  },
+
+  getLeaderboard: async (): Promise<DashboardLeaderboardEntry[]> => {
+    const response = await fetch(`${getBackendUrl()}/dashboard/leaderboard`, {
+      method: 'GET',
+      headers: createHeaders(),
+    })
+    return handleResponse(response)
+  },
+
+  getProfile: async (): Promise<DashboardProfileResponse> => {
+    const response = await fetch(`${getBackendUrl()}/dashboard/profile`, {
+      method: 'GET',
+      headers: createHeaders(true),
+    })
+    return handleResponse(response)
+  },
+
+  updateNickname: async (nickname: string): Promise<{ id: string; nickname: string }> => {
+    const response = await fetch(`${getBackendUrl()}/dashboard/profile`, {
+      method: 'PUT',
+      headers: createHeaders(true),
+      body: JSON.stringify({ nickname }),
+    })
+    return handleResponse(response)
+  },
+
+  getMyTrades: async (): Promise<DashboardTrade[]> => {
+    const response = await fetch(`${getBackendUrl()}/dashboard/my-trades`, {
+      method: 'GET',
+      headers: createHeaders(true),
+    })
+    return handleResponse(response)
+  },
+
+  createTrade: async (dto: CreateDashboardTradeDto): Promise<DashboardTrade> => {
+    const response = await fetch(`${getBackendUrl()}/dashboard/trades`, {
+      method: 'POST',
+      headers: createHeaders(true),
+      body: JSON.stringify(dto),
+    })
+    return handleResponse(response)
+  },
+
+  updateTrade: async (id: string, dto: Partial<CreateDashboardTradeDto>): Promise<DashboardTrade> => {
+    const response = await fetch(`${getBackendUrl()}/dashboard/trades/${id}`, {
+      method: 'PUT',
+      headers: createHeaders(true),
+      body: JSON.stringify(dto),
+    })
+    return handleResponse(response)
+  },
+
+  deleteTrade: async (id: string): Promise<void> => {
+    const response = await fetch(`${getBackendUrl()}/dashboard/trades/${id}`, {
+      method: 'DELETE',
+      headers: createHeaders(true),
+    })
+    if (!response.ok) throw new Error(`Delete failed: ${response.statusText}`)
   },
 }

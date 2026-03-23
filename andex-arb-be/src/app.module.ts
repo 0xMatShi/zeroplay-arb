@@ -13,6 +13,7 @@ import { SportsArbModule } from './arbitrage/pm-bm-arb/sports-arb.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { DatabaseConfig } from './config/database.config';
 import { BotModule } from './bot/bot.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { BotModule } from './bot/bot.module';
 
     ArbitrageModule,
     SportsArbModule,
+    DashboardModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

@@ -28,6 +28,7 @@ export class DatabaseConfig implements TypeOrmOptionsFactory {
         min: 2,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 5000,
+        options: '-c timezone=UTC',
       },
     };
 

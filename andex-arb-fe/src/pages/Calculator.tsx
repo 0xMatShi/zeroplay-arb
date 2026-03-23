@@ -33,6 +33,8 @@ export function Calculator() {
         dexAmount={initDexAmount}
         dexPlatform={params.get('dexPlatform') ?? undefined}
         marketType={params.get('marketType') ?? undefined}
+        eventName={params.get('eventName') ?? undefined}
+        sport={params.get('sport') ?? undefined}
       />
     </div>
   )

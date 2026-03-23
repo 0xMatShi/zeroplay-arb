@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Copy, Check } from 'lucide-react'
+import { Copy, Check, PenLine } from 'lucide-react'
 import '../pages/Calculator.css'
 
 export interface CalcParams {
@@ -14,14 +14,21 @@ export interface CalcParams {
   /** When provided, calculator switches to bm-bm mode (both sides are bookmakers) */
   leftOdds?: string
   leftPlatform?: string
+  /** Event/match title for dashboard */
+  eventName?: string
+  /** Sport key for dashboard */
+  sport?: string
 }
 
 function platformLabel(platform: string | undefined): string {
-  if (platform === 'pinnacle') return 'PINNACLE'
-  if (platform === 'stake') return 'STAKE'
-  if (platform === 'cloudbet') return 'CLOUDBET'
-  if (platform === 'dexsport') return 'DEXSPORT'
-  return 'DEXSPORT'
+  if (platform === 'pinnacle') return 'Pinnacle'
+  if (platform === 'stake') return 'Stake'
+  if (platform === 'cloudbet') return 'Cloudbet'
+  if (platform === 'dexsport') return 'DexSport'
+  if (platform === 'betboom') return 'Betboom'
+  if (platform === 'kalshi') return 'Kalshi'
+  if (platform === 'polymarket') return 'Polymarket'
+  return 'DexSport'
 }
 
 function platformClass(platform: string | undefined): string {
@@ -42,6 +49,8 @@ export function CalculatorContent({
   marketType,
   leftOdds: initLeftOdds,
   leftPlatform,
+  eventName,
+  sport,
 }: CalcParams) {
   const isBmBm = !!initLeftOdds
 
@@ -152,6 +161,36 @@ export function CalculatorContent({
   }
 
   const pmQty = !isBmBm && pmAmt > 0 && pmProb > 0 ? Math.round(pmAmt / pmProb) : 0
+
+  const handleSendToDashboard = () => {
+    // Human-readable platform names
+    const bm1Name = isBmBm ? platformLabel(leftPlatform) : 'Polymarket'
+    const bm2Name = platformLabel(dexPlatform)
+
+    // For Polymarket side: store price in cents (e.g. "37"), not decimal odds
+    // For bookmaker side: store decimal odds
+    const odds1 = isBmBm
+      ? leftOddsVal
+      : pmPrice // cents string, e.g. "37"
+    const odds2 = dexOddsVal
+
+    const pending = {
+      bookmaker1: bm1Name,
+      bookmaker2: bm2Name,
+      eventName: eventName || '',
+      sport: sport || '',
+      outcome1: pmOutcome || undefined,
+      outcome2: dexOutcome || undefined,
+      odds1,
+      odds2,
+      stake1: pmAmount,
+      stake2: dexAmount,
+      profit: totalCost > 0 ? String(Math.min(pmWinProfit, dexWinProfit).toFixed(2)) : '',
+      profitPercent: totalCost > 0 ? String(profitPct.toFixed(4)) : '',
+    }
+    localStorage.setItem('pendingDashboardTrade', JSON.stringify(pending))
+    window.open('/dashboard', '_blank')
+  }
 
   const handleCopyQty = () => {
     const text = String(pmQty)
@@ -274,6 +313,11 @@ export function CalculatorContent({
           </span>
         </div>
       </div>
+
+      {/* Send to dashboard */}
+      <button className="calc-dashboard-btn" onClick={handleSendToDashboard} title="Добавить в дашборд">
+        <PenLine size={14} strokeWidth={2.5} />
+      </button>
     </div>
   )
 }

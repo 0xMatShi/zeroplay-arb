@@ -20,7 +20,7 @@ async function openCalcWindow(params: CalcParams) {
 
   if ('documentPictureInPicture' in window) {
     try {
-      const pipWin: Window = await (window as { documentPictureInPicture: { requestWindow: (o: object) => Promise<Window> } }).documentPictureInPicture.requestWindow({ width: 480, height: 350 })
+      const pipWin: Window = await (window as { documentPictureInPicture: { requestWindow: (o: object) => Promise<Window> } }).documentPictureInPicture.requestWindow({ width: 480, height: 380 })
 
       // Copy all styles from the main document
       document.querySelectorAll('link[rel="stylesheet"], style').forEach((node) => {
@@ -44,7 +44,7 @@ async function openCalcWindow(params: CalcParams) {
   window.open(
     `/calculator?${q}`,
     '_blank',
-    'width=480,height=350,left=0,top=0,resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no',
+    'width=480,height=380,left=0,top=0,resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no',
   )
 }
 
@@ -298,6 +298,8 @@ function SportsOpportunityCard({
       dexAmount: dexCalcAmount.toFixed(2),
       dexPlatform: rightLeg?.platform,
       marketType: displayMarketType,
+      eventName: opp.matchTitle,
+      sport: sportLabel,
       ...(isBmBm && leftLeg ? { leftOdds: leftLeg.decimalOdds.toFixed(2), leftPlatform: leftLeg.platform } : {}),
     })
     if (leftLeg?.url) openTab(leftLeg.url)
@@ -452,6 +454,8 @@ function SportsOpportunityCard({
               dexAmount: dexCalcAmount.toFixed(2),
               dexPlatform: rightLeg?.platform,
               marketType: displayMarketType,
+              eventName: opp.matchTitle,
+              sport: sportLabel,
               ...(isBmBm && leftLeg ? { leftOdds: leftLeg.decimalOdds.toFixed(2), leftPlatform: leftLeg.platform } : {}),
             })
           }}
@@ -1006,9 +1010,9 @@ export function Scanner() {
               <User size={16} />
             </span>
           </button>
-          {/* <button className="scanner-back-button" onClick={() => navigate('/dashboard')}>
+          <button className="scanner-back-button" onClick={() => navigate('/dashboard')}>
             {t('scanner.backToDashboard')}
-          </button> */}
+          </button>
         </div>
       </div>
 
