@@ -504,12 +504,21 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
       existing.markets[0] = mlMarket;
     }
 
-    // Check if any typed market prices changed
+    // Update typed markets in-place so SportsMatch references stay valid.
+    // New markets (new line) are appended; markets no longer offered are kept to avoid
+    // orphaning references held by currentMatches (same policy as Stake/Pinnacle adapters).
     let hasTypedChanges = false;
     const prevTypedMap = new Map(existing.markets.slice(1).map((m) => [m.marketId, m]));
+
     for (const tm of typedMarkets) {
       const prev = prevTypedMap.get(tm.marketId);
-      if (!prev) { hasTypedChanges = true; continue; }
+      if (!prev) {
+        // New line — append to markets list
+        existing.markets.push(tm);
+        hasTypedChanges = true;
+        continue;
+      }
+      // Update outcomes in-place
       for (let i = 0; i < Math.min(prev.outcomes.length, tm.outcomes.length); i++) {
         if (prev.outcomes[i].price !== tm.outcomes[i].price) {
           hasTypedChanges = true;
@@ -517,12 +526,10 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
             const arrow = tm.outcomes[i].price > prev.outcomes[i].price ? '↑' : '↓';
             changes.push(`[${tm.name}] ${tm.outcomes[i].name}: ${prev.outcomes[i].price?.toFixed(3)} → ${tm.outcomes[i].price.toFixed(3)} ${arrow}`);
           }
+          prev.outcomes[i] = { ...prev.outcomes[i], price: tm.outcomes[i].price };
         }
       }
     }
-
-    // Rebuild typed markets (replace all non-moneyline markets with fresh data)
-    existing.markets = [existing.markets[0] ?? mlMarket, ...typedMarkets];
 
     if (changes.length > 0) {
       this.logger.log(`[Cloudbet WS] ${existing.name}:\n  ${changes.join('\n  ')}`);
