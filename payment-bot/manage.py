@@ -693,28 +693,41 @@ async def _evm_token_balance(rpc_url: str, token_address: str, wallet: str) -> i
 
 
 async def _tron_token_balance(api_url: str, token_address: str, wallet: str) -> int:
-    """Получает баланс TRC-20 токена через TronGrid API."""
+    """Получает баланс TRC-20 токена через TronGrid API.
+    Поддерживает неактивированные адреса через /tokens endpoint."""
     api_key = os.getenv("TRONGRID_API_KEY", "")
     headers = {}
     if api_key:
         headers["TRON-PRO-API-KEY"] = api_key
 
     async with aiohttp.ClientSession(headers=headers) as session:
+        # Основной запрос — работает для активированных адресов
         async with session.get(
             f"{api_url}/v1/accounts/{wallet}",
             timeout=aiohttp.ClientTimeout(total=15),
         ) as resp:
             data = await resp.json()
 
-    # Ищем токен в trc20-балансах
-    accounts = data.get("data", [])
-    if not accounts:
-        return 0
-    for token_entry in accounts[0].get("trc20", []):
-        if isinstance(token_entry, dict):
-            balance = token_entry.get(token_address)
-            if balance is not None:
-                return int(balance)
+        accounts = data.get("data", [])
+        if accounts:
+            for token_entry in accounts[0].get("trc20", []):
+                if isinstance(token_entry, dict):
+                    balance = token_entry.get(token_address)
+                    if balance is not None:
+                        return int(balance)
+            return 0
+
+        # Резервный запрос для неактивированных адресов
+        async with session.get(
+            f"{api_url}/v1/accounts/{wallet}/tokens",
+            params={"token_id": token_address, "limit": 20},
+            timeout=aiohttp.ClientTimeout(total=15),
+        ) as resp:
+            data = await resp.json()
+
+    for entry in data.get("data", []):
+        if entry.get("tokenId") == token_address or entry.get("token_id") == token_address:
+            return int(entry.get("balance", 0))
     return 0
 
 
