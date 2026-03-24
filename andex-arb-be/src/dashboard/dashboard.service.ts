@@ -145,76 +145,66 @@ export class DashboardService {
 
   // ── Stats ─────────────────────────────────────────────────────────────
 
-  async getGlobalStats(): Promise<{
-    totalProfit: number;
-    totalTrades: number;
-    bestProfit: number;
-    todayProfit: number;
-    todayTrades: number;
-    todayBestProfit: number;
+  async getGlobalStats(period: '1d' | '7d' | '30d' | 'all' = '1d'): Promise<{
+    periodProfit: number;
+    periodTrades: number;
+    periodBestProfit: number;
   }> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const allResult = await this.tradeRepo
+    let qb = this.tradeRepo
       .createQueryBuilder('t')
-      .where('t.is_public = true')
-      .select('COALESCE(SUM(t.profit), 0)', 'totalProfit')
-      .addSelect('COUNT(*)', 'totalTrades')
-      .addSelect('COALESCE(MAX(t.profit), 0)', 'bestProfit')
-      .getRawOne();
+      .where('t.is_public = true');
 
-    const todayResult = await this.tradeRepo
-      .createQueryBuilder('t')
-      .where('t.is_public = true')
-      .andWhere('t.created_at >= :today', { today })
-      .select('COALESCE(SUM(t.profit), 0)', 'todayProfit')
-      .addSelect('COUNT(*)', 'todayTrades')
-      .addSelect('COALESCE(MAX(t.profit), 0)', 'todayBestProfit')
+    if (period !== 'all') {
+      const since = new Date();
+      if (period === '1d') since.setHours(0, 0, 0, 0);
+      else if (period === '7d') { since.setDate(since.getDate() - 7); since.setHours(0, 0, 0, 0); }
+      else if (period === '30d') { since.setDate(since.getDate() - 30); since.setHours(0, 0, 0, 0); }
+      qb = qb.andWhere('t.created_at >= :since', { since });
+    }
+
+    const result = await qb
+      .select('COALESCE(SUM(t.profit), 0)', 'periodProfit')
+      .addSelect('COUNT(*)', 'periodTrades')
+      .addSelect('COALESCE(MAX(t.profit), 0)', 'periodBestProfit')
       .getRawOne();
 
     return {
-      totalProfit: parseFloat(allResult.totalProfit) || 0,
-      totalTrades: parseInt(allResult.totalTrades) || 0,
-      bestProfit: parseFloat(allResult.bestProfit) || 0,
-      todayProfit: parseFloat(todayResult.todayProfit) || 0,
-      todayTrades: parseInt(todayResult.todayTrades) || 0,
-      todayBestProfit: parseFloat(todayResult.todayBestProfit) || 0,
+      periodProfit: parseFloat(result.periodProfit) || 0,
+      periodTrades: parseInt(result.periodTrades) || 0,
+      periodBestProfit: parseFloat(result.periodBestProfit) || 0,
     };
   }
 
-  async getMyStats(userId: string): Promise<{
+  async getMyStats(
+    userId: string,
+    period: '1d' | '7d' | '30d' | 'all' = 'all',
+  ): Promise<{
     totalProfit: number;
     totalTrades: number;
     bestProfit: number;
-    todayProfit: number;
-    todayTrades: number;
   }> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const allResult = await this.tradeRepo
+    let qb = this.tradeRepo
       .createQueryBuilder('t')
-      .where('t.user_id = :userId', { userId })
+      .where('t.user_id = :userId', { userId });
+
+    if (period !== 'all') {
+      const since = new Date();
+      if (period === '1d') since.setHours(0, 0, 0, 0);
+      else if (period === '7d') { since.setDate(since.getDate() - 7); since.setHours(0, 0, 0, 0); }
+      else if (period === '30d') { since.setDate(since.getDate() - 30); since.setHours(0, 0, 0, 0); }
+      qb = qb.andWhere('t.created_at >= :since', { since });
+    }
+
+    const result = await qb
       .select('COALESCE(SUM(t.profit), 0)', 'totalProfit')
       .addSelect('COUNT(*)', 'totalTrades')
       .addSelect('COALESCE(MAX(t.profit), 0)', 'bestProfit')
       .getRawOne();
 
-    const todayResult = await this.tradeRepo
-      .createQueryBuilder('t')
-      .where('t.user_id = :userId', { userId })
-      .andWhere('t.created_at >= :today', { today })
-      .select('COALESCE(SUM(t.profit), 0)', 'todayProfit')
-      .addSelect('COUNT(*)', 'todayTrades')
-      .getRawOne();
-
     return {
-      totalProfit: parseFloat(allResult.totalProfit) || 0,
-      totalTrades: parseInt(allResult.totalTrades) || 0,
-      bestProfit: parseFloat(allResult.bestProfit) || 0,
-      todayProfit: parseFloat(todayResult.todayProfit) || 0,
-      todayTrades: parseInt(todayResult.todayTrades) || 0,
+      totalProfit: parseFloat(result.totalProfit) || 0,
+      totalTrades: parseInt(result.totalTrades) || 0,
+      bestProfit: parseFloat(result.bestProfit) || 0,
     };
   }
 

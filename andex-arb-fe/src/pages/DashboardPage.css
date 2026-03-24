@@ -131,6 +131,37 @@
   padding: 24px 32px 48px;
 }
 
+/* ── Period selector ────────────────────────────────────────────────────── */
+.db-period-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.db-period-btn {
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.db-period-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-main);
+}
+
+.db-period-btn--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 /* ── Cards ──────────────────────────────────────────────────────────────── */
 .db-cards {
   display: grid;
@@ -681,17 +712,6 @@ tr:hover .db-row-actions {
 @media (max-width: 768px) {
   .db-header {
     padding: 12px 16px;
-  }
-
-  .db-stats-bar {
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 16px;
-  }
-
-  .db-stats-bar-vals {
-    flex-direction: column;
-    gap: 4px;
   }
 
   .db-main {

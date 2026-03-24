@@ -239,20 +239,15 @@ export interface DashboardTradeWithNickname extends DashboardTrade {
 }
 
 export interface DashboardGlobalStats {
-  totalProfit: number
-  totalTrades: number
-  bestProfit: number
-  todayProfit: number
-  todayTrades: number
-  todayBestProfit: number
+  periodProfit: number
+  periodTrades: number
+  periodBestProfit: number
 }
 
 export interface DashboardMyStats {
   totalProfit: number
   totalTrades: number
   bestProfit: number
-  todayProfit: number
-  todayTrades: number
 }
 
 export interface DashboardLeaderboardEntry {

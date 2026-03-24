@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { PenLine, Trophy, User, X, Check, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { PenLine, Trophy, User, X, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   useDashboardStats,
   useDashboardTrades,
   useDashboardLeaderboard,
   useDashboardProfile,
+  useDashboardMyStats,
   useDashboardMyTrades,
   useCreateDashboardTrade,
   useUpdateDashboardTrade,
@@ -299,15 +300,6 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
             </div>
           </div>
 
-          <label className="db-form-checkbox">
-            <input
-              type="checkbox"
-              checked={form.isPublic}
-              onChange={(e) => set('isPublic', e.target.checked)}
-            />
-            <span>Отображать в общей статистике и лидерборде</span>
-          </label>
-
           <div className="db-modal-actions">
             <button type="button" className="secondary-button" onClick={onClose}>Отмена</button>
             <button type="submit" className="primary-button" disabled={isPending}>
@@ -376,14 +368,27 @@ function MyProfileTab() {
   const deleteMutation = useDeleteDashboardTrade()
   const [editTrade, setEditTrade] = useState<DashboardTrade | null>(null)
   const [showNicknameModal, setShowNicknameModal] = useState(false)
+  const [period, setPeriod] = useState<Period>('all')
+  const { data: periodStats } = useDashboardMyStats(period)
 
   if (isLoading) return <div className="db-loading">Загрузка...</div>
   if (!profileData) return null
 
-  const { profile, stats } = profileData
+  const { profile } = profileData
 
   return (
     <div className="db-profile">
+      <div className="db-period-row">
+        {(['1d', '7d', '30d', 'all'] as Period[]).map((p) => (
+          <button
+            key={p}
+            className={`db-period-btn ${period === p ? 'db-period-btn--active' : ''}`}
+            onClick={() => setPeriod(p)}
+          >
+            {PERIOD_LABELS[p]}
+          </button>
+        ))}
+      </div>
       <div className="db-profile-header">
         <div className="db-profile-name">
           <span className="db-nickname-badge">{profile.nickname}</span>
@@ -394,17 +399,17 @@ function MyProfileTab() {
         <div className="db-profile-stats">
           <div className="db-profile-stat">
             <span className="db-profile-stat-label">Всего вилок</span>
-            <span className="db-profile-stat-val">{stats.totalTrades}</span>
+            <span className="db-profile-stat-val">{periodStats?.totalTrades ?? '—'}</span>
           </div>
           <div className="db-profile-stat">
             <span className="db-profile-stat-label">Общий профит</span>
-            <span className={`db-profile-stat-val ${stats.totalProfit >= 0 ? 'db-pos' : 'db-neg'}`}>
-              {formatProfit(stats.totalProfit)}
+            <span className={`db-profile-stat-val ${(periodStats?.totalProfit ?? 0) >= 0 ? 'db-pos' : 'db-neg'}`}>
+              {formatProfit(periodStats?.totalProfit)}
             </span>
           </div>
           <div className="db-profile-stat">
             <span className="db-profile-stat-label">Лучший профит</span>
-            <span className="db-profile-stat-val db-pos">{formatProfit(stats.bestProfit)}</span>
+            <span className="db-profile-stat-val db-pos">{formatProfit(periodStats?.bestProfit)}</span>
           </div>
         </div>
       </div>
@@ -419,11 +424,10 @@ function MyProfileTab() {
             <thead>
               <tr>
                 <th>Матч</th>
-                <th>Конторы</th>
+                <th>Площадки</th>
                 <th>Ставки</th>
                 <th>Профит</th>
                 <th>Дата</th>
-                <th>Публично</th>
                 <th></th>
               </tr>
             </thead>
@@ -454,13 +458,6 @@ function MyProfileTab() {
                     )}
                   </td>
                   <td className="db-date">{formatDate(t.createdAt)}</td>
-                  <td>
-                    {t.isPublic ? (
-                      <Check size={14} className="db-pos" />
-                    ) : (
-                      <X size={14} className="db-muted" />
-                    )}
-                  </td>
                   <td>
                     <div className="db-row-actions">
                       <button className="db-icon-btn" onClick={() => setEditTrade(t)} title="Редактировать">
@@ -525,7 +522,7 @@ function AllTradesTab() {
                   <th>Пользователь</th>
                   <th>Спорт</th>
                   <th>Матч</th>
-                  <th>Конторы</th>
+                  <th>Площадки</th>
                   <th>Ставки</th>
                   <th>Победитель</th>
                   <th>Профит</th>
@@ -656,10 +653,21 @@ function LeaderboardTab() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type Tab = 'all' | 'leaderboard' | 'profile'
+type Period = '1d' | '7d' | '30d' | 'all'
+
+const PERIOD_LABELS: Record<Period, string> = {
+  '1d': '1D',
+  '7d': '7D',
+  '30d': '30D',
+  'all': 'ALL',
+}
+
+const PERIOD_CARD_LABELS = { profit: 'Общий профит', trades: 'Вилок', best: 'Лучший профит' }
 
 export function DashboardPage() {
   const navigate = useNavigate()
-  const { data: stats } = useDashboardStats()
+  const [period, setPeriod] = useState<Period>('1d')
+  const { data: stats } = useDashboardStats(period)
   const { data: whoami } = useWhoami()
   const { data: profileData } = useDashboardProfile()
 
@@ -743,37 +751,40 @@ export function DashboardPage() {
         </div>
       </header>
 
-      {/* Global stats bar */}
-      {stats && (
-        <div className="db-stats-bar">
-          <span className="db-stats-bar-label">За всё время (общее)</span>
-          <div className="db-stats-bar-vals">
-            <span>Общий профит: <strong className="db-pos">{formatProfit(stats.totalProfit)}</strong></span>
-            <span>Всего вилок: <strong>{stats.totalTrades}</strong></span>
-            <span>Лучший профит: <strong className="db-pos">{formatProfit(stats.bestProfit)}</strong></span>
-          </div>
-        </div>
-      )}
-
       <main className="db-main">
-        {/* Today stats cards */}
-        {stats && (
-          <div className="db-cards">
-            <div className="db-card">
-              <div className="db-card-label">Общий профит за сегодня</div>
-              <div className={`db-card-val ${stats.todayProfit >= 0 ? 'db-pos' : 'db-neg'}`}>
-                {formatProfit(stats.todayProfit)}
+        {/* Period selector + stats cards */}
+        {activeTab !== 'profile' && (
+          <>
+            <div className="db-period-row">
+              {(['1d', '7d', '30d', 'all'] as Period[]).map((p) => (
+                <button
+                  key={p}
+                  className={`db-period-btn ${period === p ? 'db-period-btn--active' : ''}`}
+                  onClick={() => setPeriod(p)}
+                >
+                  {PERIOD_LABELS[p]}
+                </button>
+              ))}
+            </div>
+            {stats && (
+              <div className="db-cards">
+                <div className="db-card">
+                  <div className="db-card-label">{PERIOD_CARD_LABELS.profit}</div>
+                  <div className={`db-card-val ${stats.periodProfit >= 0 ? 'db-pos' : 'db-neg'}`}>
+                    {formatProfit(stats.periodProfit)}
+                  </div>
+                </div>
+                <div className="db-card">
+                  <div className="db-card-label">{PERIOD_CARD_LABELS.trades}</div>
+                  <div className="db-card-val">{stats.periodTrades}</div>
+                </div>
+                <div className="db-card">
+                  <div className="db-card-label">{PERIOD_CARD_LABELS.best}</div>
+                  <div className="db-card-val db-pos">{formatProfit(stats.periodBestProfit)}</div>
+                </div>
               </div>
-            </div>
-            <div className="db-card">
-              <div className="db-card-label">Вилок за сегодня</div>
-              <div className="db-card-val">{stats.todayTrades}</div>
-            </div>
-            <div className="db-card">
-              <div className="db-card-label">Лучший профит за сегодня</div>
-              <div className="db-card-val db-pos">{formatProfit(stats.todayBestProfit)}</div>
-            </div>
-          </div>
+            )}
+          </>
         )}
 
         {/* Add trade + login hint */}
@@ -809,7 +820,7 @@ export function DashboardPage() {
               className={`db-tab ${activeTab === 'profile' ? 'db-tab--active' : ''}`}
               onClick={() => setActiveTab('profile')}
             >
-              Мой профиль: {nickname ?? '...'}
+              Мой профиль
             </button>
           )}
         </div>

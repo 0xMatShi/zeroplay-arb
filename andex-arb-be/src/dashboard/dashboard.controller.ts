@@ -24,8 +24,9 @@ export class DashboardController {
   // ── Public endpoints ──────────────────────────────────────────────────
 
   @Get('stats')
-  getGlobalStats() {
-    return this.dashboardService.getGlobalStats();
+  getGlobalStats(@Query('period') period?: string) {
+    const p = ['1d', '7d', '30d', 'all'].includes(period ?? '') ? (period as '1d' | '7d' | '30d' | 'all') : '1d';
+    return this.dashboardService.getGlobalStats(p);
   }
 
   @Get('trades')
@@ -47,8 +48,15 @@ export class DashboardController {
   @UseGuards(ApiKeyGuard)
   async getProfile(@CurrentUser() user: User) {
     const profile = await this.dashboardService.getOrCreateProfile(user.id);
-    const stats = await this.dashboardService.getMyStats(user.id);
+    const stats = await this.dashboardService.getMyStats(user.id, 'all');
     return { profile, stats };
+  }
+
+  @Get('my-stats')
+  @UseGuards(ApiKeyGuard)
+  async getMyStats(@CurrentUser() user: User, @Query('period') period?: string) {
+    const p = ['1d', '7d', '30d', 'all'].includes(period ?? '') ? (period as '1d' | '7d' | '30d' | 'all') : 'all';
+    return this.dashboardService.getMyStats(user.id, p);
   }
 
   @Put('profile')

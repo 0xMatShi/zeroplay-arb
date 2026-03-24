@@ -205,8 +205,8 @@ export const arbitrageApi = {
  * Dashboard API
  */
 export const dashboardApi = {
-  getStats: async (): Promise<DashboardGlobalStats> => {
-    const response = await fetch(`${getBackendUrl()}/dashboard/stats`, {
+  getStats: async (period: '1d' | '7d' | '30d' | 'all' = '1d'): Promise<DashboardGlobalStats> => {
+    const response = await fetch(`${getBackendUrl()}/dashboard/stats?period=${period}`, {
       method: 'GET',
       headers: createHeaders(),
     })
@@ -231,6 +231,14 @@ export const dashboardApi = {
 
   getProfile: async (): Promise<DashboardProfileResponse> => {
     const response = await fetch(`${getBackendUrl()}/dashboard/profile`, {
+      method: 'GET',
+      headers: createHeaders(true),
+    })
+    return handleResponse(response)
+  },
+
+  getMyStats: async (period: '1d' | '7d' | '30d' | 'all' = 'all'): Promise<DashboardMyStats> => {
+    const response = await fetch(`${getBackendUrl()}/dashboard/my-stats?period=${period}`, {
       method: 'GET',
       headers: createHeaders(true),
     })
