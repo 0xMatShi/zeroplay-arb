@@ -109,9 +109,9 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
           // seriesSlug required to filter non-match events
           if (!raw.seriesSlug) continue;
 
-          // Skip even-BO series (BO2, BO4, ...) — no clear winner possible
+          // For even-BO series (BO2, BO4, ...) only child_moneyline (Map N) markets make sense
           const boMatch = raw.title.match(/\(BO(\d+)\)/i);
-          if (boMatch && Number(boMatch[1]) % 2 === 0) continue;
+          const isEvenBo = boMatch !== null && Number(boMatch[1]) % 2 === 0;
 
           // Determine sport from tags
           const tags = (raw.tags ?? []).map((t) => t.slug);
@@ -126,6 +126,8 @@ export class PolymarketSportsAdapter implements OnModuleInit, OnModuleDestroy {
           const markets: PmMarket[] = [];
           for (const m of raw.markets) {
             if (!m.sportsMarketType) continue;
+            // Even-BO series: skip everything except per-map markets
+            if (isEvenBo && m.sportsMarketType !== 'child_moneyline') continue;
 
             const outcomeNames = this.safeParse<string[]>(m.outcomes, []);
             const tokenIds = this.safeParse<string[]>(m.clobTokenIds, []);
