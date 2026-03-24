@@ -428,7 +428,7 @@ function NicknameModal({ current, onClose }: { current: string; onClose: () => v
 
 // ── My Profile tab ────────────────────────────────────────────────────────────
 
-function MyProfileTab({ onEditNickname, trades, isLoading: tradesLoading }: { onEditNickname: () => void; trades: DashboardTrade[]; isLoading?: boolean }) {
+function MyProfileTab({ trades, isLoading: tradesLoading }: { onEditNickname: () => void; trades: DashboardTrade[]; isLoading?: boolean }) {
   const { t } = useTranslation()
   const deleteMutation = useDeleteDashboardTrade()
   const [editTrade, setEditTrade] = useState<DashboardTrade | null>(null)

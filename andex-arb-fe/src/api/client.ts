@@ -11,6 +11,7 @@ import type {
   Platform,
   OrderBookAnalysisResponse,
   DashboardGlobalStats,
+  DashboardMyStats,
   DashboardTradeWithNickname,
   DashboardLeaderboardEntry,
   DashboardProfileResponse,
