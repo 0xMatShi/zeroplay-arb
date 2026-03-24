@@ -39,8 +39,10 @@ const config: Config = {
   // may want to replace "en" with "zh-Hans".
   i18n: {
     defaultLocale: 'ru',
-    locales: ['ru'],
+    locales: ['ru', 'en'],
   },
+
+  plugins: ['docusaurus-plugin-image-zoom'],
 
   presets: [
     [
@@ -98,6 +100,10 @@ const config: Config = {
           type: 'search',
           position: 'right',
         },
+        {
+          type: 'custom-LanguageToggle',
+          position: 'right',
+        },
       ],
     },
     footer: {
@@ -143,6 +149,17 @@ const config: Config = {
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
+    },
+    zoom: {
+      selector: '.markdown img',
+      config: {
+        margin: 80,
+        scrollOffset: 0,
+      },
+      background: {
+        light: 'rgba(255, 255, 255, 0.7)',
+        dark: 'rgba(0, 0, 0, 0.7)',
+      },
     },
   } satisfies Preset.ThemeConfig,
 };

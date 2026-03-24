@@ -24,22 +24,24 @@ export class DashboardController {
   // ── Public endpoints ──────────────────────────────────────────────────
 
   @Get('stats')
-  getGlobalStats(@Query('period') period?: string) {
+  getGlobalStats(@Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
     const p = ['1d', '7d', '30d', 'all'].includes(period ?? '') ? (period as '1d' | '7d' | '30d' | 'all') : '1d';
-    return this.dashboardService.getGlobalStats(p);
+    return this.dashboardService.getGlobalStats(p, from, to);
   }
 
   @Get('trades')
   getPublicTrades(
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
     @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
-    return this.dashboardService.getPublicTradesWithNicknames(limit, offset);
+    return this.dashboardService.getPublicTradesWithNicknames(limit, offset, from, to);
   }
 
   @Get('leaderboard')
-  getLeaderboard() {
-    return this.dashboardService.getLeaderboard();
+  getLeaderboard(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.dashboardService.getLeaderboard(from, to);
   }
 
   // ── Authenticated endpoints ───────────────────────────────────────────
@@ -54,9 +56,9 @@ export class DashboardController {
 
   @Get('my-stats')
   @UseGuards(ApiKeyGuard)
-  async getMyStats(@CurrentUser() user: User, @Query('period') period?: string) {
+  async getMyStats(@CurrentUser() user: User, @Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
     const p = ['1d', '7d', '30d', 'all'].includes(period ?? '') ? (period as '1d' | '7d' | '30d' | 'all') : 'all';
-    return this.dashboardService.getMyStats(user.id, p);
+    return this.dashboardService.getMyStats(user.id, p, from, to);
   }
 
   @Put('profile')
@@ -67,8 +69,8 @@ export class DashboardController {
 
   @Get('my-trades')
   @UseGuards(ApiKeyGuard)
-  getMyTrades(@CurrentUser() user: User) {
-    return this.dashboardService.getMyTrades(user.id);
+  getMyTrades(@CurrentUser() user: User, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.dashboardService.getMyTrades(user.id, from, to);
   }
 
   @Post('trades')

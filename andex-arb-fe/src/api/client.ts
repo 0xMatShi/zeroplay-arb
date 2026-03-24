@@ -205,24 +205,34 @@ export const arbitrageApi = {
  * Dashboard API
  */
 export const dashboardApi = {
-  getStats: async (period: '1d' | '7d' | '30d' | 'all' = '1d'): Promise<DashboardGlobalStats> => {
-    const response = await fetch(`${getBackendUrl()}/dashboard/stats?period=${period}`, {
+  getStats: async (period: '1d' | '7d' | '30d' | 'all' = '1d', from?: string, to?: string): Promise<DashboardGlobalStats> => {
+    const params = new URLSearchParams({ period })
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    const response = await fetch(`${getBackendUrl()}/dashboard/stats?${params}`, {
       method: 'GET',
       headers: createHeaders(),
     })
     return handleResponse(response)
   },
 
-  getTrades: async (limit = 50, offset = 0): Promise<{ trades: DashboardTradeWithNickname[]; total: number }> => {
-    const response = await fetch(`${getBackendUrl()}/dashboard/trades?limit=${limit}&offset=${offset}`, {
+  getTrades: async (limit = 50, offset = 0, from?: string, to?: string): Promise<{ trades: DashboardTradeWithNickname[]; total: number }> => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    const response = await fetch(`${getBackendUrl()}/dashboard/trades?${params}`, {
       method: 'GET',
       headers: createHeaders(),
     })
     return handleResponse(response)
   },
 
-  getLeaderboard: async (): Promise<DashboardLeaderboardEntry[]> => {
-    const response = await fetch(`${getBackendUrl()}/dashboard/leaderboard`, {
+  getLeaderboard: async (from?: string, to?: string): Promise<DashboardLeaderboardEntry[]> => {
+    const params = new URLSearchParams()
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    const qs = params.toString()
+    const response = await fetch(`${getBackendUrl()}/dashboard/leaderboard${qs ? `?${qs}` : ''}`, {
       method: 'GET',
       headers: createHeaders(),
     })
@@ -237,8 +247,11 @@ export const dashboardApi = {
     return handleResponse(response)
   },
 
-  getMyStats: async (period: '1d' | '7d' | '30d' | 'all' = 'all'): Promise<DashboardMyStats> => {
-    const response = await fetch(`${getBackendUrl()}/dashboard/my-stats?period=${period}`, {
+  getMyStats: async (period: '1d' | '7d' | '30d' | 'all' = 'all', from?: string, to?: string): Promise<DashboardMyStats> => {
+    const params = new URLSearchParams({ period })
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    const response = await fetch(`${getBackendUrl()}/dashboard/my-stats?${params}`, {
       method: 'GET',
       headers: createHeaders(true),
     })
@@ -254,8 +267,12 @@ export const dashboardApi = {
     return handleResponse(response)
   },
 
-  getMyTrades: async (): Promise<DashboardTrade[]> => {
-    const response = await fetch(`${getBackendUrl()}/dashboard/my-trades`, {
+  getMyTrades: async (from?: string, to?: string): Promise<DashboardTrade[]> => {
+    const params = new URLSearchParams()
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    const qs = params.toString()
+    const response = await fetch(`${getBackendUrl()}/dashboard/my-trades${qs ? '?' + qs : ''}`, {
       method: 'GET',
       headers: createHeaders(true),
     })

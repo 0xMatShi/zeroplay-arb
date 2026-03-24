@@ -88,6 +88,49 @@
   --search-local-input-active-border-color: #8be8ff;
 }
 
+.lang-switcher-docs {
+  position: relative;
+  background: linear-gradient(135deg, #3ED6FF 0%, #F472B6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  border: none;
+  padding: 6px 12px;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  border-radius: 40px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  filter: saturate(0) brightness(2);
+  transition: filter 0.4s ease;
+  text-decoration: none;
+}
+
+.lang-switcher-docs::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 40px;
+  padding: 1.5px;
+  background: linear-gradient(135deg, #3ED6FF 0%, #F472B6 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.lang-switcher-docs:hover {
+  filter: saturate(1) brightness(1);
+  -webkit-text-fill-color: transparent;
+}
+
+.lang-switcher-docs:hover::before {
+  opacity: 1;
+}
+
 .navbar__inner {
   padding-left: 200px;
   padding-right: 200px;
@@ -469,6 +512,18 @@ code {
 
 .footer__item {
   font-size: 0.9rem;
+}
+
+/* Единый размер изображений в доках */
+.theme-doc-markdown img {
+  width: auto;
+  max-width: 70%;
+  max-height: 300px;
+  height: auto;
+  display: block;
+  margin: 1rem 0;
+  cursor: zoom-in;
+  border-radius: 8px;
 }
 
 @media (max-width: 996px) {

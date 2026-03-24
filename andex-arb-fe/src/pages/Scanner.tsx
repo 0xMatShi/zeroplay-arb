@@ -4,14 +4,15 @@ import { createRoot } from 'react-dom/client'
 import { CalculatorContent, type CalcParams } from '../components/CalculatorContent'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Calculator, ExternalLink, Pause, Pin, Play, User, Volume2, VolumeX } from 'lucide-react'
+import { Calculator, ExternalLink, Pause, Pencil, Pin, Play, User, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
-import { useOpportunities, useOrderBook, useSubscriptionStatus, useActiveSubscription, useSportsOpportunities, useWhoami, queryKeys } from '../api/hooks'
+import { useOpportunities, useOrderBook, useSubscriptionStatus, useActiveSubscription, useSportsOpportunities, useWhoami, useDashboardProfile, useUpdateDashboardNickname, queryKeys } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
 import { useSportsArbSocket } from '../hooks/useSportsArbSocket'
 import { ApiError } from '../api/client'
 import { clearAuthCookies } from '../utils/authCookies'
+import { SmokeCanvas } from '../components/SmokeCanvas'
 import { formatRelativeTime } from '../utils/time'
 import type { Opportunity, SportsOpportunity, SportsOpportunityLeg, NewOpportunityEvent, OrderBookAnalysisResponse } from '../api/types'
 
@@ -531,6 +532,11 @@ export function Scanner() {
   const [isPaused, setIsPaused] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [editingNick, setEditingNick] = useState(false)
+  const [nickInput, setNickInput] = useState('')
+  const { data: profileData } = useDashboardProfile()
+  const updateNickname = useUpdateDashboardNickname()
+  const scannerNickname = profileData?.profile?.nickname
 
   // PM-BM settings
   const [pmDisplayMode, setPmDisplayMode] = useLocalStorage<'shares' | 'odds'>('scanner:pmDisplayMode', 'shares')
@@ -1002,16 +1008,10 @@ export function Scanner() {
           <LanguageSwitcher />
           <button
             type="button"
-            className={`settings-icon-button profile-icon-button ${isProfileOpen ? 'active' : ''}`}
+            className="gradient-profile-btn"
             onClick={() => setIsProfileOpen(true)}
-            aria-label="Profile"
           >
-            <span className="settings-icon-content" aria-hidden="true">
-              <User size={16} />
-            </span>
-          </button>
-          <button className="scanner-back-button" onClick={() => navigate('/dashboard')}>
-            {t('scanner.backToDashboard')}
+            {t('andexDashboard.tabProfile') || 'Profile'}
           </button>
         </div>
       </div>
@@ -1386,9 +1386,38 @@ export function Scanner() {
 
       {/* Profile sliding panel */}
       <div className={`profile-panel ${isProfileOpen ? 'profile-panel--open' : ''}`}>
+        <SmokeCanvas />
         <div className="profile-panel-inner">
-          <div className="profile-panel-avatar">
-            <User size={32} />
+          <div className="profile-panel-header">
+            <div className="profile-panel-avatar">
+              <User size={32} />
+            </div>
+            {scannerNickname && (
+              <div className="profile-panel-nick-wrap">
+                {editingNick ? (
+                  <input
+                    className="profile-nick-input"
+                    value={nickInput}
+                    autoFocus
+                    onChange={e => setNickInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        updateNickname.mutate(nickInput, { onSuccess: () => setEditingNick(false) })
+                      }
+                      if (e.key === 'Escape') setEditingNick(false)
+                    }}
+                  />
+                ) : (
+                  <span className="profile-panel-nickname">{scannerNickname}</span>
+                )}
+                <button
+                  className="db-icon-btn db-edit-nick-btn"
+                  onClick={() => { setNickInput(scannerNickname); setEditingNick(true) }}
+                >
+                  <Pencil size={13} />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Subscription info */}
@@ -1417,21 +1446,27 @@ export function Scanner() {
 
           {/* Action buttons */}
           <div className="profile-panel-actions">
-            <a
-              href={import.meta.env.VITE_TELEGRAM_BOT_URL as string}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="profile-action-btn profile-action-btn--primary"
+            <button
+              className="profile-action-btn"
+              onClick={() => { setIsProfileOpen(false); navigate('/dashboard') }}
             >
-              {t('scanner.renewSub') || 'Продлить подписку'}
-            </a>
+              PNL Tracker
+            </button>
             <a
               href={`https://docs.subline.space?key=${localStorage.getItem('apiKey') ?? ''}`}
               target="_blank"
               rel="noopener noreferrer"
               className="profile-action-btn"
             >
-              {t('scanner.learnGuide') || 'Пройти обучение'}
+              {t('scanner.learnGuide')}
+            </a>
+            <a
+              href={import.meta.env.VITE_TELEGRAM_BOT_URL as string}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="profile-action-btn"
+            >
+              {t('scanner.renewSub')}
             </a>
             <a
               href={import.meta.env.VITE_TELEGRAM_SUPPORT_URL as string}
@@ -1439,7 +1474,7 @@ export function Scanner() {
               rel="noopener noreferrer"
               className="profile-action-btn"
             >
-              {t('scanner.askQuestion') || 'Задать вопрос'}
+              {t('scanner.askQuestion')}
             </a>
             <button
               className="profile-action-btn profile-action-btn--logout"
@@ -1451,7 +1486,7 @@ export function Scanner() {
                 navigate('/')
               }}
             >
-              {t('scanner.logout') || 'Выйти'}
+              {t('scanner.logout')}
             </button>
           </div>
         </div>

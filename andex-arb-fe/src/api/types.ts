@@ -230,6 +230,7 @@ export interface DashboardTrade {
   profitPercent: number | null
   isPublic: boolean
   winner: string | null
+  comment: string | null
   createdAt: string
   updatedAt: string
 }
@@ -278,6 +279,7 @@ export interface CreateDashboardTradeDto {
   profitPercent?: number
   isPublic?: boolean
   winner?: string
+  comment?: string
 }
 
 export interface OrderBookAnalysisResponse {

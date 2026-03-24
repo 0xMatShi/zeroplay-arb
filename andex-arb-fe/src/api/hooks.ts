@@ -26,7 +26,7 @@ export const queryKeys = {
   sportsStats: ['sports-arbitrage', 'stats'] as const,
   dashboardStats: (period: string) => ['dashboard', 'stats', period] as const,
   dashboardTrades: (limit: number, offset: number) => ['dashboard', 'trades', limit, offset] as const,
-  dashboardLeaderboard: ['dashboard', 'leaderboard'] as const,
+  dashboardLeaderboard: (from?: string, to?: string) => ['dashboard', 'leaderboard', from, to] as const,
   dashboardProfile: ['dashboard', 'profile'] as const,
   dashboardMyStats: (period: string) => ['dashboard', 'my-stats', period] as const,
   dashboardMyTrades: ['dashboard', 'my-trades'] as const,
@@ -150,26 +150,26 @@ export const useOrderBook = (opportunityId: string, enabled = false) => {
 /**
  * Dashboard hooks
  */
-export const useDashboardStats = (period: '1d' | '7d' | '30d' | 'all' = '1d') => {
+export const useDashboardStats = (period: '1d' | '7d' | '30d' | 'all' = '1d', from?: string, to?: string) => {
   return useQuery({
-    queryKey: queryKeys.dashboardStats(period),
-    queryFn: () => dashboardApi.getStats(period),
+    queryKey: [...queryKeys.dashboardStats(period), from, to],
+    queryFn: () => dashboardApi.getStats(period, from, to),
     refetchInterval: 60_000,
   })
 }
 
-export const useDashboardTrades = (limit = 50, offset = 0) => {
+export const useDashboardTrades = (limit = 50, offset = 0, from?: string, to?: string) => {
   return useQuery({
-    queryKey: queryKeys.dashboardTrades(limit, offset),
-    queryFn: () => dashboardApi.getTrades(limit, offset),
+    queryKey: [...queryKeys.dashboardTrades(limit, offset), from, to],
+    queryFn: () => dashboardApi.getTrades(limit, offset, from, to),
     staleTime: 30_000,
   })
 }
 
-export const useDashboardLeaderboard = () => {
+export const useDashboardLeaderboard = (from?: string, to?: string) => {
   return useQuery({
-    queryKey: queryKeys.dashboardLeaderboard,
-    queryFn: dashboardApi.getLeaderboard,
+    queryKey: queryKeys.dashboardLeaderboard(from, to),
+    queryFn: () => dashboardApi.getLeaderboard(from, to),
     staleTime: 60_000,
   })
 }
@@ -183,19 +183,19 @@ export const useDashboardProfile = () => {
   })
 }
 
-export const useDashboardMyStats = (period: '1d' | '7d' | '30d' | 'all' = 'all') => {
+export const useDashboardMyStats = (period: '1d' | '7d' | '30d' | 'all' = 'all', from?: string, to?: string) => {
   return useQuery({
-    queryKey: queryKeys.dashboardMyStats(period),
-    queryFn: () => dashboardApi.getMyStats(period),
+    queryKey: [...queryKeys.dashboardMyStats(period), from, to],
+    queryFn: () => dashboardApi.getMyStats(period, from, to),
     enabled: !!localStorage.getItem('apiKey'),
     retry: false,
   })
 }
 
-export const useDashboardMyTrades = () => {
+export const useDashboardMyTrades = (from?: string, to?: string) => {
   return useQuery({
-    queryKey: queryKeys.dashboardMyTrades,
-    queryFn: dashboardApi.getMyTrades,
+    queryKey: [...queryKeys.dashboardMyTrades, from, to],
+    queryFn: () => dashboardApi.getMyTrades(from, to),
     enabled: !!localStorage.getItem('apiKey'),
   })
 }

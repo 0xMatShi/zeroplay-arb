@@ -58,6 +58,9 @@ export class DashboardTrade {
   @Column({ name: 'winner', type: 'varchar', length: 100, nullable: true })
   winner: string | null;
 
+  @Column({ name: 'comment', type: 'text', nullable: true })
+  comment: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

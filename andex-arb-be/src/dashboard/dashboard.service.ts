@@ -19,6 +19,7 @@ export interface CreateTradeDto {
   profitPercent?: number;
   isPublic?: boolean;
   winner?: string;
+  comment?: string;
 }
 
 export interface UpdateTradeDto extends Partial<CreateTradeDto> {}
@@ -90,6 +91,7 @@ export class DashboardService {
       profitPercent: dto.profitPercent ?? null,
       isPublic: dto.isPublic !== undefined ? dto.isPublic : true,
       winner: dto.winner ?? null,
+      comment: dto.comment ?? null,
     });
     return this.tradeRepo.save(trade);
   }
@@ -114,6 +116,7 @@ export class DashboardService {
       ...(dto.profitPercent !== undefined && { profitPercent: dto.profitPercent }),
       ...(dto.isPublic !== undefined && { isPublic: dto.isPublic }),
       ...(dto.winner !== undefined && { winner: dto.winner }),
+      ...(dto.comment !== undefined && { comment: dto.comment }),
     });
 
     return this.tradeRepo.save(trade);
@@ -126,26 +129,32 @@ export class DashboardService {
     await this.tradeRepo.remove(trade);
   }
 
-  async getMyTrades(userId: string): Promise<DashboardTrade[]> {
-    return this.tradeRepo.find({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-    });
+  async getMyTrades(userId: string, from?: string, to?: string): Promise<DashboardTrade[]> {
+    let qb = this.tradeRepo.createQueryBuilder('t').where('t.user_id = :userId', { userId });
+    if (from && to) {
+      qb = qb.andWhere('t.created_at >= :from AND t.created_at <= :to', {
+        from: new Date(from),
+        to: new Date(new Date(to).setHours(23, 59, 59, 999)),
+      });
+    }
+    return qb.orderBy('t.created_at', 'DESC').getMany();
   }
 
-  async getPublicTrades(limit = 50, offset = 0): Promise<{ trades: DashboardTrade[]; total: number }> {
-    const [trades, total] = await this.tradeRepo.findAndCount({
-      where: { isPublic: true },
-      order: { createdAt: 'DESC' },
-      take: limit,
-      skip: offset,
-    });
+  async getPublicTrades(limit = 50, offset = 0, from?: string, to?: string): Promise<{ trades: DashboardTrade[]; total: number }> {
+    let qb = this.tradeRepo.createQueryBuilder('t').where('t.is_public = true');
+    if (from && to) {
+      qb = qb.andWhere('t.created_at >= :from AND t.created_at <= :to', {
+        from: new Date(from),
+        to: new Date(new Date(to).setHours(23, 59, 59, 999)),
+      });
+    }
+    const [trades, total] = await qb.orderBy('t.created_at', 'DESC').skip(offset).take(limit).getManyAndCount();
     return { trades, total };
   }
 
   // ── Stats ─────────────────────────────────────────────────────────────
 
-  async getGlobalStats(period: '1d' | '7d' | '30d' | 'all' = '1d'): Promise<{
+  async getGlobalStats(period: '1d' | '7d' | '30d' | 'all' = '1d', from?: string, to?: string): Promise<{
     periodProfit: number;
     periodTrades: number;
     periodBestProfit: number;
@@ -154,7 +163,12 @@ export class DashboardService {
       .createQueryBuilder('t')
       .where('t.is_public = true');
 
-    if (period !== 'all') {
+    if (from && to) {
+      qb = qb.andWhere('t.created_at >= :from AND t.created_at <= :to', {
+        from: new Date(from),
+        to: new Date(new Date(to).setHours(23, 59, 59, 999)),
+      });
+    } else if (period !== 'all') {
       const since = new Date();
       if (period === '1d') since.setHours(0, 0, 0, 0);
       else if (period === '7d') { since.setDate(since.getDate() - 7); since.setHours(0, 0, 0, 0); }
@@ -178,6 +192,8 @@ export class DashboardService {
   async getMyStats(
     userId: string,
     period: '1d' | '7d' | '30d' | 'all' = 'all',
+    from?: string,
+    to?: string,
   ): Promise<{
     totalProfit: number;
     totalTrades: number;
@@ -187,7 +203,12 @@ export class DashboardService {
       .createQueryBuilder('t')
       .where('t.user_id = :userId', { userId });
 
-    if (period !== 'all') {
+    if (from && to) {
+      qb = qb.andWhere('t.created_at >= :from AND t.created_at <= :to', {
+        from: new Date(from),
+        to: new Date(new Date(to).setHours(23, 59, 59, 999)),
+      });
+    } else if (period !== 'all') {
       const since = new Date();
       if (period === '1d') since.setHours(0, 0, 0, 0);
       else if (period === '7d') { since.setDate(since.getDate() - 7); since.setHours(0, 0, 0, 0); }
@@ -210,7 +231,7 @@ export class DashboardService {
 
   // ── Leaderboard ──────────────────────────────────────────────────────
 
-  async getLeaderboard(): Promise<
+  async getLeaderboard(from?: string, to?: string): Promise<
     Array<{
       userId: string;
       nickname: string;
@@ -219,9 +240,18 @@ export class DashboardService {
       bestProfit: number;
     }>
   > {
-    const rows = await this.tradeRepo
+    let qb = this.tradeRepo
       .createQueryBuilder('t')
-      .where('t.is_public = true')
+      .where('t.is_public = true');
+
+    if (from && to) {
+      qb = qb.andWhere('t.created_at >= :from AND t.created_at <= :to', {
+        from: new Date(from),
+        to: new Date(new Date(to).setHours(23, 59, 59, 999)),
+      });
+    }
+
+    const rows = await qb
       .groupBy('t.user_id')
       .select('t.user_id', 'userId')
       .addSelect('COUNT(*)', 'totalTrades')
@@ -247,8 +277,10 @@ export class DashboardService {
   async getPublicTradesWithNicknames(
     limit = 50,
     offset = 0,
+    from?: string,
+    to?: string,
   ): Promise<{ trades: Array<DashboardTrade & { nickname: string }>; total: number }> {
-    const { trades, total } = await this.getPublicTrades(limit, offset);
+    const { trades, total } = await this.getPublicTrades(limit, offset, from, to);
     const userIds = [...new Set(trades.map((t) => t.userId))];
     const profiles = userIds.length
       ? await this.profileRepo

@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { PenLine, Trophy, User, X, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { User, X, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   useDashboardStats,
   useDashboardTrades,
@@ -13,9 +15,13 @@ import {
   useDeleteDashboardTrade,
   useUpdateDashboardNickname,
   useWhoami,
+  useActiveSubscription,
 } from '../api/hooks'
+import { clearAuthCookies } from '../utils/authCookies'
 import type { DashboardTrade, DashboardTradeWithNickname, CreateDashboardTradeDto } from '../api/types'
 import { ApiKeyModal } from '../components/ApiKeyModal'
+import { LanguageSwitcher } from '../components/LanguageSwitcher'
+import { SmokeCanvas } from '../components/SmokeCanvas'
 import './DashboardPage.css'
 
 const PLATFORMS = ['Polymarket', 'DexSport', 'Pinnacle', 'Stake', 'Cloudbet']
@@ -32,20 +38,20 @@ function platformClass(name: string): string {
 
 function formatProfit(val: number | null | undefined): string {
   if (val == null) return '—'
-  const sign = val >= 0 ? '+' : ''
-  return `${sign}$${Math.abs(val).toFixed(2)}`
+  const sign = val >= 0 ? '+' : '-'
+  return `${sign}${Math.abs(val).toFixed(2)}$`
 }
 
 function formatPct(val: number | null | undefined): string {
   if (val == null) return ''
-  const sign = val >= 0 ? '+' : ''
-  return `(${sign}${Number(val).toFixed(2)}%)`
+  const sign = val >= 0 ? '+' : '-'
+  return `(${sign}${Math.abs(Number(val)).toFixed(2)}%)`
 }
 
 function formatDate(dateStr: string): string {
   const normalized = dateStr.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(dateStr) ? dateStr : dateStr + 'Z'
   const d = new Date(normalized)
-  return d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC'
+  return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC'
 }
 
 // ── Add/Edit trade modal ──────────────────────────────────────────────────────
@@ -65,6 +71,7 @@ interface TradeFormState {
   profitPercent: string
   isPublic: boolean
   winner: string
+  comment: string
 }
 
 const emptyForm = (): TradeFormState => ({
@@ -82,9 +89,12 @@ const emptyForm = (): TradeFormState => ({
   profitPercent: '',
   isPublic: true,
   winner: '',
+  comment: '',
 })
 
 function tradeToForm(t: DashboardTrade): TradeFormState {
+  const isPm1 = t.bookmaker1.toLowerCase() === 'polymarket'
+  const isPm2 = t.bookmaker2.toLowerCase() === 'polymarket'
   return {
     bookmaker1: t.bookmaker1,
     bookmaker2: t.bookmaker2,
@@ -92,14 +102,15 @@ function tradeToForm(t: DashboardTrade): TradeFormState {
     sport: t.sport ?? '',
     outcome1: t.outcome1 ?? '',
     outcome2: t.outcome2 ?? '',
-    odds1: String(t.odds1),
-    odds2: String(t.odds2),
+    odds1: isPm1 ? String(Math.round(100 / Number(t.odds1))) : String(t.odds1),
+    odds2: isPm2 ? String(Math.round(100 / Number(t.odds2))) : String(t.odds2),
     stake1: String(t.stake1),
     stake2: String(t.stake2),
     profit: t.profit != null ? String(t.profit) : '',
     profitPercent: t.profitPercent != null ? String(t.profitPercent) : '',
     isPublic: t.isPublic,
     winner: t.winner ?? '',
+    comment: t.comment ?? '',
   }
 }
 
@@ -125,9 +136,11 @@ interface TradeModalProps {
 }
 
 function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<TradeFormState>(initialForm ?? emptyForm())
   const createMutation = useCreateDashboardTrade()
   const updateMutation = useUpdateDashboardTrade()
+  const isFirstRender = useRef(true)
 
   const set = (key: keyof TradeFormState, val: string | boolean) =>
     setForm((f) => ({ ...f, [key]: val }))
@@ -135,15 +148,17 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
   const isPm1 = form.bookmaker1.toLowerCase() === 'polymarket'
   const isPm2 = form.bookmaker2.toLowerCase() === 'polymarket'
 
-  // Convert input value to decimal odds (Polymarket uses cents 1-99)
   const toDecimalOdds = (val: string, isPm: boolean) => {
     const n = parseFloat(val)
     if (!n || n <= 0) return 0
     return isPm ? 100 / n : n
   }
 
-  // Auto-calculate profit when amounts/odds change
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
     const s1 = parseFloat(form.stake1) || 0
     const s2 = parseFloat(form.stake2) || 0
     const o1 = toDecimalOdds(form.odds1, isPm1)
@@ -178,6 +193,7 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
       profitPercent: form.profitPercent ? parseFloat(form.profitPercent) : undefined,
       isPublic: form.isPublic,
       winner: form.winner || undefined,
+      comment: form.comment || undefined,
     }
     if (editId) {
       await updateMutation.mutateAsync({ id: editId, dto })
@@ -190,22 +206,22 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
   const isPending = createMutation.isPending || updateMutation.isPending
 
   return (
-    <div className="db-modal-overlay" onClick={onClose}>
+    <div className="db-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="db-modal" onClick={(e) => e.stopPropagation()}>
         <div className="db-modal-header">
-          <span className="db-modal-title">{editId ? 'Редактировать вилку' : 'Добавить вилку'}</span>
+          <span className="db-modal-title">{editId ? t('andexDashboard.editTrade') : t('andexDashboard.addTradeModal')}</span>
           <button className="db-modal-close" onClick={onClose}><X size={18} /></button>
         </div>
         <form className="db-modal-form" onSubmit={handleSubmit}>
           <div className="db-form-row">
             <div className="db-form-group">
-              <label>Контора 1</label>
+              <label>{t('andexDashboard.bookmaker1')}</label>
               <select value={form.bookmaker1} onChange={(e) => set('bookmaker1', e.target.value)}>
                 {PLATFORMS.map((p) => <option key={p}>{p}</option>)}
               </select>
             </div>
             <div className="db-form-group">
-              <label>Контора 2</label>
+              <label>{t('andexDashboard.bookmaker2')}</label>
               <select value={form.bookmaker2} onChange={(e) => set('bookmaker2', e.target.value)}>
                 {PLATFORMS.map((p) => <option key={p}>{p}</option>)}
               </select>
@@ -213,10 +229,10 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
           </div>
 
           <div className="db-form-group">
-            <label>Матч / событие</label>
+            <label>{t('andexDashboard.eventName')}</label>
             <input
               type="text"
-              placeholder="Например: Falcons vs FURIA"
+              placeholder={t('andexDashboard.eventPlaceholder')}
               value={form.eventName}
               onChange={(e) => set('eventName', e.target.value)}
               required
@@ -225,13 +241,18 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
 
           <div className="db-form-row">
             <div className="db-form-group">
-              <label>Спорт / категория</label>
-              <input type="text" placeholder="esport, tennis..." value={form.sport} onChange={(e) => set('sport', e.target.value)} />
+              <label>{t('andexDashboard.sport')}</label>
+              <select value={form.sport} onChange={(e) => set('sport', e.target.value)}>
+                <option value="">—</option>
+                {['Basketball', 'Baseball', 'Tennis', 'Hockey', 'Boxing', 'CS2', 'Valorant', 'Dota 2', 'League of Legends', 'Call of Duty'].map((s) => (
+                  <option key={s} value={s.toLowerCase()}>{s}</option>
+                ))}
+              </select>
             </div>
             <div className="db-form-group">
-              <label>Победитель (контора)</label>
+              <label>{t('andexDashboard.winner')}</label>
               <select value={form.winner} onChange={(e) => set('winner', e.target.value)}>
-                <option value="">Не определён</option>
+                <option value="">{t('andexDashboard.winnerNone')}</option>
                 <option value={form.bookmaker1}>{form.bookmaker1}</option>
                 <option value={form.bookmaker2}>{form.bookmaker2}</option>
               </select>
@@ -240,21 +261,21 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
 
           <div className="db-form-row">
             <div className="db-form-group">
-              <label>Исход 1 ({form.bookmaker1})</label>
-              <input type="text" placeholder="YES / Falcons" value={form.outcome1} onChange={(e) => set('outcome1', e.target.value)} />
+              <label>{t('andexDashboard.outcome1')} ({form.bookmaker1})</label>
+              <input type="text" placeholder={t('andexDashboard.outcomePlaceholder1')} value={form.outcome1} onChange={(e) => set('outcome1', e.target.value)} />
             </div>
             <div className="db-form-group">
-              <label>Исход 2 ({form.bookmaker2})</label>
-              <input type="text" placeholder="NO / FURIA" value={form.outcome2} onChange={(e) => set('outcome2', e.target.value)} />
+              <label>{t('andexDashboard.outcome2')} ({form.bookmaker2})</label>
+              <input type="text" placeholder={t('andexDashboard.outcomePlaceholder2')} value={form.outcome2} onChange={(e) => set('outcome2', e.target.value)} />
             </div>
           </div>
 
           <div className="db-form-row">
             <div className="db-form-group">
-              <label>{isPm1 ? 'Цена (¢)' : 'Кэф 1 (×)'}</label>
+              <label>{isPm1 ? t('andexDashboard.priceCents') : t('andexDashboard.odds', { n: 1 })}</label>
               <input
                 type="number"
-                step={isPm1 ? '1' : '0.0001'}
+                step={isPm1 ? '0.01' : '0.0001'}
                 min="1"
                 max={isPm1 ? '99' : undefined}
                 placeholder={isPm1 ? '37' : '1.45'}
@@ -264,10 +285,10 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
               />
             </div>
             <div className="db-form-group">
-              <label>{isPm2 ? 'Цена (¢)' : 'Кэф 2 (×)'}</label>
+              <label>{isPm2 ? t('andexDashboard.priceCents') : t('andexDashboard.odds', { n: 2 })}</label>
               <input
                 type="number"
-                step={isPm2 ? '1' : '0.0001'}
+                step={isPm2 ? '0.01' : '0.0001'}
                 min="1"
                 max={isPm2 ? '99' : undefined}
                 placeholder={isPm2 ? '37' : '2.95'}
@@ -280,30 +301,35 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
 
           <div className="db-form-row">
             <div className="db-form-group">
-              <label>Ставка 1 ($)</label>
+              <label>{t('andexDashboard.stake1')}</label>
               <input type="number" step="0.01" min="0" placeholder="0.00" value={form.stake1} onChange={(e) => set('stake1', e.target.value)} required />
             </div>
             <div className="db-form-group">
-              <label>Ставка 2 ($)</label>
+              <label>{t('andexDashboard.stake2')}</label>
               <input type="number" step="0.01" min="0" placeholder="0.00" value={form.stake2} onChange={(e) => set('stake2', e.target.value)} required />
             </div>
           </div>
 
           <div className="db-form-row">
             <div className="db-form-group">
-              <label>Профит ($)</label>
-              <input type="number" step="0.01" placeholder="авто" value={form.profit} onChange={(e) => set('profit', e.target.value)} />
+              <label>{t('andexDashboard.profit')}</label>
+              <input type="number" step="0.01" placeholder={t('andexDashboard.profitAuto')} value={form.profit} onChange={(e) => set('profit', e.target.value)} />
             </div>
             <div className="db-form-group">
-              <label>Профит (%)</label>
-              <input type="number" step="0.0001" placeholder="авто" value={form.profitPercent} onChange={(e) => set('profitPercent', e.target.value)} />
+              <label>{t('andexDashboard.profitPct')}</label>
+              <input type="number" step="0.0001" placeholder={t('andexDashboard.profitAuto')} value={form.profitPercent} onChange={(e) => set('profitPercent', e.target.value)} />
             </div>
           </div>
 
+          <div className="db-form-group">
+            <label>{t('andexDashboard.comment')}</label>
+            <input type="text" placeholder={t('andexDashboard.commentPlaceholder')} value={form.comment} onChange={(e) => set('comment', e.target.value)} />
+          </div>
+
           <div className="db-modal-actions">
-            <button type="button" className="secondary-button" onClick={onClose}>Отмена</button>
+            <button type="button" className="secondary-button" onClick={onClose}>{t('andexDashboard.cancel')}</button>
             <button type="submit" className="primary-button" disabled={isPending}>
-              {isPending ? 'Сохранение...' : editId ? 'Сохранить' : 'Добавить'}
+              {isPending ? t('andexDashboard.saving') : editId ? t('andexDashboard.save') : t('andexDashboard.add')}
             </button>
           </div>
         </form>
@@ -315,6 +341,7 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
 // ── Nickname edit modal ───────────────────────────────────────────────────────
 
 function NicknameModal({ current, onClose }: { current: string; onClose: () => void }) {
+  const { t } = useTranslation()
   const [value, setValue] = useState(current)
   const mutation = useUpdateDashboardNickname()
 
@@ -325,15 +352,15 @@ function NicknameModal({ current, onClose }: { current: string; onClose: () => v
   }
 
   return (
-    <div className="db-modal-overlay" onClick={onClose}>
+    <div className="db-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="db-modal db-modal--sm" onClick={(e) => e.stopPropagation()}>
         <div className="db-modal-header">
-          <span className="db-modal-title">Изменить никнейм</span>
+          <span className="db-modal-title">{t('andexDashboard.editNickname')}</span>
           <button className="db-modal-close" onClick={onClose}><X size={18} /></button>
         </div>
         <form className="db-modal-form" onSubmit={handleSubmit}>
           <div className="db-form-group">
-            <label>Никнейм</label>
+            <label>{t('andexDashboard.nickname')}</label>
             <input
               type="text"
               maxLength={50}
@@ -349,9 +376,9 @@ function NicknameModal({ current, onClose }: { current: string; onClose: () => v
             </div>
           )}
           <div className="db-modal-actions">
-            <button type="button" className="secondary-button" onClick={onClose}>Отмена</button>
+            <button type="button" className="secondary-button" onClick={onClose}>{t('andexDashboard.cancel')}</button>
             <button type="submit" className="primary-button" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Сохранение...' : 'Сохранить'}
+              {mutation.isPending ? t('andexDashboard.saving') : t('andexDashboard.save')}
             </button>
           </div>
         </form>
@@ -362,111 +389,104 @@ function NicknameModal({ current, onClose }: { current: string; onClose: () => v
 
 // ── My Profile tab ────────────────────────────────────────────────────────────
 
-function MyProfileTab() {
-  const { data: profileData, isLoading } = useDashboardProfile()
-  const { data: myTrades = [], isLoading: tradesLoading } = useDashboardMyTrades()
+type Period = '1d' | '7d' | '30d' | 'all'
+
+function MyProfileTab({ onEditNickname, dateFilter }: { onEditNickname: () => void; dateFilter?: string }) {
+  const { t } = useTranslation()
+  const { data: rawMyTrades = [], isLoading: tradesLoading } = useDashboardMyTrades(dateFilter, dateFilter)
   const deleteMutation = useDeleteDashboardTrade()
   const [editTrade, setEditTrade] = useState<DashboardTrade | null>(null)
-  const [showNicknameModal, setShowNicknameModal] = useState(false)
-  const [period, setPeriod] = useState<Period>('all')
-  const { data: periodStats } = useDashboardMyStats(period)
+  const [sortField, setSortField] = useState<SortField | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  if (isLoading) return <div className="db-loading">Загрузка...</div>
-  if (!profileData) return null
+  const myTrades = sortField
+    ? [...rawMyTrades].sort((a, b) => {
+        let cmp = 0
+        if (sortField === 'profit') {
+          cmp = (Number(a.profit) ?? 0) - (Number(b.profit) ?? 0)
+        } else {
+          cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        }
+        return sortDir === 'asc' ? cmp : -cmp
+      })
+    : rawMyTrades
 
-  const { profile } = profileData
+  function handleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('desc')
+    }
+  }
+
+  function SortIcon({ field }: { field: SortField }) {
+    if (sortField !== field) return <span className="db-sort-icon db-sort-inactive">⇅</span>
+    return <span className="db-sort-icon">{sortDir === 'asc' ? '↑' : '↓'}</span>
+  }
 
   return (
     <div className="db-profile">
-      <div className="db-period-row">
-        {(['1d', '7d', '30d', 'all'] as Period[]).map((p) => (
-          <button
-            key={p}
-            className={`db-period-btn ${period === p ? 'db-period-btn--active' : ''}`}
-            onClick={() => setPeriod(p)}
-          >
-            {PERIOD_LABELS[p]}
-          </button>
-        ))}
-      </div>
-      <div className="db-profile-header">
-        <div className="db-profile-name">
-          <span className="db-nickname-badge">{profile.nickname}</span>
-          <button className="db-icon-btn" onClick={() => setShowNicknameModal(true)} title="Изменить никнейм">
-            <Pencil size={14} />
-          </button>
-        </div>
-        <div className="db-profile-stats">
-          <div className="db-profile-stat">
-            <span className="db-profile-stat-label">Всего вилок</span>
-            <span className="db-profile-stat-val">{periodStats?.totalTrades ?? '—'}</span>
-          </div>
-          <div className="db-profile-stat">
-            <span className="db-profile-stat-label">Общий профит</span>
-            <span className={`db-profile-stat-val ${(periodStats?.totalProfit ?? 0) >= 0 ? 'db-pos' : 'db-neg'}`}>
-              {formatProfit(periodStats?.totalProfit)}
-            </span>
-          </div>
-          <div className="db-profile-stat">
-            <span className="db-profile-stat-label">Лучший профит</span>
-            <span className="db-profile-stat-val db-pos">{formatProfit(periodStats?.bestProfit)}</span>
-          </div>
-        </div>
-      </div>
+      <h2 className="db-section-title">{t('andexDashboard.myTradesTitle')}</h2>
 
       {tradesLoading ? (
-        <div className="db-loading">Загрузка сделок...</div>
+        <div className="db-loading">{t('andexDashboard.loadingTrades')}</div>
       ) : myTrades.length === 0 ? (
-        <div className="db-empty">У вас пока нет добавленных вилок</div>
+        <div className="db-empty">{t('andexDashboard.noMyTrades')}</div>
       ) : (
         <div className="db-table-wrap">
           <table className="db-table">
             <thead>
               <tr>
-                <th>Матч</th>
-                <th>Площадки</th>
-                <th>Ставки</th>
-                <th>Профит</th>
-                <th>Дата</th>
+                <th>{t('andexDashboard.colMatch')}</th>
+                <th>{t('andexDashboard.colPlatforms')}</th>
+                <th>{t('andexDashboard.colStakes')}</th>
+                <th className="db-th-sortable" onClick={() => handleSort('profit')}>
+                  {t('andexDashboard.colProfit')} <SortIcon field="profit" />
+                </th>
+                <th className="db-th-sortable" onClick={() => handleSort('date')}>
+                  {t('andexDashboard.colDate')} <SortIcon field="date" />
+                </th>
+                <th>{t('andexDashboard.colComment')}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {myTrades.map((t) => (
-                <tr key={t.id} className={!t.isPublic ? 'db-row-private' : ''}>
+              {myTrades.map((trade) => (
+                <tr key={trade.id} className={!trade.isPublic ? 'db-row-private' : ''}>
                   <td>
-                    <div className="db-event-name">{t.eventName}</div>
-                    {t.sport && <div className="db-sport-tag">{t.sport}</div>}
+                    <div className="db-event-name">{trade.eventName}</div>
+                    {trade.sport && <div className="db-sport-tag">{trade.sport}</div>}
                   </td>
                   <td>
                     <div className="db-bookmakers">
-                      <span className={`db-bm-tag db-bm-${platformClass(t.bookmaker1)}`}>{t.bookmaker1}</span>
-                      <span className={`db-bm-tag db-bm-${platformClass(t.bookmaker2)}`}>{t.bookmaker2}</span>
+                      <span className={`db-bm-tag db-bm-${platformClass(trade.bookmaker1)}`}>{trade.bookmaker1}</span>
+                      <span className={`db-bm-tag db-bm-${platformClass(trade.bookmaker2)}`}>{trade.bookmaker2}</span>
                     </div>
                   </td>
                   <td>
                     <div className="db-stakes">
-                      <span>${Number(t.stake1).toFixed(2)} / ${Number(t.stake2).toFixed(2)}</span>
-                      <span className="db-stakes-total">Σ ${(Number(t.stake1) + Number(t.stake2)).toFixed(2)}</span>
+                      <span>{(Number(trade.stake1) + Number(trade.stake2)).toFixed(2)}$</span>
                     </div>
                   </td>
                   <td>
-                    {t.profit != null && (
-                      <span className={`db-profit ${Number(t.profit) >= 0 ? 'db-pos' : 'db-neg'}`}>
-                        {formatProfit(Number(t.profit))} {formatPct(t.profitPercent ? Number(t.profitPercent) : null)}
+                    {trade.profit != null && (
+                      <span className={`db-profit ${Number(trade.profit) >= 0 ? 'db-pos' : 'db-neg'}`}>
+                        {formatProfit(Number(trade.profit))} {formatPct(trade.profitPercent ? (Number(trade.profit) < 0 ? -Math.abs(Number(trade.profitPercent)) : Math.abs(Number(trade.profitPercent))) : null)}
                       </span>
                     )}
                   </td>
-                  <td className="db-date">{formatDate(t.createdAt)}</td>
+                  <td className="db-date">{formatDate(trade.createdAt)}</td>
+                  <td className="db-comment">{trade.comment ?? ''}</td>
                   <td>
                     <div className="db-row-actions">
-                      <button className="db-icon-btn" onClick={() => setEditTrade(t)} title="Редактировать">
+                      <button className="db-icon-btn" onClick={() => setEditTrade(trade)} title={t('andexDashboard.editTooltip')}>
                         <Pencil size={13} />
                       </button>
                       <button
                         className="db-icon-btn db-icon-btn--danger"
-                        onClick={() => { if (confirm('Удалить вилку?')) deleteMutation.mutate(t.id) }}
-                        title="Удалить"
+                        onClick={() => { if (confirm(t('andexDashboard.deleteConfirm'))) deleteMutation.mutate(trade.id) }}
+                        title={t('andexDashboard.deleteTooltip')}
                       >
                         <Trash2 size={13} />
                       </button>
@@ -486,9 +506,6 @@ function MyProfileTab() {
           onClose={() => setEditTrade(null)}
         />
       )}
-      {showNicknameModal && (
-        <NicknameModal current={profile.nickname} onClose={() => setShowNicknameModal(false)} />
-      )}
     </div>
   )
 }
@@ -497,79 +514,117 @@ function MyProfileTab() {
 
 const PAGE_SIZE = 30
 
-function AllTradesTab() {
-  const [offset, setOffset] = useState(0)
-  const { data, isLoading } = useDashboardTrades(PAGE_SIZE, offset)
+type SortField = 'profit' | 'date'
+type SortDir = 'asc' | 'desc'
 
-  const trades = data?.trades ?? []
+function AllTradesTab({ dateFilter }: { dateFilter?: string }) {
+  const { t } = useTranslation()
+  const [offset, setOffset] = useState(0)
+  const [sortField, setSortField] = useState<SortField | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const { data, isLoading } = useDashboardTrades(PAGE_SIZE, offset, dateFilter, dateFilter)
+
+  const rawTrades = data?.trades ?? []
   const total = data?.total ?? 0
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const currentPage = Math.floor(offset / PAGE_SIZE)
 
+  const trades = sortField
+    ? [...rawTrades].sort((a, b) => {
+        let cmp = 0
+        if (sortField === 'profit') {
+          cmp = (Number(a.profit) ?? 0) - (Number(b.profit) ?? 0)
+        } else {
+          cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        }
+        return sortDir === 'asc' ? cmp : -cmp
+      })
+    : rawTrades
+
+  function handleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('desc')
+    }
+  }
+
+  function SortIcon({ field }: { field: SortField }) {
+    if (sortField !== field) return <span className="db-sort-icon db-sort-inactive">⇅</span>
+    return <span className="db-sort-icon">{sortDir === 'asc' ? '↑' : '↓'}</span>
+  }
+
   return (
     <div>
-      <h2 className="db-section-title">История сделок (все пользователи)</h2>
+      <h2 className="db-section-title">{t('andexDashboard.allTradesTitle')}</h2>
       {isLoading ? (
-        <div className="db-loading">Загрузка...</div>
+        <div className="db-loading">{t('andexDashboard.loading')}</div>
       ) : trades.length === 0 ? (
-        <div className="db-empty">Пока нет публичных сделок</div>
+        <div className="db-empty">{t('andexDashboard.noPublicTrades')}</div>
       ) : (
         <>
           <div className="db-table-wrap">
             <table className="db-table">
               <thead>
                 <tr>
-                  <th>Пользователь</th>
-                  <th>Спорт</th>
-                  <th>Матч</th>
-                  <th>Площадки</th>
-                  <th>Ставки</th>
-                  <th>Победитель</th>
-                  <th>Профит</th>
-                  <th>Дата</th>
+                  <th>{t('andexDashboard.colUser')}</th>
+                  <th>{t('andexDashboard.colMatch')}</th>
+                  <th>{t('andexDashboard.colPlatforms')}</th>
+                  <th>{t('andexDashboard.colStakes')}</th>
+                  <th>{t('andexDashboard.colWinner')}</th>
+                  <th className="db-th-sortable" onClick={() => handleSort('profit')}>
+                    {t('andexDashboard.colProfit')} <SortIcon field="profit" />
+                  </th>
+                  <th className="db-th-sortable" onClick={() => handleSort('date')}>
+                    {t('andexDashboard.colDate')} <SortIcon field="date" />
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {trades.map((t: DashboardTradeWithNickname) => (
-                  <tr key={t.id}>
+                {trades.map((trade: DashboardTradeWithNickname) => (
+                  <tr key={trade.id}>
                     <td>
-                      <span className="db-nickname-badge db-nickname-badge--sm">{t.nickname}</span>
+                      <span className="db-nickname-badge db-nickname-badge--sm">{trade.nickname}</span>
                     </td>
-                    <td className="db-sport">{t.sport ?? '—'}</td>
                     <td>
-                      <div className="db-event-name">{t.eventName}</div>
+                      <div className="db-event-name">{trade.eventName}</div>
+                      {trade.sport && <div className="db-sport-tag">{trade.sport}</div>}
                     </td>
                     <td>
                       <div className="db-bookmakers">
                         <div className="db-bm-odds-row">
-                          <span className={`db-bm-tag db-bm-${platformClass(t.bookmaker1)}`}>{t.bookmaker1}</span>
-                          <span className="db-odds">{Number(t.odds1).toFixed(2)}×</span>
+                          <span className={`db-bm-tag db-bm-${platformClass(trade.bookmaker1)}`}>{trade.bookmaker1}</span>
+                          {trade.bookmaker1.toLowerCase() === 'polymarket'
+                            ? <span className="db-odds">{(100 / Number(trade.odds1)).toFixed(1)}¢</span>
+                            : <span className="db-odds">{Number(trade.odds1).toFixed(2)}×</span>}
                         </div>
                         <div className="db-bm-odds-row">
-                          <span className={`db-bm-tag db-bm-${platformClass(t.bookmaker2)}`}>{t.bookmaker2}</span>
-                          <span className="db-odds">{Number(t.odds2).toFixed(2)}×</span>
+                          <span className={`db-bm-tag db-bm-${platformClass(trade.bookmaker2)}`}>{trade.bookmaker2}</span>
+                          {trade.bookmaker2.toLowerCase() === 'polymarket'
+                            ? <span className="db-odds">{(100 / Number(trade.odds2)).toFixed(1)}¢</span>
+                            : <span className="db-odds">{Number(trade.odds2).toFixed(2)}×</span>}
                         </div>
                       </div>
                     </td>
                     <td>
                       <div className="db-stakes">
-                        <span>${Number(t.stake1).toFixed(2)} / ${Number(t.stake2).toFixed(2)}</span>
-                        <span className="db-stakes-total">Σ ${(Number(t.stake1) + Number(t.stake2)).toFixed(2)}</span>
+                        <span>{(Number(trade.stake1) + Number(trade.stake2)).toFixed(2)}$</span>
                       </div>
                     </td>
                     <td>
-                      {t.winner ? (
-                        <span className={`db-bm-tag db-bm-${platformClass(t.winner)}`}>{t.winner}</span>
-                      ) : '—'}
+                      {trade.winner ? (
+                        <span className={`db-bm-tag db-bm-${platformClass(trade.winner)}`}>{trade.winner}</span>
+                      ) : t('andexDashboard.noValue')}
                     </td>
                     <td>
-                      {t.profit != null && (
-                        <span className={`db-profit ${Number(t.profit) >= 0 ? 'db-pos' : 'db-neg'}`}>
-                          {formatProfit(Number(t.profit))} {formatPct(t.profitPercent ? Number(t.profitPercent) : null)}
+                      {trade.profit != null && (
+                        <span className={`db-profit ${Number(trade.profit) >= 0 ? 'db-pos' : 'db-neg'}`}>
+                          {formatProfit(Number(trade.profit))} {formatPct(trade.profitPercent ? (Number(trade.profit) < 0 ? -Math.abs(Number(trade.profitPercent)) : Math.abs(Number(trade.profitPercent))) : null)}
                         </span>
                       )}
                     </td>
-                    <td className="db-date">{formatDate(t.createdAt)}</td>
+                    <td className="db-date">{formatDate(trade.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -602,26 +657,27 @@ function AllTradesTab() {
 
 // ── Leaderboard tab ───────────────────────────────────────────────────────────
 
-function LeaderboardTab() {
-  const { data: entries = [], isLoading } = useDashboardLeaderboard()
+function LeaderboardTab({ dateFilter }: { dateFilter?: string }) {
+  const { t } = useTranslation()
+  const { data: entries = [], isLoading } = useDashboardLeaderboard(dateFilter, dateFilter)
 
   return (
     <div>
-      <h2 className="db-section-title">Лидерборд</h2>
+      <h2 className="db-section-title">{t('andexDashboard.leaderboardTitle')}</h2>
       {isLoading ? (
-        <div className="db-loading">Загрузка...</div>
+        <div className="db-loading">{t('andexDashboard.loading')}</div>
       ) : entries.length === 0 ? (
-        <div className="db-empty">Пока нет данных</div>
+        <div className="db-empty">{t('andexDashboard.noData')}</div>
       ) : (
         <div className="db-table-wrap">
           <table className="db-table db-table--leaderboard">
             <thead>
               <tr>
-                <th>#</th>
-                <th>Пользователь</th>
-                <th>Вилок</th>
-                <th>Общий профит</th>
-                <th>Лучший профит</th>
+                <th>{t('andexDashboard.colRank')}</th>
+                <th>{t('andexDashboard.colUser')}</th>
+                <th>{t('andexDashboard.colForks')}</th>
+                <th>{t('andexDashboard.colTotalProfit')}</th>
+                <th>{t('andexDashboard.colBestProfit')}</th>
               </tr>
             </thead>
             <tbody>
@@ -653,21 +709,30 @@ function LeaderboardTab() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type Tab = 'all' | 'leaderboard' | 'profile'
-type Period = '1d' | '7d' | '30d' | 'all'
 
-const PERIOD_LABELS: Record<Period, string> = {
-  '1d': '1D',
-  '7d': '7D',
-  '30d': '30D',
-  'all': 'ALL',
-}
-
-const PERIOD_CARD_LABELS = { profit: 'Общий профит', trades: 'Вилок', best: 'Лучший профит' }
+const PERIOD_CARD_LABELS_KEY = { profit: 'andexDashboard.statTotalProfit', trades: 'andexDashboard.statForks', best: 'andexDashboard.statBestProfit' }
 
 export function DashboardPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [period, setPeriod] = useState<Period>('1d')
-  const { data: stats } = useDashboardStats(period)
+  const [customDate, setCustomDate] = useState('')
+  const [confirmedDate, setConfirmedDate] = useState('')
+  const [showDatePicker, setShowDatePicker] = useState(false)
+
+  function parseDayMonth(val: string): string | undefined {
+    const m = val.match(/^(\d{1,2})\.(\d{2})$/)
+    if (!m) return undefined
+    const year = new Date().getFullYear()
+    const month = m[2].padStart(2, '0')
+    const day = m[1].padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const isoDate = parseDayMonth(confirmedDate)
+  const isCustomRange = !!isoDate
+  const { data: stats } = useDashboardStats(period, isoDate, isoDate)
+  const { data: myStats } = useDashboardMyStats(period, isoDate, isoDate)
   const { data: whoami } = useWhoami()
   const { data: profileData } = useDashboardProfile()
 
@@ -675,12 +740,64 @@ export function DashboardPage() {
   const nickname = profileData?.profile?.nickname
 
   const [activeTab, setActiveTab] = useState<Tab>('all')
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
+
+  useEffect(() => {
+    const container = tabsRef.current
+    if (!container) return
+    const active = container.querySelector<HTMLElement>('.db-tab--active')
+    if (!active) return
+    const containerRect = container.getBoundingClientRect()
+    const activeRect = active.getBoundingClientRect()
+    setIndicatorStyle({ left: activeRect.left - containerRect.left, width: activeRect.width })
+  }, [activeTab])
+
   const [showAddModal, setShowAddModal] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [showNicknameModal, setShowNicknameModal] = useState(false)
   const [pendingForm, setPendingForm] = useState<TradeFormState | undefined>(undefined)
   const pendingFormRef = useRef<TradeFormState | undefined>(undefined)
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const queryClient = useQueryClient()
 
-  // Read pending trade from localStorage on mount (before whoami loads)
+  const { data: activeSub } = useActiveSubscription()
+
+  const calcSubInfo = useCallback(() => {
+    if (!activeSub) return null
+    if (!activeSub.expiresAt) return { label: null, pct: 100 }
+    const now = Date.now()
+    const expires = new Date(activeSub.expiresAt).getTime()
+    const starts = new Date(activeSub.startsAt).getTime()
+    const totalMs = expires - starts
+    const remainingMs = Math.max(0, expires - now)
+    const pct = totalMs > 0 ? Math.max(0, Math.min(100, (remainingMs / totalMs) * 100)) : 0
+    const totalMins = Math.floor(remainingMs / 60_000)
+    const days = Math.floor(totalMins / 1440)
+    const hours = Math.floor((totalMins % 1440) / 60)
+    const mins = totalMins % 60
+    const parts: string[] = []
+    if (days > 0) parts.push(`${days}d`)
+    if (hours > 0) parts.push(`${hours}h`)
+    if (mins > 0 || parts.length === 0) parts.push(`${mins}m`)
+    return { label: parts.join(' '), pct }
+  }, [activeSub])
+
+  const [subDaysInfo, setSubDaysInfo] = useState(() => calcSubInfo())
+  useEffect(() => {
+    setSubDaysInfo(calcSubInfo())
+    if (!activeSub?.expiresAt) return
+    const id = setInterval(() => setSubDaysInfo(calcSubInfo()), 60_000)
+    return () => clearInterval(id)
+  }, [activeSub, calcSubInfo])
+
+  const PERIOD_LABELS: Record<Period, string> = {
+    '1d': t('andexDashboard.period1d'),
+    '7d': t('andexDashboard.period7d'),
+    '30d': t('andexDashboard.period30d'),
+    'all': t('andexDashboard.periodAll'),
+  }
+
   useEffect(() => {
     const raw = localStorage.getItem('pendingDashboardTrade')
     if (!raw) return
@@ -705,7 +822,6 @@ export function DashboardPage() {
     } catch {}
   }, [])
 
-  // Open modal as soon as we know user is logged in and there's a pending form
   useEffect(() => {
     if (isLoggedIn && pendingFormRef.current) {
       setShowAddModal(true)
@@ -723,113 +839,153 @@ export function DashboardPage() {
 
   return (
     <div className="db-page">
+      <SmokeCanvas />
       {/* Nav */}
       <header className="db-header">
+        <div className="db-header-inner">
         <div className="db-header-left">
           <div className="db-logo" onClick={() => navigate('/')}>
-            <span className="db-logo-icon">A</span>
-            <div>
-              <div className="db-logo-title">ANDEX DASHBOARD</div>
-              <div className="db-logo-sub">Публичный учёт вилок и профита</div>
-            </div>
+            <div className="db-logo-title">{t('andexDashboard.title')}</div>
           </div>
         </div>
         <div className="db-header-right">
-          <button className="primary-button db-scanner-btn" onClick={() => navigate('/scanner')}>
-            Сканер
-          </button>
-          {isLoggedIn ? (
-            <button className="db-profile-btn" onClick={() => setActiveTab('profile')}>
-              <User size={14} />
-              <span>{nickname ?? 'Профиль'}</span>
-            </button>
-          ) : (
+          {!isLoggedIn && (
             <button className="secondary-button" onClick={() => setShowLoginModal(true)}>
-              Войти
+              {t('andexDashboard.login')}
             </button>
           )}
+          <LanguageSwitcher />
+          <button
+            type="button"
+            className="gradient-profile-btn"
+            onClick={() => setIsProfileOpen(true)}
+          >
+            {t('andexDashboard.tabProfile')}
+          </button>
+        </div>
         </div>
       </header>
 
       <main className="db-main">
         {/* Period selector + stats cards */}
-        {activeTab !== 'profile' && (
-          <>
-            <div className="db-period-row">
-              {(['1d', '7d', '30d', 'all'] as Period[]).map((p) => (
-                <button
-                  key={p}
-                  className={`db-period-btn ${period === p ? 'db-period-btn--active' : ''}`}
-                  onClick={() => setPeriod(p)}
-                >
-                  {PERIOD_LABELS[p]}
-                </button>
-              ))}
-            </div>
-            {stats && (
-              <div className="db-cards">
-                <div className="db-card">
-                  <div className="db-card-label">{PERIOD_CARD_LABELS.profit}</div>
-                  <div className={`db-card-val ${stats.periodProfit >= 0 ? 'db-pos' : 'db-neg'}`}>
-                    {formatProfit(stats.periodProfit)}
-                  </div>
-                </div>
-                <div className="db-card">
-                  <div className="db-card-label">{PERIOD_CARD_LABELS.trades}</div>
-                  <div className="db-card-val">{stats.periodTrades}</div>
-                </div>
-                <div className="db-card">
-                  <div className="db-card-label">{PERIOD_CARD_LABELS.best}</div>
-                  <div className="db-card-val db-pos">{formatProfit(stats.periodBestProfit)}</div>
-                </div>
-              </div>
+        <div className="db-period-row">
+          {(['1d', '7d', '30d', 'all'] as Period[]).map((p) => (
+            <button
+              key={p}
+              className={`db-period-btn ${period === p && !isCustomRange && !showDatePicker ? 'db-period-btn--active' : ''}`}
+              onClick={() => { setPeriod(p); setCustomDate(''); setShowDatePicker(false) }}
+            >
+              {PERIOD_LABELS[p]}
+            </button>
+          ))}
+          <div className="db-date-btn-wrap">
+            <button
+              className={`db-period-btn ${isCustomRange || showDatePicker ? 'db-period-btn--active' : ''}`}
+              onClick={() => { setShowDatePicker(v => !v); setCustomDate(confirmedDate) }}
+            >
+              {t('andexDashboard.customDate')}{confirmedDate ? ` ${confirmedDate}` : ''}
+            </button>
+            {isCustomRange && (
+              <button className="db-date-clear" onClick={() => { setConfirmedDate(''); setCustomDate(''); setShowDatePicker(false) }}>✕</button>
             )}
-          </>
-        )}
-
-        {/* Add trade + login hint */}
-        <div className="db-actions-row">
-          <button className="primary-button db-add-btn" onClick={handleAddClick}>
-            <PenLine size={15} />
-            + Добавить сделку
-          </button>
-          {!isLoggedIn && (
-            <div className="db-login-hint">
-              Войдите, чтобы вести личный журнал сделок
+          </div>
+          {showDatePicker && (
+            <div className="db-datepicker">
+              <input
+                type="text"
+                className="db-date-input"
+                placeholder={t('andexDashboard.datePlaceholder')}
+                maxLength={5}
+                value={customDate}
+                autoFocus
+                onChange={e => setCustomDate(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && parseDayMonth(customDate)) { setConfirmedDate(customDate); setShowDatePicker(false) } }}
+              />
+              {parseDayMonth(customDate) && (
+                <button className="db-date-confirm" onClick={() => { setConfirmedDate(customDate); setShowDatePicker(false) }}>✓</button>
+              )}
+              {customDate && (
+                <button className="db-date-clear" onClick={() => { setCustomDate(''); setConfirmedDate(''); }}>✕</button>
+              )}
             </div>
           )}
         </div>
+        {activeTab === 'profile' ? (
+          <div className="db-cards">
+            <div className="db-card">
+              <div className="db-card-label">{t('andexDashboard.myTotalProfit')}</div>
+              <div className={`db-card-val ${(myStats?.totalProfit ?? 0) >= 0 ? 'db-pos' : 'db-neg'}`}>
+                {formatProfit(myStats?.totalProfit)}
+              </div>
+            </div>
+            <div className="db-card">
+              <div className="db-card-label">{t('andexDashboard.myTotalTrades')}</div>
+              <div className="db-card-val">{myStats?.totalTrades ?? '—'}</div>
+            </div>
+            <div className="db-card">
+              <div className="db-card-label">{t('andexDashboard.myBestProfit')}</div>
+              <div className="db-card-val db-pos">{formatProfit(myStats?.bestProfit)}</div>
+            </div>
+          </div>
+        ) : stats && (
+          <div className="db-cards">
+            <div className="db-card">
+              <div className="db-card-label">{t(PERIOD_CARD_LABELS_KEY.profit)}</div>
+              <div className={`db-card-val ${stats.periodProfit >= 0 ? 'db-pos' : 'db-neg'}`}>
+                {formatProfit(stats.periodProfit)}
+              </div>
+            </div>
+            <div className="db-card">
+              <div className="db-card-label">{t(PERIOD_CARD_LABELS_KEY.trades)}</div>
+              <div className="db-card-val">{stats.periodTrades}</div>
+            </div>
+            <div className="db-card">
+              <div className="db-card-label">{t(PERIOD_CARD_LABELS_KEY.best)}</div>
+              <div className="db-card-val db-pos">{formatProfit(stats.periodBestProfit)}</div>
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
-        <div className="db-tabs">
+        <div className="db-tabs" ref={tabsRef}>
           <button
             className={`db-tab ${activeTab === 'all' ? 'db-tab--active' : ''}`}
             onClick={() => setActiveTab('all')}
           >
-            Все сделки
+            {t('andexDashboard.tabAll')}
           </button>
           <button
             className={`db-tab ${activeTab === 'leaderboard' ? 'db-tab--active' : ''}`}
             onClick={() => setActiveTab('leaderboard')}
           >
-            <Trophy size={14} />
-            Лидерборд
+            {t('andexDashboard.tabLeaderboard')}
           </button>
           {isLoggedIn && (
-            <button
-              className={`db-tab ${activeTab === 'profile' ? 'db-tab--active' : ''}`}
-              onClick={() => setActiveTab('profile')}
-            >
-              Мой профиль
-            </button>
+            <>
+              <button
+                className={`db-tab ${activeTab === 'profile' ? 'db-tab--active' : ''}`}
+                onClick={() => setActiveTab('profile')}
+              >
+                {t('andexDashboard.tabProfile')}
+              </button>
+              {activeTab === 'profile' && (
+                <button className="db-tab-add-btn" onClick={handleAddClick}>
+                  {t('andexDashboard.addTrade')}
+                </button>
+              )}
+            </>
           )}
+          <div
+            className="db-tab-indicator"
+            style={{ left: indicatorStyle.left, width: indicatorStyle.width }}
+          />
         </div>
 
         {/* Tab content */}
         <div className="db-tab-content">
-          {activeTab === 'all' && <AllTradesTab />}
-          {activeTab === 'leaderboard' && <LeaderboardTab />}
-          {activeTab === 'profile' && isLoggedIn && <MyProfileTab />}
+          {activeTab === 'all' && <AllTradesTab dateFilter={isoDate} />}
+          {activeTab === 'leaderboard' && <LeaderboardTab dateFilter={isoDate} />}
+          {activeTab === 'profile' && isLoggedIn && <MyProfileTab onEditNickname={() => setShowNicknameModal(true)} dateFilter={isoDate} />}
         </div>
       </main>
 
@@ -847,6 +1003,100 @@ export function DashboardPage() {
           onSuccess={() => setShowLoginModal(false)}
         />
       )}
+      {showNicknameModal && nickname != null && (
+        <NicknameModal current={nickname} onClose={() => setShowNicknameModal(false)} />
+      )}
+
+      {/* Profile sliding panel */}
+      <div
+        className={`profile-overlay ${isProfileOpen ? 'profile-overlay--open' : ''}`}
+        onClick={() => setIsProfileOpen(false)}
+      />
+      <div className={`profile-panel ${isProfileOpen ? 'profile-panel--open' : ''}`}>
+        <SmokeCanvas />
+        <div className="profile-panel-inner">
+          <div className="profile-panel-header">
+            <div className="profile-panel-avatar">
+              <User size={32} />
+            </div>
+            {nickname && (
+              <div className="profile-panel-nick-wrap">
+                <span className="profile-panel-nickname">{nickname}</span>
+                <button
+                  className="db-icon-btn db-edit-nick-btn"
+                  onClick={() => { setIsProfileOpen(false); setShowNicknameModal(true) }}
+                  title={t('andexDashboard.editNickname')}
+                >
+                  <Pencil size={13} />
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="profile-panel-section">
+            <div className="profile-panel-label">{t('scanner.currentPlan') || 'Подписка'}</div>
+            {subDaysInfo ? (
+              <>
+                <div className="profile-sub-days">
+                  {subDaysInfo.label === null
+                    ? (t('scanner.lifetimeSub') || 'Навсегда')
+                    : subDaysInfo.label}
+                </div>
+                <div className="profile-hp-bar">
+                  <div className="profile-hp-fill" style={{ width: `${subDaysInfo.pct}%` }} />
+                </div>
+              </>
+            ) : (
+              <div className="profile-sub-days profile-sub-days--none">
+                {t('scanner.noActiveSub') || 'Нет подписки'}
+              </div>
+            )}
+          </div>
+          <div className="profile-panel-actions">
+            <button
+              className="profile-action-btn"
+              onClick={() => { setIsProfileOpen(false); navigate('/scanner') }}
+            >
+              {t('andexDashboard.scanner')}
+            </button>
+            <a
+              href={`https://docs.subline.space?key=${localStorage.getItem('apiKey') ?? ''}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="profile-action-btn"
+            >
+              {t('scanner.learnGuide')}
+            </a>
+            <a
+              href={import.meta.env.VITE_TELEGRAM_BOT_URL as string}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="profile-action-btn"
+            >
+              {t('scanner.renewSub')}
+            </a>
+            <a
+              href={import.meta.env.VITE_TELEGRAM_SUPPORT_URL as string}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="profile-action-btn"
+            >
+              {t('scanner.askQuestion')}
+            </a>
+            <button
+              className="profile-action-btn profile-action-btn--logout"
+              onClick={() => {
+                localStorage.removeItem('apiKey')
+                localStorage.removeItem('sessionToken')
+                clearAuthCookies()
+                queryClient.clear()
+                navigate('/')
+              }}
+            >
+              {t('scanner.logout')}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
