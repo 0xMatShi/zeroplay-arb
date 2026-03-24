@@ -352,7 +352,19 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
           <div className="db-form-row">
             <div className="db-form-group">
               <label>{t('andexDashboard.profit')}</label>
-              <input type="number" step="0.01" placeholder={t('andexDashboard.profitAuto')} value={form.profit} onChange={(e) => set('profit', e.target.value)} />
+              <input type="number" step="0.01" placeholder={t('andexDashboard.profitAuto')} value={form.profit} onChange={(e) => {
+                const profitVal = e.target.value
+                const s1 = parseFloat(form.stake1) || 0
+                const s2 = parseFloat(form.stake2) || 0
+                const total = s1 + s2
+                const profitNum = parseFloat(profitVal)
+                if (total > 0 && !isNaN(profitNum)) {
+                  const pct = (profitNum / total) * 100
+                  setForm((f) => ({ ...f, profit: profitVal, profitPercent: pct.toFixed(4) }))
+                } else {
+                  set('profit', profitVal)
+                }
+              }} />
             </div>
             <div className="db-form-group">
               <label>{t('andexDashboard.profitPct')}</label>
