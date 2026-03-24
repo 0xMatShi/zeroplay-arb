@@ -533,12 +533,10 @@ export class SportsMatcher {
 
           const bm = bmList.find((d) => d.eventId === bmId)!;
 
-          // Mirror pm-bm logic: if dex has a date but bm doesn't — skip (can't verify same match).
+          // Both sides must have a startTime — if either is missing we can't verify it's the same match.
           // If both have dates — require within 3 hours.
-          if (dex.startTime && dex.startTime > 0) {
-            if (!bm.startTime || bm.startTime <= 0) continue;
-            if (Math.abs(dex.startTime - bm.startTime) > 3 * 3600) continue;
-          }
+          if (!dex.startTime || dex.startTime <= 0 || !bm.startTime || bm.startTime <= 0) continue;
+          if (Math.abs(dex.startTime - bm.startTime) > 3 * 3600) continue;
 
           const sim = computeSimilarity(dex.name, bm.name);
           const isBetter =
@@ -639,13 +637,11 @@ export class SportsMatcher {
 
           const bm = bmList.find((d) => d.eventId === bmId)!;
 
-          // Filter by startTime: if PM has a date but BM doesn't — skip (can't verify it's the same match).
+          // Both sides must have a startTime — if either is missing we can't verify it's the same match.
           // If both have dates — require them to be within 3 hours of each other.
-          if (pm.startTime !== undefined) {
-            if (!bm.startTime || bm.startTime <= 0) continue;
-            const bmMs = bm.startTime * 1000;
-            if (Math.abs(pm.startTime - bmMs) > 3 * 3_600_000) continue;
-          }
+          if (!pm.startTime || !bm.startTime || bm.startTime <= 0) continue;
+          const bmMs = bm.startTime * 1000;
+          if (Math.abs(pm.startTime - bmMs) > 3 * 3_600_000) continue;
 
           const sim = computeSimilarity(pmStripped, bm.name);
           const isBetter =

@@ -195,7 +195,7 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       dexMarketName: opp.dexMarketName,
       startTime: isBmBm
         ? ((match as BmBmMatch).dexEvent.startTime != null ? (match as BmBmMatch).dexEvent.startTime! * 1000 : null)
-        : ((match as SportsMatch | undefined)?.pmEvent.startTime ?? match?.dexEvent.startTime ?? null),
+        : ((match as SportsMatch | undefined)?.pmEvent.startTime ?? (match?.dexEvent.startTime != null ? match.dexEvent.startTime * 1000 : null)),
       sportsLegs: opp.legs.map((leg) => ({
         platform: leg.platform,
         outcomeName: leg.outcomeName,
