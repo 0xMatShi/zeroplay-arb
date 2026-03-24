@@ -200,6 +200,23 @@ export const useDashboardMyTrades = (from?: string, to?: string) => {
   })
 }
 
+export const useDashboardAllTrades = () => {
+  return useQuery({
+    queryKey: ['dashboard', 'all-trades'] as const,
+    queryFn: () => dashboardApi.getTrades(9999, 0),
+    staleTime: 30_000,
+  })
+}
+
+export const useDashboardAllMyTrades = () => {
+  return useQuery({
+    queryKey: ['dashboard', 'all-my-trades'] as const,
+    queryFn: () => dashboardApi.getMyTrades(),
+    enabled: !!localStorage.getItem('apiKey'),
+    staleTime: 30_000,
+  })
+}
+
 export const useCreateDashboardTrade = () => {
   const queryClient = useQueryClient()
   return useMutation({

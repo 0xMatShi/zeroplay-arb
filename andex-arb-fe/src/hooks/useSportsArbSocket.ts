@@ -13,6 +13,7 @@ export type SportsSocketAuthError = 'auth_required' | 'subscription_required' | 
 interface UseSportsArbSocketOptions {
   onNewOpportunity?: (data: SportsOpportunity) => void
   paused?: boolean
+  apiKey?: string | null
 }
 
 export function useSportsArbSocket(options?: UseSportsArbSocketOptions) {
@@ -42,7 +43,7 @@ export function useSportsArbSocket(options?: UseSportsArbSocketOptions) {
   }, [options?.paused, refetchAll])
 
   useEffect(() => {
-    const apiKey = localStorage.getItem('apiKey') || ''
+    const apiKey = options?.apiKey ?? localStorage.getItem('apiKey') ?? ''
 
     const socket = io(`${getBackendUrl()}/sports-arbitrage`, {
       transports: ['websocket'],
@@ -149,7 +150,7 @@ export function useSportsArbSocket(options?: UseSportsArbSocketOptions) {
       socket.disconnect()
       socketRef.current = null
     }
-  }, [queryClient, refetchAll])
+  }, [queryClient, refetchAll, options?.apiKey])
 
   return { isConnected, authError }
 }

@@ -19,6 +19,7 @@ export type SocketAuthError = 'auth_required' | 'subscription_required' | null
 interface UseArbitrageSocketOptions {
   onNewOpportunity?: (data: NewOpportunityEvent) => void
   paused?: boolean
+  apiKey?: string | null
 }
 
 export function useArbitrageSocket(options?: UseArbitrageSocketOptions) {
@@ -49,7 +50,7 @@ export function useArbitrageSocket(options?: UseArbitrageSocketOptions) {
   }, [options?.paused, invalidateAll])
 
   useEffect(() => {
-    const apiKey = localStorage.getItem('apiKey') || ''
+    const apiKey = options?.apiKey ?? localStorage.getItem('apiKey') ?? ''
 
     const socket = io(`${getBackendUrl()}/arbitrage`, {
       transports: ['websocket'],
@@ -191,7 +192,7 @@ export function useArbitrageSocket(options?: UseArbitrageSocketOptions) {
       socket.disconnect()
       socketRef.current = null
     }
-  }, [queryClient, invalidateAll])
+  }, [queryClient, invalidateAll, options?.apiKey])
 
   return { isConnected, authError }
 }

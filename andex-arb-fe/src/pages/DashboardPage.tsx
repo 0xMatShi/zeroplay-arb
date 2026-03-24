@@ -4,12 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { User, X, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  useDashboardStats,
-  useDashboardTrades,
-  useDashboardLeaderboard,
+  useDashboardAllTrades,
+  useDashboardAllMyTrades,
   useDashboardProfile,
-  useDashboardMyStats,
-  useDashboardMyTrades,
   useCreateDashboardTrade,
   useUpdateDashboardTrade,
   useDeleteDashboardTrade,
@@ -112,6 +109,48 @@ function tradeToForm(t: DashboardTrade): TradeFormState {
     winner: t.winner ?? '',
     comment: t.comment ?? '',
   }
+}
+
+type Period = '1d' | '7d' | '30d' | 'all'
+
+function filterByPeriod<T extends { createdAt: string }>(trades: T[], period: Period, isoDate?: string): T[] {
+  if (isoDate) return trades.filter(t => t.createdAt.startsWith(isoDate))
+  if (period === 'all') return trades
+  const days = period === '1d' ? 1 : period === '7d' ? 7 : 30
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+  return trades.filter(t => new Date(t.createdAt).getTime() >= cutoff)
+}
+
+function computeGlobalStats(trades: { profit: number | null }[]) {
+  const profits = trades.map(t => Number(t.profit) || 0)
+  return {
+    periodProfit: profits.reduce((a, b) => a + b, 0),
+    periodTrades: trades.length,
+    periodBestProfit: profits.length > 0 ? Math.max(...profits) : 0,
+  }
+}
+
+function computeMyStats(trades: { profit: number | null }[]) {
+  const profits = trades.map(t => Number(t.profit) || 0)
+  return {
+    totalProfit: profits.reduce((a, b) => a + b, 0),
+    totalTrades: trades.length,
+    bestProfit: profits.length > 0 ? Math.max(...profits) : 0,
+  }
+}
+
+function computeLeaderboard(trades: DashboardTradeWithNickname[]) {
+  const map = new Map<string, { userId: string; nickname: string; totalTrades: number; totalProfit: number; bestProfit: number }>()
+  for (const t of trades) {
+    if (!map.has(t.userId)) {
+      map.set(t.userId, { userId: t.userId, nickname: t.nickname, totalTrades: 0, totalProfit: 0, bestProfit: 0 })
+    }
+    const e = map.get(t.userId)!
+    e.totalTrades++
+    e.totalProfit += Number(t.profit) || 0
+    e.bestProfit = Math.max(e.bestProfit, Number(t.profit) || 0)
+  }
+  return Array.from(map.values()).sort((a, b) => b.totalProfit - a.totalProfit)
 }
 
 interface PendingTrade {
@@ -389,18 +428,15 @@ function NicknameModal({ current, onClose }: { current: string; onClose: () => v
 
 // ── My Profile tab ────────────────────────────────────────────────────────────
 
-type Period = '1d' | '7d' | '30d' | 'all'
-
-function MyProfileTab({ onEditNickname, dateFilter }: { onEditNickname: () => void; dateFilter?: string }) {
+function MyProfileTab({ onEditNickname, trades, isLoading: tradesLoading }: { onEditNickname: () => void; trades: DashboardTrade[]; isLoading?: boolean }) {
   const { t } = useTranslation()
-  const { data: rawMyTrades = [], isLoading: tradesLoading } = useDashboardMyTrades(dateFilter, dateFilter)
   const deleteMutation = useDeleteDashboardTrade()
   const [editTrade, setEditTrade] = useState<DashboardTrade | null>(null)
   const [sortField, setSortField] = useState<SortField | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
   const myTrades = sortField
-    ? [...rawMyTrades].sort((a, b) => {
+    ? [...trades].sort((a, b) => {
         let cmp = 0
         if (sortField === 'profit') {
           cmp = (Number(a.profit) ?? 0) - (Number(b.profit) ?? 0)
@@ -409,7 +445,7 @@ function MyProfileTab({ onEditNickname, dateFilter }: { onEditNickname: () => vo
         }
         return sortDir === 'asc' ? cmp : -cmp
       })
-    : rawMyTrades
+    : trades
 
   function handleSort(field: SortField) {
     if (sortField === field) {
@@ -517,20 +553,14 @@ const PAGE_SIZE = 30
 type SortField = 'profit' | 'date'
 type SortDir = 'asc' | 'desc'
 
-function AllTradesTab({ dateFilter }: { dateFilter?: string }) {
+function AllTradesTab({ trades: allTrades, isLoading }: { trades: DashboardTradeWithNickname[]; isLoading: boolean }) {
   const { t } = useTranslation()
   const [offset, setOffset] = useState(0)
   const [sortField, setSortField] = useState<SortField | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>('desc')
-  const { data, isLoading } = useDashboardTrades(PAGE_SIZE, offset, dateFilter, dateFilter)
 
-  const rawTrades = data?.trades ?? []
-  const total = data?.total ?? 0
-  const totalPages = Math.ceil(total / PAGE_SIZE)
-  const currentPage = Math.floor(offset / PAGE_SIZE)
-
-  const trades = sortField
-    ? [...rawTrades].sort((a, b) => {
+  const sorted = sortField
+    ? [...allTrades].sort((a, b) => {
         let cmp = 0
         if (sortField === 'profit') {
           cmp = (Number(a.profit) ?? 0) - (Number(b.profit) ?? 0)
@@ -539,7 +569,12 @@ function AllTradesTab({ dateFilter }: { dateFilter?: string }) {
         }
         return sortDir === 'asc' ? cmp : -cmp
       })
-    : rawTrades
+    : allTrades
+
+  const total = sorted.length
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const currentPage = Math.floor(offset / PAGE_SIZE)
+  const trades = sorted.slice(offset, offset + PAGE_SIZE)
 
   function handleSort(field: SortField) {
     if (sortField === field) {
@@ -657,9 +692,9 @@ function AllTradesTab({ dateFilter }: { dateFilter?: string }) {
 
 // ── Leaderboard tab ───────────────────────────────────────────────────────────
 
-function LeaderboardTab({ dateFilter }: { dateFilter?: string }) {
+function LeaderboardTab({ trades, isLoading }: { trades: DashboardTradeWithNickname[]; isLoading: boolean }) {
   const { t } = useTranslation()
-  const { data: entries = [], isLoading } = useDashboardLeaderboard(dateFilter, dateFilter)
+  const entries = computeLeaderboard(trades)
 
   return (
     <div>
@@ -731,8 +766,15 @@ export function DashboardPage() {
 
   const isoDate = parseDayMonth(confirmedDate)
   const isCustomRange = !!isoDate
-  const { data: stats } = useDashboardStats(period, isoDate, isoDate)
-  const { data: myStats } = useDashboardMyStats(period, isoDate, isoDate)
+
+  const { data: allTradesData, isLoading: allTradesLoading } = useDashboardAllTrades()
+  const { data: allMyTradesRaw = [], isLoading: myTradesLoading } = useDashboardAllMyTrades()
+  const allPublicTrades = allTradesData?.trades ?? []
+  const filteredPublicTrades = filterByPeriod(allPublicTrades, period, isoDate)
+  const filteredMyTrades = filterByPeriod(allMyTradesRaw, period, isoDate)
+  const stats = computeGlobalStats(filteredPublicTrades)
+  const myStats = computeMyStats(filteredMyTrades)
+
   const { data: whoami } = useWhoami()
   const { data: profileData } = useDashboardProfile()
 
@@ -808,7 +850,7 @@ export function DashboardPage() {
       if (pending.bookmaker1) f.bookmaker1 = pending.bookmaker1
       if (pending.bookmaker2) f.bookmaker2 = pending.bookmaker2
       if (pending.eventName) f.eventName = pending.eventName
-      if (pending.sport) f.sport = pending.sport
+      if (pending.sport) f.sport = pending.sport.toLowerCase()
       if (pending.outcome1) f.outcome1 = pending.outcome1
       if (pending.outcome2) f.outcome2 = pending.outcome2
       if (pending.odds1) f.odds1 = pending.odds1
@@ -849,19 +891,20 @@ export function DashboardPage() {
           </div>
         </div>
         <div className="db-header-right">
-          {!isLoggedIn && (
-            <button className="secondary-button" onClick={() => setShowLoginModal(true)}>
+          <LanguageSwitcher />
+          {!isLoggedIn ? (
+            <button className="header-button-login" onClick={() => setShowLoginModal(true)}>
               {t('andexDashboard.login')}
             </button>
+          ) : (
+            <button
+              type="button"
+              className="gradient-profile-btn"
+              onClick={() => setIsProfileOpen(true)}
+            >
+              {t('andexDashboard.tabProfile')}
+            </button>
           )}
-          <LanguageSwitcher />
-          <button
-            type="button"
-            className="gradient-profile-btn"
-            onClick={() => setIsProfileOpen(true)}
-          >
-            {t('andexDashboard.tabProfile')}
-          </button>
         </div>
         </div>
       </header>
@@ -927,7 +970,7 @@ export function DashboardPage() {
               <div className="db-card-val db-pos">{formatProfit(myStats?.bestProfit)}</div>
             </div>
           </div>
-        ) : stats && (
+        ) : (
           <div className="db-cards">
             <div className="db-card">
               <div className="db-card-label">{t(PERIOD_CARD_LABELS_KEY.profit)}</div>
@@ -983,9 +1026,9 @@ export function DashboardPage() {
 
         {/* Tab content */}
         <div className="db-tab-content">
-          {activeTab === 'all' && <AllTradesTab dateFilter={isoDate} />}
-          {activeTab === 'leaderboard' && <LeaderboardTab dateFilter={isoDate} />}
-          {activeTab === 'profile' && isLoggedIn && <MyProfileTab onEditNickname={() => setShowNicknameModal(true)} dateFilter={isoDate} />}
+          {activeTab === 'all' && <AllTradesTab key={`${period}-${isoDate ?? ''}`} trades={filteredPublicTrades} isLoading={allTradesLoading} />}
+          {activeTab === 'leaderboard' && <LeaderboardTab trades={filteredPublicTrades} isLoading={allTradesLoading} />}
+          {activeTab === 'profile' && isLoggedIn && <MyProfileTab onEditNickname={() => setShowNicknameModal(true)} trades={filteredMyTrades} isLoading={myTradesLoading} />}
         </div>
       </main>
 

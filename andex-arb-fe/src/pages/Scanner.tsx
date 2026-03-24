@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Calculator, ExternalLink, Pause, Pencil, Pin, Play, User, Volume2, VolumeX } from 'lucide-react'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
+import { ApiKeyModal } from '../components/ApiKeyModal'
 import { useOpportunities, useOrderBook, useSubscriptionStatus, useActiveSubscription, useSportsOpportunities, useWhoami, useDashboardProfile, useUpdateDashboardNickname, queryKeys } from '../api/hooks'
 import { useQueryClient } from '@tanstack/react-query'
 import { useArbitrageSocket } from '../hooks/useArbitrageSocket'
@@ -532,6 +533,7 @@ export function Scanner() {
   const [isPaused, setIsPaused] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [showLoginModal, setShowLoginModal] = useState(false)
   const [editingNick, setEditingNick] = useState(false)
   const [nickInput, setNickInput] = useState('')
   const { data: profileData } = useDashboardProfile()
@@ -560,7 +562,8 @@ export function Scanner() {
   useWhoami()
   const { data: subStatus, isLoading: isSubLoading } = useSubscriptionStatus()
   const hasSubscription = subStatus?.active === true
-  const noApiKey = !localStorage.getItem('apiKey')
+  const [apiKeyState, setApiKeyState] = useState(() => localStorage.getItem('apiKey'))
+  const noApiKey = !apiKeyState
   const { data: activeSub } = useActiveSubscription()
 
   // Live countdown for profile panel (updates every second)
@@ -690,6 +693,7 @@ export function Scanner() {
   const { isConnected, authError: wsAuthError } = useArbitrageSocket({
     onNewOpportunity: handleNewOpportunity,
     paused: isPaused,
+    apiKey: apiKeyState,
   })
 
   // PM-BM real-time WebSocket
@@ -700,6 +704,7 @@ export function Scanner() {
   const { authError: sportsWsAuthError } = useSportsArbSocket({
     onNewOpportunity: handleNewSportsOpportunity,
     paused: isPaused,
+    apiKey: apiKeyState,
   })
 
   const effectiveBlockedReason = blockedReason ?? wsAuthError ?? sportsWsAuthError
@@ -1006,13 +1011,19 @@ export function Scanner() {
             </button>
           </div>
           <LanguageSwitcher />
-          <button
-            type="button"
-            className="gradient-profile-btn"
-            onClick={() => setIsProfileOpen(true)}
-          >
-            {t('andexDashboard.tabProfile') || 'Profile'}
-          </button>
+          {noApiKey ? (
+            <button className="header-button-login" onClick={() => setShowLoginModal(true)}>
+              {t('header.login')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="gradient-profile-btn"
+              onClick={() => setIsProfileOpen(true)}
+            >
+              {t('andexDashboard.tabProfile') || 'Profile'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1030,7 +1041,13 @@ export function Scanner() {
             }</p>
             <button
               className="primary-button"
-              onClick={() => navigate(effectiveBlockedReason === 'subscription_required' ? '/dashboard' : '/')}
+              onClick={() => {
+                if (effectiveBlockedReason === 'subscription_required') {
+                  navigate('/dashboard')
+                } else {
+                  setShowLoginModal(true)
+                }
+              }}
             >
               {effectiveBlockedReason === 'subscription_required'
                 ? t('scanner.goToPayment')
@@ -1491,6 +1508,13 @@ export function Scanner() {
           </div>
         </div>
       </div>
+      {showLoginModal && (
+        <ApiKeyModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          onSuccess={() => { setShowLoginModal(false); setApiKeyState(localStorage.getItem('apiKey')) }}
+        />
+      )}
     </div>
   )
 }
