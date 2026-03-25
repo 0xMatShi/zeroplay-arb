@@ -541,6 +541,7 @@
 .db-bm-pinnacle   { background: rgba(0, 149, 1, 0.15); color: #4ade80; border: 1px solid rgba(0, 149, 1, 0.3); }
 .db-bm-stake      { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
 .db-bm-cloudbet   { background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); }
+.db-bm-pari       { background: rgba(13, 199, 176, 0.15); color: #0dc7b0; border: 1px solid rgba(13, 199, 176, 0.3); }
 .db-bm-other      { background: rgba(176, 176, 176, 0.1); color: #b0b0b0; border: 1px solid rgba(176, 176, 176, 0.2); }
 
 .db-odds {

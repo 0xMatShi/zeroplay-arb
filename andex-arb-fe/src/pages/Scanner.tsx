@@ -390,8 +390,8 @@ function SportsOpportunityCard({
 
           {/* Right platform box (bookmaker) */}
           <div className="sports-platform-box">
-            <div className={`sports-platform-label sports-platform-label--${dexLeg?.platform === 'pinnacle' ? 'pinnacle' : dexLeg?.platform === 'stake' ? 'stake' : dexLeg?.platform === 'cloudbet' ? 'cloudbet' : 'dex'}`}>
-              {dexLeg?.platform === 'pinnacle' ? 'PINNACLE' : dexLeg?.platform === 'stake' ? 'STAKE' : dexLeg?.platform === 'cloudbet' ? 'CLOUDBET' : 'DEXSPORT'}
+            <div className={`sports-platform-label sports-platform-label--${dexLeg?.platform === 'pinnacle' ? 'pinnacle' : dexLeg?.platform === 'stake' ? 'stake' : dexLeg?.platform === 'cloudbet' ? 'cloudbet' : dexLeg?.platform === 'pari' ? 'pari' : 'dex'}`}>
+              {dexLeg?.platform === 'pinnacle' ? 'PINNACLE' : dexLeg?.platform === 'stake' ? 'STAKE' : dexLeg?.platform === 'cloudbet' ? 'CLOUDBET' : dexLeg?.platform === 'pari' ? 'PARI' : 'DEXSPORT'}
             </div>
             <div className="sports-outcome-name">{dexLeg?.outcomeName ?? '—'}</div>
             <div className="sports-amounts-inline">
@@ -1271,6 +1271,7 @@ export function Scanner() {
                           { key: 'pinnacle',          label: 'Polymarket → Pinnacle'  },
                           { key: 'stake',             label: 'Polymarket → Stake'     },
                           { key: 'cloudbet',          label: 'Polymarket → Cloudbet'  },
+                          { key: 'pari',              label: 'Polymarket → Pari'      },
                           { key: 'dexsport-pinnacle', label: 'Dexsport → Pinnacle'    },
                           { key: 'dexsport-stake',    label: 'Dexsport → Stake'       },
                           { key: 'dexsport-cloudbet', label: 'Dexsport → Cloudbet'    },
@@ -1281,7 +1282,7 @@ export function Scanner() {
                               key={key}
                               className={`sidebar-mode-button ${isActive ? 'active' : ''}`}
                               onClick={() => setPlatformPairFilter((prev) => {
-                                const all = ['dexsport', 'pinnacle', 'stake', 'cloudbet', 'dexsport-pinnacle', 'dexsport-stake', 'dexsport-cloudbet']
+                                const all = ['dexsport', 'pinnacle', 'stake', 'cloudbet', 'pari', 'dexsport-pinnacle', 'dexsport-stake', 'dexsport-cloudbet']
                                 const next = new Set(prev.size === 0 ? all : prev)
                                 if (next.has(key)) next.delete(key); else next.add(key)
                                 if (next.size === all.length) return new Set()

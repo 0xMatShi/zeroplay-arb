@@ -21,7 +21,7 @@ import { LanguageSwitcher } from '../components/LanguageSwitcher'
 import { SmokeCanvas } from '../components/SmokeCanvas'
 import './DashboardPage.css'
 
-const PLATFORMS = ['Polymarket', 'DexSport', 'Pinnacle', 'Stake', 'Cloudbet']
+const PLATFORMS = ['Polymarket', 'DexSport', 'Pinnacle', 'Stake', 'Cloudbet', 'Pari']
 
 function platformClass(name: string): string {
   const l = name.toLowerCase()
@@ -29,6 +29,7 @@ function platformClass(name: string): string {
   if (l.includes('pinnacle')) return 'pinnacle'
   if (l.includes('stake')) return 'stake'
   if (l.includes('cloudbet')) return 'cloudbet'
+  if (l.includes('pari')) return 'pari'
   if (l.includes('dexsport')) return 'dex'
   return 'other'
 }

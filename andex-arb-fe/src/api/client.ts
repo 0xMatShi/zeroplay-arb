@@ -163,6 +163,14 @@ export const sportsArbApi = {
     })
     return handleResponse(response)
   },
+
+  getBybitRate: async (): Promise<{ rate: number | null; updatedAt: string | null }> => {
+    const response = await fetch(`${getBackendUrl()}/sports-arbitrage/bybit-rate`, {
+      method: 'GET',
+      headers: createHeaders(true),
+    })
+    return handleResponse(response)
+  },
 }
 
 /**

@@ -69,6 +69,14 @@
   color: #f59e0b;
 }
 
+.calc-box-label--pari {
+  color: #0dc7b0;
+}
+
+.calc-box--pari {
+  border-color: rgba(13, 199, 176, 0.2);
+}
+
 /* Outcome name — same as .sports-outcome-name */
 .calc-outcome {
   font-family: 'Inter', -apple-system, monospace;
@@ -271,6 +279,24 @@
 .calc-result-val--neg {
   color: #F472B6;
   text-shadow: 0 0 10px rgba(244, 114, 182, 0.7), 0 0 20px rgba(244, 114, 182, 0.4);
+}
+
+/* Ruble amount (Pari only) */
+.calc-rub-amount {
+  font-family: 'Inter', -apple-system, monospace;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0dc7b0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calc-rub-rate {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(13, 199, 176, 0.5);
+  letter-spacing: 0.3px;
 }
 
 /* Dashboard button */

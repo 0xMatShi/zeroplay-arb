@@ -1,13 +1,17 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SportsScheduler } from '../scheduler/sports-scheduler';
+import { BybitP2PService } from '../services/bybit-p2p.service';
 import { SubscriptionGuard } from '../../../auth/guards/subscription.guard';
 
 @ApiTags('sports-arbitrage')
 @Controller('sports-arbitrage')
 @ApiBearerAuth()
 export class SportsArbController {
-  constructor(private readonly scheduler: SportsScheduler) {}
+  constructor(
+    private readonly scheduler: SportsScheduler,
+    private readonly bybitP2P: BybitP2PService,
+  ) {}
 
   @Get('opportunities')
   @UseGuards(SubscriptionGuard)
@@ -50,6 +54,8 @@ export class SportsArbController {
           bookmakerUrl = match.dexEvent.url ?? 'https://stake3017.com/en/sports';
         } else if (match?.bookmakerPlatform === 'cloudbet') {
           bookmakerUrl = match.dexEvent.url ?? 'https://www.cloudbet.com/en/sports';
+        } else if (match?.bookmakerPlatform === 'pari') {
+          bookmakerUrl = match.dexEvent.url ?? 'https://pari.ru/sports';
         } else if (match) {
           const rawId = match.dexEvent.eventId.includes('.') ? match.dexEvent.eventId.split('.')[1] : match.dexEvent.eventId;
           const nameSlug = match.dexEvent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -60,6 +66,9 @@ export class SportsArbController {
         const platformName = (platform: string) => {
           if (platform === 'polymarket') return 'Polymarket';
           if (platform === 'pinnacle') return 'Pinnacle';
+          if (platform === 'stake') return 'Stake';
+          if (platform === 'cloudbet') return 'Cloudbet';
+          if (platform === 'pari') return 'Pari';
           return 'DexSport';
         };
 
@@ -110,6 +119,13 @@ export class SportsArbController {
       limit: opps.length,
       offset: 0,
     };
+  }
+
+  @Get('bybit-rate')
+  @UseGuards(SubscriptionGuard)
+  @ApiOperation({ summary: 'Bybit P2P USDT/RUB buy rate' })
+  getBybitRate() {
+    return this.bybitP2P.getRate();
   }
 
   @Get('stats')

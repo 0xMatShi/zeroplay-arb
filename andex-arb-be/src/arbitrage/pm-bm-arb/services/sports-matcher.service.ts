@@ -5,6 +5,7 @@ import { DexsportAdapter } from '../adapters/dexsport/dexsport.adapter';
 import { PinnacleAdapter } from '../adapters/pinnacle/pinnacle.adapter';
 import { StakeAdapter } from '../adapters/stake/stake.adapter';
 import { CloudbetAdapter } from '../adapters/cloudbet/cloudbet.adapter';
+import { PariAdapter } from '../adapters/pari/pari.adapter';
 import {
   SportsMatch,
   MatchedMarketPair,
@@ -435,6 +436,7 @@ export class SportsMatcher {
     private readonly pinnacleAdapter: PinnacleAdapter,
     private readonly stakeAdapter: StakeAdapter,
     private readonly cloudbetAdapter: CloudbetAdapter,
+    private readonly pariAdapter: PariAdapter,
   ) {}
 
   findMatches(): SportsMatch[] {
@@ -444,12 +446,13 @@ export class SportsMatcher {
     const pinnacleMatches = this.matchBookmakerEvents(this.pinnacleAdapter.getEvents(), pmEvents, 'pinnacle');
     const stakeMatches    = this.matchBookmakerEvents(this.stakeAdapter.getEvents(),    pmEvents, 'stake');
     const cloudbetMatches = this.matchBookmakerEvents(this.cloudbetAdapter.getEvents(), pmEvents, 'cloudbet');
+    const pariMatches     = this.matchBookmakerEvents(this.pariAdapter.getEvents(),     pmEvents, 'pari');
 
-    const all = [...dexMatches, ...pinnacleMatches, ...stakeMatches, ...cloudbetMatches];
+    const all = [...dexMatches, ...pinnacleMatches, ...stakeMatches, ...cloudbetMatches, ...pariMatches];
     const totalMarkets = all.reduce((s, p) => s + p.matchedMarkets.length, 0);
     this.logger.log(
       `SportsMatcher: ${pmEvents.length} PM | dexsport=${dexMatches.length} pinnacle=${pinnacleMatches.length}` +
-      ` stake=${stakeMatches.length} cloudbet=${cloudbetMatches.length}` +
+      ` stake=${stakeMatches.length} cloudbet=${cloudbetMatches.length} pari=${pariMatches.length}` +
       ` → ${all.length} matched events, ${totalMarkets} matched markets`,
     );
     return all;
@@ -576,7 +579,7 @@ export class SportsMatcher {
   private matchBookmakerEvents(
     bmEvents: DexSportsEvent[],
     pmEvents: PmSportsEvent[],
-    platform: 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet',
+    platform: 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet' | 'pari',
   ): SportsMatch[] {
     // Resolve dexsport sport slugs to canonical sport keys.
     // Pinnacle and Stake already set the canonical sportKey — DEX_SLUG_TO_SPORT is a no-op for them.

@@ -76,7 +76,7 @@ export interface OpportunitiesResponse {
 
 // Sports Arbitrage (PM vs DexSport)
 export interface SportsOpportunityLeg {
-  platform: 'polymarket' | 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet'
+  platform: 'polymarket' | 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet' | 'pari'
   outcomeName: string
   probability: number       // 0..1 (price in $; cents = *100)
   decimalOdds: number       // 1/probability

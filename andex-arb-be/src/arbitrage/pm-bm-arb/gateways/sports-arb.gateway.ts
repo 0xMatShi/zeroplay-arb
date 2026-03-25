@@ -128,6 +128,10 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       return dexEvent.url ?? 'https://www.cloudbet.com/en/sports';
     }
 
+    if (bookmakerPlatform === 'pari') {
+      return dexEvent.url ?? 'https://pari.ru/sports';
+    }
+
     // DexSport URL: https://dexsport.io/{esports|sports}/{sport}/{name-slug}-{id}/bets/
     const rawId = dexEvent.eventId.includes('.')
       ? dexEvent.eventId.split('.')[1]
@@ -158,6 +162,7 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       if (platform === 'pinnacle') return 'Pinnacle';
       if (platform === 'stake') return 'Stake';
       if (platform === 'cloudbet') return 'Cloudbet';
+      if (platform === 'pari') return 'Pari';
       return 'DexSport';
     };
 

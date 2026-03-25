@@ -89,7 +89,7 @@ export interface SportsMatch {
   similarity: number;
   matchedMarkets: MatchedMarketPair[];
   matchedAt: number;
-  bookmakerPlatform: 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet';
+  bookmakerPlatform: 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet' | 'pari';
 }
 
 // ── BM-BM matched pair ───────────────────────────────────────
@@ -116,7 +116,7 @@ export interface BmBmMatch {
 // ── Arbitrage ────────────────────────────────────────────────
 
 export interface SportsArbLeg {
-  platform: 'polymarket' | 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet';
+  platform: 'polymarket' | 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet' | 'pari';
   outcomeName: string;
   /** Probability 0..1 (cost per $1 payout) */
   probability: number;

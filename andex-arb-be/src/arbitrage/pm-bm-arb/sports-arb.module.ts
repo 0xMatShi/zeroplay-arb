@@ -6,10 +6,12 @@ import { DexsportAdapter } from './adapters/dexsport/dexsport.adapter';
 import { PinnacleAdapter } from './adapters/pinnacle/pinnacle.adapter';
 import { StakeAdapter } from './adapters/stake/stake.adapter';
 import { CloudbetAdapter } from './adapters/cloudbet/cloudbet.adapter';
+import { PariAdapter } from './adapters/pari/pari.adapter';
 
 // Services
 import { SportsMatcher } from './services/sports-matcher.service';
 import { SportsArbScanner } from './services/sports-arb-scanner.service';
+import { BybitP2PService } from './services/bybit-p2p.service';
 
 // Scheduler
 import { SportsScheduler } from './scheduler/sports-scheduler';
@@ -46,10 +48,12 @@ import { SubscriptionsModule } from '../../subscriptions/subscriptions.module';
     PinnacleAdapter,
     StakeAdapter,
     CloudbetAdapter,
+    PariAdapter,
 
     // Pipeline services
     SportsMatcher,
     SportsArbScanner,
+    BybitP2PService,
 
     // Schedulers
     SportsScheduler,

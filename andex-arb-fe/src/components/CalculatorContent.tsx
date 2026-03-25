@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Copy, Check, PenLine } from 'lucide-react'
+import { sportsArbApi } from '../api/client'
 import '../pages/Calculator.css'
 
 export interface CalcParams {
@@ -24,6 +25,7 @@ function platformLabel(platform: string | undefined): string {
   if (platform === 'pinnacle') return 'Pinnacle'
   if (platform === 'stake') return 'Stake'
   if (platform === 'cloudbet') return 'Cloudbet'
+  if (platform === 'pari') return 'Pari'
   if (platform === 'dexsport') return 'DexSport'
   if (platform === 'betboom') return 'Betboom'
   if (platform === 'kalshi') return 'Kalshi'
@@ -35,6 +37,7 @@ function platformClass(platform: string | undefined): string {
   if (platform === 'pinnacle') return 'pinnacle'
   if (platform === 'stake') return 'stake'
   if (platform === 'cloudbet') return 'cloudbet'
+  if (platform === 'pari') return 'pari'
   return 'dex'
 }
 
@@ -53,6 +56,14 @@ export function CalculatorContent({
   sport,
 }: CalcParams) {
   const isBmBm = !!initLeftOdds
+  const isPari = dexPlatform === 'pari'
+
+  // ── Bybit P2P rate (only for Pari) ───────────────────────────
+  const [bybitRate, setBybitRate] = useState<number | null>(null)
+  useEffect(() => {
+    if (!isPari) return
+    sportsArbApi.getBybitRate().then(r => setBybitRate(r.rate)).catch(() => {})
+  }, [isPari])
 
   // ── PM-BM state ──────────────────────────────────────────────
   const [pmPrice, setPmPrice] = useState(initPmPrice)
@@ -63,6 +74,21 @@ export function CalculatorContent({
   const [pmAmount, setPmAmount] = useState(initPmAmount)
   const [dexAmount, setDexAmount] = useState(initDexAmount)
   const [lastEdited, setLastEdited] = useState<'pm' | 'dex' | null>(null)
+
+  // ── Ruble input (Pari only) ───────────────────────────────────
+  // rubInput is what the user sees/types; dexAmount stays in USD for all calculations
+  const [rubInput, setRubInput] = useState('')
+  useEffect(() => {
+    if (!isPari || !bybitRate) return
+    const usd = parseFloat(dexAmount)
+    if (!isNaN(usd) && usd > 0) setRubInput(Math.round(usd * bybitRate).toString())
+  }, [bybitRate]) // only init once when rate loads
+
+  const toRub = (usdStr: string) => {
+    if (!bybitRate) return
+    const usd = parseFloat(usdStr)
+    setRubInput(isNaN(usd) || usd <= 0 ? '' : Math.round(usd * bybitRate).toString())
+  }
 
   // ── BM-BM state ──────────────────────────────────────────────
   const [leftOddsVal, setLeftOddsVal] = useState(initLeftOdds ?? '')
@@ -103,7 +129,9 @@ export function CalculatorContent({
   const handlePmAmount = (v: string) => {
     setPmAmount(v)
     setLastEdited('pm')
-    setDexAmount(isBmBm ? calcRightFromLeft(v) : calcDexFromPm(v))
+    const newDex = isBmBm ? calcRightFromLeft(v) : calcDexFromPm(v)
+    setDexAmount(newDex)
+    toRub(newDex)
   }
 
   const handleDexAmount = (v: string) => {
@@ -112,11 +140,26 @@ export function CalculatorContent({
     setPmAmount(isBmBm ? calcLeftFromRight(v) : calcPmFromDex(v))
   }
 
+  // Ruble input handler (Pari only): converts rub → usd → triggers normal dex logic
+  const handleRubInput = (v: string) => {
+    setRubInput(v)
+    if (!bybitRate) return
+    const usd = parseFloat(v) / bybitRate
+    const usdStr = isNaN(usd) || usd <= 0 ? '' : usd.toFixed(2)
+    setDexAmount(usdStr)
+    setLastEdited('dex')
+    setPmAmount(isBmBm ? calcLeftFromRight(usdStr) : calcPmFromDex(usdStr))
+  }
+
   const handlePmPrice = (v: string) => {
     setPmPrice(v)
     const p = parseFloat(v) / 100
     if (lastEdited === 'dex' && dexAmount) setPmAmount(calcPmFromDex(dexAmount, p, dexO))
-    else if (lastEdited === 'pm' && pmAmount) setDexAmount(calcDexFromPm(pmAmount, p, dexO))
+    else if (lastEdited === 'pm' && pmAmount) {
+      const newDex = calcDexFromPm(pmAmount, p, dexO)
+      setDexAmount(newDex)
+      toRub(newDex)
+    }
   }
 
   const handleDexOdds = (v: string) => {
@@ -124,10 +167,18 @@ export function CalculatorContent({
     const o = parseFloat(v)
     if (isBmBm) {
       if (lastEdited === 'dex' && dexAmount) setPmAmount(calcLeftFromRight(dexAmount, leftO, o))
-      else if (lastEdited === 'pm' && pmAmount) setDexAmount(calcRightFromLeft(pmAmount, leftO, o))
+      else if (lastEdited === 'pm' && pmAmount) {
+        const newDex = calcRightFromLeft(pmAmount, leftO, o)
+        setDexAmount(newDex)
+        toRub(newDex)
+      }
     } else {
       if (lastEdited === 'dex' && dexAmount) setPmAmount(calcPmFromDex(dexAmount, pmProb, o))
-      else if (lastEdited === 'pm' && pmAmount) setDexAmount(calcDexFromPm(pmAmount, pmProb, o))
+      else if (lastEdited === 'pm' && pmAmount) {
+        const newDex = calcDexFromPm(pmAmount, pmProb, o)
+        setDexAmount(newDex)
+        toRub(newDex)
+      }
     }
   }
 
@@ -135,7 +186,11 @@ export function CalculatorContent({
     setLeftOddsVal(v)
     const lo = parseFloat(v)
     if (lastEdited === 'dex' && dexAmount) setPmAmount(calcLeftFromRight(dexAmount, lo, rightO))
-    else if (lastEdited === 'pm' && pmAmount) setDexAmount(calcRightFromLeft(pmAmount, lo, rightO))
+    else if (lastEdited === 'pm' && pmAmount) {
+      const newDex = calcRightFromLeft(pmAmount, lo, rightO)
+      setDexAmount(newDex)
+      toRub(newDex)
+    }
   }
 
   // ── Profit calc ──────────────────────────────────────────────
@@ -273,9 +328,16 @@ export function CalculatorContent({
           <div className="calc-outcome">{dexOutcome || '—'}</div>
           <div className="calc-field">
             <div className="calc-input-wrap">
-              <span className="calc-input-prefix">$</span>
-              <input className="calc-input calc-input--prefixed" type="number" min="0" placeholder="0.00"
-                value={dexAmount} onChange={(e) => handleDexAmount(e.target.value)} />
+              {isPari && bybitRate
+                ? <span className="calc-input-prefix">₽</span>
+                : <span className="calc-input-prefix">$</span>
+              }
+              {isPari && bybitRate
+                ? <input className="calc-input calc-input--prefixed" type="number" min="0" placeholder="0"
+                    value={rubInput} onChange={(e) => handleRubInput(e.target.value)} />
+                : <input className="calc-input calc-input--prefixed" type="number" min="0" placeholder="0.00"
+                    value={dexAmount} onChange={(e) => handleDexAmount(e.target.value)} />
+              }
             </div>
           </div>
           <div className="calc-field">
@@ -285,6 +347,12 @@ export function CalculatorContent({
                 value={dexOddsVal} onChange={(e) => handleDexOdds(e.target.value)} />
             </div>
           </div>
+          {isPari && bybitRate && dexAmount && parseFloat(dexAmount) > 0 && (
+            <div className="calc-rub-amount">
+              ≈ ${parseFloat(dexAmount).toFixed(2)}
+              <span className="calc-rub-rate">{bybitRate} ₽/$</span>
+            </div>
+          )}
         </div>
       </div>
 
