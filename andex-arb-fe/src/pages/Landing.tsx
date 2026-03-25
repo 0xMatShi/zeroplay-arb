@@ -59,7 +59,7 @@ export function Landing() {
           </Link>
           <nav className="header-nav">
             <div className="nav-links">
-              <button onClick={() => navigate('/dashboard')} className="nav-link nav-link-button" data-text={t('header.leaderboard')}>{t('header.leaderboard')}</button>
+              {/* <button onClick={() => navigate('/dashboard')} className="nav-link nav-link-button" data-text={t('header.leaderboard')}>{t('header.leaderboard')}</button> */}
               <button onClick={() => navigate('/scanner')} className="nav-link nav-link-button" data-text={t('header.scanner')}>{t('header.scanner')}</button>
               <button onClick={() => navigate('/pricing')} className="nav-link nav-link-button" data-text={t('header.pricing')}>{t('header.pricing')}</button>
             </div>
