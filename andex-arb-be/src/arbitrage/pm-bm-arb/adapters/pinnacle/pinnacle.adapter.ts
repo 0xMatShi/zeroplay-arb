@@ -762,10 +762,12 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         const ou = entry as import('./pinnacle.types').PinnacleOverUnder;
         if (ou.unavailable || ou.offline) continue;
         const points   = parseFloat(ou.points);
-        const overOdds = parseFloat(ou.overOdds);
-        const underOdds = parseFloat(ou.underOdds);
+        // Pinnacle returns totals/spreads prices in Hong Kong odds (profit per unit staked).
+        // Convert to decimal: decimal = hk + 1
+        const overOdds = parseFloat(ou.overOdds) + 1;
+        const underOdds = parseFloat(ou.underOdds) + 1;
         if (!isFinite(points) || !isFinite(overOdds) || !isFinite(underOdds)) continue;
-        if (overOdds <= 0 || underOdds <= 0) continue;
+        if (overOdds <= 1 || underOdds <= 1) continue;
         markets.push({
           marketId:   `${eventId}_p0_ou_${ou.points}`,
           marketType: totalsType,
@@ -786,11 +788,12 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         if (hdp.unavailable || hdp.offline) continue;
         const homeSpreadNum = parseFloat(hdp.homeSpread);
         const awaySpreadNum = parseFloat(hdp.awaySpread);
-        const homeOdds      = parseFloat(hdp.homeOdds);
-        const awayOdds      = parseFloat(hdp.awayOdds);
+        // Pinnacle returns handicap prices in Hong Kong odds. Convert to decimal: decimal = hk + 1
+        const homeOdds      = parseFloat(hdp.homeOdds) + 1;
+        const awayOdds      = parseFloat(hdp.awayOdds) + 1;
         if (!isFinite(homeSpreadNum) || !isFinite(awaySpreadNum) ||
             !isFinite(homeOdds) || !isFinite(awayOdds)) continue;
-        if (homeOdds <= 0 || awayOdds <= 0) continue;
+        if (homeOdds <= 1 || awayOdds <= 1) continue;
         // Normalise spread strings: always include explicit sign (+/-)
         const homeSpreadStr = homeSpreadNum >= 0 ? `+${homeSpreadNum}` : `${homeSpreadNum}`;
         const awaySpreadStr = awaySpreadNum >= 0 ? `+${awaySpreadNum}` : `${awaySpreadNum}`;
