@@ -65,6 +65,8 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
   // ── Callbacks (same interface as DexsportAdapter) ────────────
   onPriceUpdate: (() => void) | null = null;
   onAllMarketsReady: (() => void) | null = null;
+  /** Called when a 1006 close triggers an emergency re-login (before the new login starts). */
+  onSessionExpired: (() => void) | null = null;
 
   /** Market IDs currently in matched pairs — used to filter debug logs */
   trackedMarketIds: Set<string> = new Set();
@@ -106,6 +108,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private evictTimer: ReturnType<typeof setInterval> | null = null;
   private destroyed = false;
+  private reloginInProgress = false;
 
   constructor() {
     const proxyUrl = process.env.PINNACLE_PROXY_URL;
@@ -371,8 +374,16 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       // so intentional close will have a different (or no) entry here.
       if (this.wsConnections.get(sportId) !== ws) return;
       this.wsConnections.delete(sportId);
-      this.logger.warn(`Pinnacle: [${sportLabel}] WS closed (code=${code}), reconnecting in ${WS_RECONNECT_DELAY_MS}ms`);
-      if (!this.destroyed) {
+
+      if (this.destroyed) return;
+
+      if (code === 1006) {
+        // Abnormal close — session cookies likely expired. Trigger full re-login instead of
+        // a simple per-sport reconnect, which would fail with the same stale credentials.
+        this.logger.warn(`Pinnacle: [${sportLabel}] WS closed (code=1006) — session expired, triggering re-login`);
+        this.triggerRelogin();
+      } else {
+        this.logger.warn(`Pinnacle: [${sportLabel}] WS closed (code=${code}), reconnecting in ${WS_RECONNECT_DELAY_MS}ms`);
         setTimeout(() => this.connectSport(sportId), WS_RECONNECT_DELAY_MS);
       }
     });
@@ -383,6 +394,26 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       try { ws.terminate(); } catch {}
       this.wsConnections.delete(sportId);
     }
+  }
+
+  /**
+   * Called when any WS closes with code 1006 (session expired).
+   * Re-runs the full login → connectAll cycle so fresh cookies are used.
+   * Concurrent 1006 errors from other sports are ignored once re-login is in flight.
+   */
+  private triggerRelogin(): void {
+    if (this.reloginInProgress) return;
+    this.reloginInProgress = true;
+    this.logger.warn('Pinnacle: starting emergency re-login (1006 session expiry)');
+
+    this.clearCache();
+    this.closeAll();
+    this.onSessionExpired?.();
+
+    this.login()
+      .then(() => { this.connectAll(); })
+      .catch((err: any) => { this.logger.error(`Pinnacle: emergency re-login failed — ${err.message}`); })
+      .finally(() => { this.reloginInProgress = false; });
   }
 
   /** Send SUBSCRIBE messages for a given sportId to a specific WS instance. */

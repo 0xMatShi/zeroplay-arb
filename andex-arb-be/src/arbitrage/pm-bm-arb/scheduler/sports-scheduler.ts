@@ -126,6 +126,10 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       this.pinnacleReady = true;
       this.checkAndTriggerMatchCycle('pinnacle');
     };
+    this.pinnacleAdapter.onSessionExpired = () => {
+      this.logger.warn('Pinnacle: session expired — resetting pinnacleReady until re-login completes');
+      this.pinnacleReady = false;
+    };
     this.stakeAdapter.onAllMarketsReady = () => {
       this.stakeReady = true;
       this.checkAndTriggerMatchCycle('stake');
@@ -147,6 +151,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.dexAdapter.onAllMarketsReady = null;
     this.pinnacleAdapter.onPriceUpdate = null;
     this.pinnacleAdapter.onAllMarketsReady = null;
+    this.pinnacleAdapter.onSessionExpired = null;
     this.stakeAdapter.onPriceUpdate = null;
     this.stakeAdapter.onAllMarketsReady = null;
     this.cloudbetAdapter.onPriceUpdate = null;
