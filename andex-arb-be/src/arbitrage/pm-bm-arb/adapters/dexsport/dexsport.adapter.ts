@@ -111,8 +111,6 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
   private readyFired = false;
   /** Timeout to fire ready if not all phase 2 markets respond */
   private readyDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Periodic resubscription interval — resends join for all subscribed markets every 5s */
-  private marketRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
   // ── Callbacks ────────────────────────────────────────────────
   /** Called when any market price changes (set by scheduler) */
@@ -228,8 +226,6 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
       this.send(['join', 'market', newIds]);
       this.logger.log(`DexSport: subscribed to ${newIds.length} matched market(s)`);
     }
-    // Start periodic resubscription now that we're in the arbitrage phase
-    this.startMarketRefresh();
   }
 
   // ── Main WebSocket lifecycle ───────────────────────────────────
@@ -290,7 +286,6 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
 
       ws.on('close', (code: number) => {
         if (this.ws !== ws) return;
-        if (this.marketRefreshTimer) { clearInterval(this.marketRefreshTimer); this.marketRefreshTimer = null; }
         this.logger.warn(`DexSport WebSocket closed (code=${code}), reconnecting in ${WS_RECONNECT_DELAY_MS}ms`);
         if (!this.destroyed) {
           this.reconnectTimer = setTimeout(() => this.reconnect(), WS_RECONNECT_DELAY_MS);
@@ -318,15 +313,6 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     if (this.eventSettleTimer) { clearTimeout(this.eventSettleTimer); this.eventSettleTimer = null; }
     if (this.phase1TimeoutTimer) { clearTimeout(this.phase1TimeoutTimer); this.phase1TimeoutTimer = null; }
     if (this.readyDebounceTimer) { clearTimeout(this.readyDebounceTimer); this.readyDebounceTimer = null; }
-    if (this.marketRefreshTimer) { clearInterval(this.marketRefreshTimer); this.marketRefreshTimer = null; }
-  }
-
-  private startMarketRefresh(): void {
-    if (this.marketRefreshTimer) clearInterval(this.marketRefreshTimer);
-    this.marketRefreshTimer = setInterval(() => {
-      const ids = [...this.subscribedMarkets];
-      if (ids.length > 0) this.send(['join', 'market', ids]);
-    }, 3_000);
   }
 
   private send(msg: unknown): void {
@@ -493,8 +479,26 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     const allFrozen = (data.outcomes ?? []).length > 0 &&
       (data.outcomes ?? []).every((o) => o.isFrozen || (o.price ?? 0) === 0);
 
-    // Update internal cache
+    // ── Update logging (after initial snapshot) ──────────────
     const existingMarket = cached.markets.get(marketId);
+    if (this.readyFired && existingMarket && this.trackedMarketIds.has(marketId)) {
+      const changeLines: string[] = [];
+      for (const newO of outcomes) {
+        const oldO = existingMarket.outcomes.find((o) => o.name === newO.name);
+        if (!oldO || oldO.price !== newO.price) {
+          changeLines.push(`  ${newO.name}: ${oldO?.price ?? '—'} → ${newO.price}`);
+        }
+      }
+      if (changeLines.length) {
+        const eventName = this.publicEvents.get(eventId)?.name ?? eventId;
+        const marketName = data.name ?? existingMarket.name ?? marketId;
+        this.logger.log(
+          `[DexSport WS] UPDATE ${marketName} (${eventName})\n` + changeLines.join('\n'),
+        );
+      }
+    }
+
+    // Update internal cache
     if (existingMarket) {
       if (data.name) existingMarket.name = data.name;
       existingMarket.outcomes = outcomes;
@@ -664,8 +668,12 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     if (this.readyFired) return;
     this.readyFired = true;
     if (this.readyDebounceTimer) { clearTimeout(this.readyDebounceTimer); this.readyDebounceTimer = null; }
+
+    let totalMarkets = 0;
+    for (const cached of this.eventCache.values()) totalMarkets += cached.markets.size;
+
     this.logger.log(
-      `DexSport: all markets ready — ${this.eventMatchWinnerFound.size} events confirmed`,
+      `[DexSport WS] snapshot complete — ${this.eventMatchWinnerFound.size} events, ${totalMarkets} markets received`,
     );
     this.onAllMarketsReady?.();
   }
