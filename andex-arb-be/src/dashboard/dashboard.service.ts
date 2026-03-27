@@ -59,8 +59,8 @@ export class DashboardService {
   }
 
   private async generateUniqueNickname(): Promise<string> {
-    const adjectives = ['fast', 'smart', 'lucky', 'sharp', 'bold', 'swift', 'keen', 'wise', 'cool', 'hot'];
-    const nouns = ['arber', 'trader', 'forker', 'hunter', 'scout', 'raider', 'seeker', 'finder'];
+    const adjectives = ['fast', 'smart', 'lucky', 'sharp', 'bold', 'swift', 'keen', 'wise', 'cool', 'hot', 'iron', 'slick', 'solid', 'gritty', 'prime', 'royal', 'dark', 'quick', 'fierce', 'elite', 'clean', 'savage', 'rare', 'wild', 'silent', 'sonic', 'hyper', 'neon', 'brutal', 'cold'];
+    const nouns = ['arber', 'trader', 'hunter', 'scout', 'raider', 'seeker', 'finder', 'caller', 'shark', 'sniper', 'punter', 'grinder', 'flipper', 'picker', 'edge', 'bettor', 'chaser', 'runner', 'hawk', 'wolf', 'capper', 'degen', 'closer', 'stalker', 'fader', 'lord', 'monk'];
     for (let i = 0; i < 20; i++) {
       const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
       const noun = nouns[Math.floor(Math.random() * nouns.length)];
