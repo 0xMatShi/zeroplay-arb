@@ -77,6 +77,14 @@
   border-color: rgba(13, 199, 176, 0.2);
 }
 
+.calc-box-label--fonbet {
+  color: #e53e3e;
+}
+
+.calc-box--fonbet {
+  border-color: rgba(229, 62, 62, 0.2);
+}
+
 /* Outcome name — same as .sports-outcome-name */
 .calc-outcome {
   font-family: 'Inter', -apple-system, monospace;

@@ -21,7 +21,9 @@ export class SportsArbController {
     const matches = this.scheduler.getMatches();
     const matchMap = new Map(matches.map((m) => [m.id, m]));
 
-    const ESPORTS = new Set(['csgo', 'dota2', 'lol', 'valorant', 'call-of-duty']);
+    const ESPORTS = new Set(['csgo', 'dota2', 'lol', 'valorant', 'call-of-duty', 'cod']);
+    // Canonical sport keys that differ from DexSport URL slugs
+    const DEX_URL_SLUG: Record<string, string> = { cod: 'call-of-duty' };
     const PINNACLE_SPORT_PATH: Record<string, string> = {
       basketball: 'basketball',
       tennis:     'tennis',
@@ -56,11 +58,14 @@ export class SportsArbController {
           bookmakerUrl = match.dexEvent.url ?? 'https://www.cloudbet.com/en/sports';
         } else if (match?.bookmakerPlatform === 'pari') {
           bookmakerUrl = match.dexEvent.url ?? 'https://pari.ru/sports';
+        } else if (match?.bookmakerPlatform === 'fonbet') {
+          bookmakerUrl = match.dexEvent.url ?? 'https://fon.bet/sports';
         } else if (match) {
           const rawId = match.dexEvent.eventId.includes('.') ? match.dexEvent.eventId.split('.')[1] : match.dexEvent.eventId;
           const nameSlug = match.dexEvent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
           const dexCategory = ESPORTS.has(dexSportKey) ? 'esports' : 'sports';
-          bookmakerUrl = rawId ? `https://dexsport.io/${dexCategory}/${dexSportKey}/${nameSlug}-${rawId}/bets/` : undefined;
+          const dexSlugForUrl = DEX_URL_SLUG[dexSportKey] ?? dexSportKey;
+          bookmakerUrl = rawId ? `https://dexsport.io/${dexCategory}/${dexSlugForUrl}/${nameSlug}-${rawId}/bets/` : undefined;
         }
 
         const platformName = (platform: string) => {
@@ -69,6 +74,7 @@ export class SportsArbController {
           if (platform === 'stake') return 'Stake';
           if (platform === 'cloudbet') return 'Cloudbet';
           if (platform === 'pari') return 'Pari';
+          if (platform === 'fonbet') return 'Fonbet';
           return 'DexSport';
         };
 

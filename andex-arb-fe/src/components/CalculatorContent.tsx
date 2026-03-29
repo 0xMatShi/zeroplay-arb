@@ -26,6 +26,7 @@ function platformLabel(platform: string | undefined): string {
   if (platform === 'stake') return 'Stake'
   if (platform === 'cloudbet') return 'Cloudbet'
   if (platform === 'pari') return 'Pari'
+  if (platform === 'fonbet') return 'Fonbet'
   if (platform === 'dexsport') return 'DexSport'
   if (platform === 'betboom') return 'Betboom'
   if (platform === 'kalshi') return 'Kalshi'
@@ -38,6 +39,7 @@ function platformClass(platform: string | undefined): string {
   if (platform === 'stake') return 'stake'
   if (platform === 'cloudbet') return 'cloudbet'
   if (platform === 'pari') return 'pari'
+  if (platform === 'fonbet') return 'fonbet'
   return 'dex'
 }
 
@@ -56,14 +58,14 @@ export function CalculatorContent({
   sport,
 }: CalcParams) {
   const isBmBm = !!initLeftOdds
-  const isPari = dexPlatform === 'pari'
+  const isRussianBM = dexPlatform === 'pari' || dexPlatform === 'fonbet'
 
-  // ── Bybit P2P rate (only for Pari) ───────────────────────────
+  // ── Bybit P2P rate (for Pari and Fonbet — RUB-based bookmakers) ──────────
   const [bybitRate, setBybitRate] = useState<number | null>(null)
   useEffect(() => {
-    if (!isPari) return
+    if (!isRussianBM) return
     sportsArbApi.getBybitRate().then(r => setBybitRate(r.rate)).catch(() => {})
-  }, [isPari])
+  }, [isRussianBM])
 
   // ── PM-BM state ──────────────────────────────────────────────
   const [pmPrice, setPmPrice] = useState(initPmPrice)
@@ -79,7 +81,7 @@ export function CalculatorContent({
   // rubInput is what the user sees/types; dexAmount stays in USD for all calculations
   const [rubInput, setRubInput] = useState('')
   useEffect(() => {
-    if (!isPari || !bybitRate) return
+    if (!isRussianBM || !bybitRate) return
     const usd = parseFloat(dexAmount)
     if (!isNaN(usd) && usd > 0) setRubInput(Math.round(usd * bybitRate).toString())
   }, [bybitRate]) // only init once when rate loads
@@ -328,11 +330,11 @@ export function CalculatorContent({
           <div className="calc-outcome">{dexOutcome || '—'}</div>
           <div className="calc-field">
             <div className="calc-input-wrap">
-              {isPari && bybitRate
+              {isRussianBM && bybitRate
                 ? <span className="calc-input-prefix">₽</span>
                 : <span className="calc-input-prefix">$</span>
               }
-              {isPari && bybitRate
+              {isRussianBM && bybitRate
                 ? <input className="calc-input calc-input--prefixed" type="number" min="0" placeholder="0"
                     value={rubInput} onChange={(e) => handleRubInput(e.target.value)} />
                 : <input className="calc-input calc-input--prefixed" type="number" min="0" placeholder="0.00"
@@ -347,7 +349,7 @@ export function CalculatorContent({
                 value={dexOddsVal} onChange={(e) => handleDexOdds(e.target.value)} />
             </div>
           </div>
-          {isPari && bybitRate && dexAmount && parseFloat(dexAmount) > 0 && (
+          {isRussianBM && bybitRate && dexAmount && parseFloat(dexAmount) > 0 && (
             <div className="calc-rub-amount">
               ≈ ${parseFloat(dexAmount).toFixed(2)}
               <span className="calc-rub-rate">{bybitRate} ₽/$</span>

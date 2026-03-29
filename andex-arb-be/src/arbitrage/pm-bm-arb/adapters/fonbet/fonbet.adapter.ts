@@ -1,9 +1,9 @@
 /**
- * PariAdapter — HTTP delta-polling adapter for pari.ru (Parimatch B2B white-label).
+ * FonbetAdapter — HTTP delta-polling adapter for fon.bet.
  *
- * Protocol: versioned delta polling against line-lb01-w.pb06e2-resources.com
- *   GET /events/list?version=0    → full snapshot (events + sports + customFactors)
- *   GET /events/list?version={N}  → only changes since last response
+ * Protocol: versioned delta polling against line-lb54-w.bk6bba-resources.com
+ *   GET /ma/events/list?version=0    → full snapshot (events + sports + customFactors)
+ *   GET /ma/events/list?version={N}  → only changes since last response
  *
  * Markets:
  *   Regular moneyline (no draw):  921=П1, 923=П2
@@ -21,17 +21,17 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import axios from 'axios';
 import { DexSportsEvent, DexMarket, DexOutcome } from '../../interfaces/sports-arb.types';
 import {
-  PariSportEntry,
-  PariEvent,
-  PariCustomFactors,
-  PariListResponse,
-} from './pari.types';
+  FonbetSportEntry,
+  FonbetEvent,
+  FonbetCustomFactors,
+  FonbetListResponse,
+} from './fonbet.types';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const LINE_BASE       = 'https://line-lb01-w.pb06e2-resources.com';
-const SCOPE_MARKET    = 2300;
-const LANG            = 'en';
+const LINE_BASE         = 'https://line-lb54-w.bk6bba-resources.com';
+const SCOPE_MARKET      = 1600;
+const LANG              = 'en';
 const POLL_INTERVAL_MS  = 1_000;
 const EVENT_TTL_MS      = 5 * 60_000;
 const EVICT_INTERVAL_MS = 60_000;
@@ -40,15 +40,13 @@ const EVICT_INTERVAL_MS = 60_000;
  * Factor IDs tracked for market decisions.
  * 921=П1, 922=X(draw), 923=П2          — regular time 3-way / 2-way outcome
  * 7035=П1 winner OT, 7036=П2 winner OT — "Итоговая победа" (includes overtime/shootout)
- * 922 triggers syncEvent so draw appearance/disappearance is detected immediately.
- * 7035/7036 trigger syncEvent so "Итоговая победа" availability changes are detected.
  */
 const TRACKED_FACTORS = new Set([921, 922, 923, 7035, 7036]);
 
 /** esport sportKeys that have per-map sub-events (level=2) */
 const ESPORT_SPORT_KEYS = new Set(['csgo', 'dota2', 'lol', 'valorant']);
 
-/** Root sport IDs in the pari sports hierarchy */
+/** Root sport IDs in the fonbet sports hierarchy */
 const TARGET_ROOT_SPORT_IDS = new Set([2, 3, 4, 5]); // hockey, basketball, tennis, baseball
 const ROOT_SPORT_KEY: Record<number, string> = {
   2: 'hockey',
@@ -61,8 +59,8 @@ const ESPORT_ROOT_ID = 29086;
 // ── Adapter ───────────────────────────────────────────────────────────────────
 
 @Injectable()
-export class PariAdapter implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(PariAdapter.name);
+export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(FonbetAdapter.name);
 
   // ── Contract (shared with all bookmaker adapters) ──────────────────────────
   onPriceUpdate: (() => void) | null = null;
@@ -73,8 +71,8 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
   /** segmentId → sportKey — built from sports[] on first snapshot */
   private readonly segmentSportKey = new Map<number, string>();
 
-  /** eventId → raw pari event */
-  private readonly eventMeta = new Map<number, PariEvent>();
+  /** eventId → raw fonbet event */
+  private readonly eventMeta = new Map<number, FonbetEvent>();
 
   /** eventId → { factorId → decimal odds } — only moneyline factors */
   private readonly oddsCache = new Map<number, Map<number, number>>();
@@ -116,7 +114,7 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
   subscribeToMatchedMarkets(_entries: Array<{ eventId: string; marketId: string }>): void {}
 
   clearCache(): void {
-    this.logger.log('Pari: clearing caches and restarting polling');
+    this.logger.log('Fonbet: clearing caches and restarting polling');
     this.segmentSportKey.clear();
     this.eventMeta.clear();
     this.oddsCache.clear();
@@ -140,11 +138,11 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
 
   // ── Sport classification ───────────────────────────────────────────────────
 
-  private buildSegmentMap(sports: PariSportEntry[]): void {
-    const byId = new Map<number, PariSportEntry>();
+  private buildSegmentMap(sports: FonbetSportEntry[]): void {
+    const byId = new Map<number, FonbetSportEntry>();
     for (const s of sports) byId.set(s.id, s);
 
-    const rootOf = (id: number): PariSportEntry | null => {
+    const rootOf = (id: number): FonbetSportEntry | null => {
       let cur = byId.get(id);
       const visited = new Set<number>();
       while (cur && cur.kind !== 'sport') {
@@ -163,7 +161,7 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
       if (TARGET_ROOT_SPORT_IDS.has(root.id)) {
         this.segmentSportKey.set(s.id, ROOT_SPORT_KEY[root.id]);
       } else if (root.id === ESPORT_ROOT_ID) {
-        const key = PariAdapter.classifyEsport(s.name);
+        const key = FonbetAdapter.classifyEsport(s.name);
         if (key) this.segmentSportKey.set(s.id, key);
       }
     }
@@ -177,15 +175,14 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     return null;
   }
 
-  private getSportKey(event: PariEvent): string | null {
+  private getSportKey(event: FonbetEvent): string | null {
     return this.segmentSportKey.get(event.sportId) ?? null;
   }
 
   /** Returns true for top-level match events in target sports */
-  private isTargetMatch(e: PariEvent): boolean {
+  private isTargetMatch(e: FonbetEvent): boolean {
     if (e.level !== 1 || e.kind !== 1 || e.noEventView || this.getSportKey(e) === null) return false;
-    // Exclude derived markets (e.g. "AWP Kills", "Grenade Kills") where pari appends
-    // a market suffix in parentheses to the team name: "Vitality (AWP Kills)"
+    // Exclude derived markets (e.g. "AWP Kills") where team names have a market suffix in parentheses
     if (/\(/.test(e.team1 ?? '')) return false;
     return true;
   }
@@ -194,12 +191,12 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
    * Returns true for esport map sub-events (level=2, e.g. "1-я карта").
    * Only valid once parent event meta is already in eventMeta.
    */
-  private isTargetMapEvent(e: PariEvent): boolean {
+  private isTargetMapEvent(e: FonbetEvent): boolean {
     if (e.level !== 2 || !e.parentId || e.noEventView) return false;
     const parent = this.eventMeta.get(e.parentId);
     if (!parent || !this.isTargetMatch(parent)) return false;
     const sportKey = this.getSportKey(parent);
-    return ESPORT_SPORT_KEYS.has(sportKey ?? '') && PariAdapter.parseMapNumber(e.name) !== null;
+    return ESPORT_SPORT_KEYS.has(sportKey ?? '') && FonbetAdapter.parseMapNumber(e.name) !== null;
   }
 
   /** Extracts map number from names like "1st map", "2nd map", "3rd map" (lang=en). */
@@ -224,27 +221,27 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
 
       if (wasFirst) {
         const count = this.eventCache.size;
-        this.logger.log(`Pari: initial snapshot — ${count} events, version=${data.packetVersion}`);
+        this.logger.log(`Fonbet: initial snapshot — ${count} events, version=${data.packetVersion}`);
         this.initialStateFired = true;
         this.onAllMarketsReady?.();
       }
     } catch (err: any) {
-      if (!this.destroyed) this.logger.warn(`Pari: poll error — ${err.message}`);
+      if (!this.destroyed) this.logger.warn(`Fonbet: poll error — ${err.message}`);
     }
   }
 
-  private async fetchList(version: number): Promise<PariListResponse> {
-    const res = await axios.get<PariListResponse>(`${LINE_BASE}/events/list`, {
+  private async fetchList(version: number): Promise<FonbetListResponse> {
+    const res = await axios.get<FonbetListResponse>(`${LINE_BASE}/ma/events/list`, {
       params: { lang: LANG, version, scopeMarket: SCOPE_MARKET },
       timeout: 10_000,
-      headers: { Accept: 'application/json', Referer: 'https://pari.ru/' },
+      headers: { Accept: 'application/json', Referer: 'https://fon.bet/' },
     });
     return res.data;
   }
 
   // ── State updaters ─────────────────────────────────────────────────────────
 
-  private applyEvents(events: PariEvent[]): void {
+  private applyEvents(events: FonbetEvent[]): void {
     for (const e of events) {
       this.eventMeta.set(e.id, e);
       if (this.isTargetMatch(e)) {
@@ -257,13 +254,12 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private applyCustomFactors(items: PariCustomFactors[]): void {
+  private applyCustomFactors(items: FonbetCustomFactors[]): void {
     for (const item of items) {
       const event = this.eventMeta.get(item.e);
 
       if (event && this.isTargetMatch(event)) {
         // ── Target main match ─────────────────────────────────────────────────
-        // Refresh TTL so suspended events aren't evicted during non-moneyline-only delta windows.
         this.eventLastSeen.set(String(item.e), Date.now());
 
         const prevMap = this.oddsCache.get(item.e) ?? new Map<number, number>();
@@ -319,10 +315,6 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
 
   // ── Event cache sync ───────────────────────────────────────────────────────
 
-  /**
-   * Rebuild (or update in-place) the DexSportsEvent for a given event ID.
-   * Called whenever event meta or odds change.
-   */
   private syncEvent(id: number): void {
     const event = this.eventMeta.get(id);
     if (!event || !this.isTargetMatch(event)) return;
@@ -335,20 +327,16 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     const hasDraw     = !!(odds?.get(922));
     const hasWinnerOT = !!(odds?.get(7035));
 
-    // Draw offered but no "Итоговая победа" (winner incl. OT) → exclude.
-    // Fires whenever 922 or 7035 appear/disappear because both are in TRACKED_FACTORS.
     if (hasDraw && !hasWinnerOT) {
       this.eventCache.delete(eventId);
       return;
     }
 
-    // Select market: draw offered → use "Итоговая победа" (7035/7036), else regular (921/923)
     const moneylineMarket = this.buildMoneylineMarket(id, event, odds, hasDraw);
 
     this.eventLastSeen.set(eventId, now);
 
     if (!moneylineMarket) {
-      // Odds suspended — keep last known state in cache (don't remove)
       return;
     }
 
@@ -359,7 +347,7 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
         name: this.buildEventName(event),
         sportKey,
         isLive: event.place === 'live',
-        startTime: event.startTime, // Unix seconds (matcher multiplies by 1000 internally)
+        startTime: event.startTime,
         url: this.buildEventUrl(event, sportKey),
         markets: [moneylineMarket],
         updatedAt: now,
@@ -367,7 +355,6 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // Update in-place
     existing.isLive = event.place === 'live';
     existing.updatedAt = now;
 
@@ -375,15 +362,13 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     if (prevMarket) {
       let priceChanged = false;
 
-      // Update prices in-place so SportsMatch.matchedMarkets[].dexMarket references stay valid.
-      // Never replace markets[0] with a new object — the matcher holds a direct reference to it.
       for (let i = 0; i < Math.min(prevMarket.outcomes.length, moneylineMarket.outcomes.length); i++) {
         const np = moneylineMarket.outcomes[i].price;
         if (np !== prevMarket.outcomes[i].price) {
           if (this.trackedMarketIds.has(prevMarket.marketId)) {
             const arrow = np > prevMarket.outcomes[i].price ? '↑' : '↓';
             this.logger.log(
-              `[Pari] ${existing.name}: ${prevMarket.outcomes[i].name} ` +
+              `[Fonbet] ${existing.name}: ${prevMarket.outcomes[i].name} ` +
               `${prevMarket.outcomes[i].price?.toFixed(3)} → ${np.toFixed(3)} ${arrow}`,
             );
           }
@@ -398,17 +383,13 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Rebuild (or update in-place) the DexSportsEvent for an esport map sub-event.
-   * Uses parent team names; produces a single child_moneyline_mapN market.
-   */
   private syncMapEvent(id: number): void {
     const event = this.eventMeta.get(id);
     if (!event || !this.isTargetMapEvent(event)) return;
 
     const parent = this.eventMeta.get(event.parentId!)!;
     const sportKey = this.getSportKey(parent)!;
-    const mapN = PariAdapter.parseMapNumber(event.name)!;
+    const mapN = FonbetAdapter.parseMapNumber(event.name)!;
     const odds = this.oddsCache.get(id);
     const p1 = odds?.get(921);
     const p2 = odds?.get(923);
@@ -418,12 +399,11 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     this.eventLastSeen.set(eventId, now);
 
     if (!p1 || !p2) {
-      // Suspended — keep last known state
       return;
     }
 
     const mapMarket: DexMarket = {
-      marketId: `pari_${id}_map${mapN}`,
+      marketId: `fonbet_${id}_map${mapN}`,
       marketType: 'child_moneyline',
       name: `child_moneyline_map${mapN}`,
       outcomes: [
@@ -439,7 +419,7 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
         name: this.buildEventName(parent),
         sportKey,
         isLive: parent.place === 'live',
-        startTime: parent.startTime, // Unix seconds
+        startTime: parent.startTime,
         url: this.buildEventUrl(parent, sportKey),
         markets: [mapMarket],
         updatedAt: now,
@@ -447,7 +427,6 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // Update in-place
     existing.isLive = parent.place === 'live';
     existing.updatedAt = now;
 
@@ -460,7 +439,7 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
           if (this.trackedMarketIds.has(prevMarket.marketId)) {
             const arrow = np > prevMarket.outcomes[i].price ? '↑' : '↓';
             this.logger.log(
-              `[Pari Map${mapN}] ${existing.name}: ${prevMarket.outcomes[i].name} ` +
+              `[Fonbet Map${mapN}] ${existing.name}: ${prevMarket.outcomes[i].name} ` +
               `${prevMarket.outcomes[i].price?.toFixed(3)} → ${np.toFixed(3)} ${arrow}`,
             );
           }
@@ -474,39 +453,36 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private buildEventName(event: PariEvent): string {
+  private buildEventName(event: FonbetEvent): string {
     if (event.team2) return `${event.team1} vs ${event.team2}`;
     return event.name || event.team1;
   }
 
-  private buildEventUrl(event: PariEvent, sportKey: string): string {
-    const SPORT_URL_SLUG: Record<string, string> = {
+  private buildEventUrl(event: FonbetEvent, sportKey: string): string {
+    const ESPORT_CATEGORY: Record<string, string> = {
+      csgo:     'cs',
+      dota2:    'dota2',
+      lol:      'lol',
+      valorant: 'valorant',
+    };
+    const SPORT_SLUG: Record<string, string> = {
       hockey:     'hockey',
       basketball: 'basketball',
       tennis:     'tennis',
       baseball:   'baseball',
-      csgo:       'cs',
-      dota2:      'dota2',
-      lol:        'lol',
-      valorant:   'valorant',
     };
-    const slug = SPORT_URL_SLUG[sportKey];
+    const esportCat = ESPORT_CATEGORY[sportKey];
+    if (esportCat) {
+      return `https://fon.bet/sports/esports/category/${esportCat}/${event.sportId}/${event.id}`;
+    }
+    const slug = SPORT_SLUG[sportKey];
     if (!slug) return '';
-    const category = ESPORT_SPORT_KEYS.has(sportKey)
-      ? `esports/category/${slug}`
-      : `sports/${slug}`;
-    return `https://pari.ru/${category}/${event.sportId}/${event.id}`;
+    return `https://fon.bet/sports/${slug}/${event.sportId}/${event.id}`;
   }
 
-  /**
-   * Builds a 2-way moneyline DexMarket from the current odds cache.
-   * - hasDraw=false → regular time outcome (921/923)
-   * - hasDraw=true  → "Итоговая победа" including OT/SO (7035/7036)
-   * Returns null if the relevant factors are suspended (not in cache).
-   */
   private buildMoneylineMarket(
     id: number,
-    event: PariEvent,
+    event: FonbetEvent,
     odds: Map<number, number> | undefined,
     hasDraw: boolean,
   ): DexMarket | null {
@@ -515,7 +491,7 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     const [f1, f2] = hasDraw ? [7035, 7036] : [921, 923];
     const p1 = odds.get(f1);
     const p2 = odds.get(f2);
-    if (!p1 || !p2) return null; // suspended
+    if (!p1 || !p2) return null;
 
     const marketSuffix = hasDraw ? '_winner_ot' : '_moneyline';
     const outcomes: DexOutcome[] = [
@@ -524,7 +500,7 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     ];
 
     return {
-      marketId: `pari_${id}${marketSuffix}`,
+      marketId: `fonbet_${id}${marketSuffix}`,
       marketType: 'moneyline',
       name: 'moneyline',
       outcomes,
@@ -546,7 +522,7 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
       }
     }
     if (evicted > 0) {
-      this.logger.log(`Pari: evicted ${evicted} stale events (${this.eventCache.size} remaining)`);
+      this.logger.log(`Fonbet: evicted ${evicted} stale events (${this.eventCache.size} remaining)`);
     }
   }
 }

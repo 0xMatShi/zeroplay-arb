@@ -6,6 +6,7 @@ import { PinnacleAdapter } from '../adapters/pinnacle/pinnacle.adapter';
 import { StakeAdapter } from '../adapters/stake/stake.adapter';
 import { CloudbetAdapter } from '../adapters/cloudbet/cloudbet.adapter';
 import { PariAdapter } from '../adapters/pari/pari.adapter';
+import { FonbetAdapter } from '../adapters/fonbet/fonbet.adapter';
 import {
   SportsMatch,
   MatchedMarketPair,
@@ -437,6 +438,7 @@ export class SportsMatcher {
     private readonly stakeAdapter: StakeAdapter,
     private readonly cloudbetAdapter: CloudbetAdapter,
     private readonly pariAdapter: PariAdapter,
+    private readonly fonbetAdapter: FonbetAdapter,
   ) {}
 
   findMatches(): SportsMatch[] {
@@ -447,13 +449,14 @@ export class SportsMatcher {
     const stakeMatches    = this.matchBookmakerEvents(this.stakeAdapter.getEvents(),    pmEvents, 'stake');
     const cloudbetMatches = this.matchBookmakerEvents(this.cloudbetAdapter.getEvents(), pmEvents, 'cloudbet');
     const pariMatches     = this.matchBookmakerEvents(this.pariAdapter.getEvents(),     pmEvents, 'pari');
+    const fonbetMatches   = this.matchBookmakerEvents(this.fonbetAdapter.getEvents(),   pmEvents, 'fonbet');
 
-    const all = [...dexMatches, ...pinnacleMatches, ...stakeMatches, ...cloudbetMatches, ...pariMatches];
+    const all = [...dexMatches, ...pinnacleMatches, ...stakeMatches, ...cloudbetMatches, ...pariMatches, ...fonbetMatches];
     const totalMarkets = all.reduce((s, p) => s + p.matchedMarkets.length, 0);
     this.logger.log(
       `SportsMatcher: ${pmEvents.length} PM | dexsport=${dexMatches.length} pinnacle=${pinnacleMatches.length}` +
       ` stake=${stakeMatches.length} cloudbet=${cloudbetMatches.length} pari=${pariMatches.length}` +
-      ` → ${all.length} matched events, ${totalMarkets} matched markets`,
+      ` fonbet=${fonbetMatches.length} → ${all.length} matched events, ${totalMarkets} matched markets`,
     );
     return all;
   }
@@ -539,7 +542,7 @@ export class SportsMatcher {
           // Both sides must have a startTime — if either is missing we can't verify it's the same match.
           // If both have dates — require within 3 hours.
           if (!dex.startTime || dex.startTime <= 0 || !bm.startTime || bm.startTime <= 0) continue;
-          if (Math.abs(dex.startTime - bm.startTime) > 3 * 3600) continue;
+          if (Math.abs(dex.startTime - bm.startTime) > 5 * 60) continue;
 
           const sim = computeSimilarity(dex.name, bm.name);
           const isBetter =
@@ -579,7 +582,7 @@ export class SportsMatcher {
   private matchBookmakerEvents(
     bmEvents: DexSportsEvent[],
     pmEvents: PmSportsEvent[],
-    platform: 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet' | 'pari',
+    platform: 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet' | 'pari' | 'fonbet',
   ): SportsMatch[] {
     // Resolve dexsport sport slugs to canonical sport keys.
     // Pinnacle and Stake already set the canonical sportKey — DEX_SLUG_TO_SPORT is a no-op for them.
@@ -644,7 +647,7 @@ export class SportsMatcher {
           // If both have dates — require them to be within 3 hours of each other.
           if (!pm.startTime || !bm.startTime || bm.startTime <= 0) continue;
           const bmMs = bm.startTime * 1000;
-          if (Math.abs(pm.startTime - bmMs) > 3 * 3_600_000) continue;
+          if (Math.abs(pm.startTime - bmMs) > 5 * 60_000) continue;
 
           const sim = computeSimilarity(pmStripped, bm.name);
           const isBetter =

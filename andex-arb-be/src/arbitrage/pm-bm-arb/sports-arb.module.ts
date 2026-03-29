@@ -7,6 +7,7 @@ import { PinnacleAdapter } from './adapters/pinnacle/pinnacle.adapter';
 import { StakeAdapter } from './adapters/stake/stake.adapter';
 import { CloudbetAdapter } from './adapters/cloudbet/cloudbet.adapter';
 import { PariAdapter } from './adapters/pari/pari.adapter';
+import { FonbetAdapter } from './adapters/fonbet/fonbet.adapter';
 
 // Services
 import { SportsMatcher } from './services/sports-matcher.service';
@@ -49,6 +50,7 @@ import { SubscriptionsModule } from '../../subscriptions/subscriptions.module';
     StakeAdapter,
     CloudbetAdapter,
     PariAdapter,
+    FonbetAdapter,
 
     // Pipeline services
     SportsMatcher,

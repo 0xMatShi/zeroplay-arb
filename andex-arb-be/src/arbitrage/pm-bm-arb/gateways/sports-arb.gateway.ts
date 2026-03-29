@@ -132,6 +132,10 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       return dexEvent.url ?? 'https://pari.ru/sports';
     }
 
+    if (bookmakerPlatform === 'fonbet') {
+      return dexEvent.url ?? 'https://fon.bet/sports';
+    }
+
     // DexSport URL: https://dexsport.io/{esports|sports}/{sport}/{name-slug}-{id}/bets/
     const rawId = dexEvent.eventId.includes('.')
       ? dexEvent.eventId.split('.')[1]
@@ -163,6 +167,7 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
       if (platform === 'stake') return 'Stake';
       if (platform === 'cloudbet') return 'Cloudbet';
       if (platform === 'pari') return 'Pari';
+      if (platform === 'fonbet') return 'Fonbet';
       return 'DexSport';
     };
 

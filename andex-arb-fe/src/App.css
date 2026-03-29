@@ -5863,6 +5863,10 @@
   color: #0dc7b0;
 }
 
+.sports-platform-label--fonbet {
+  color: #e53e3e;
+}
+
 .sports-outcome-name {
   font-family: var(--font-mono);
   font-size: 16px;

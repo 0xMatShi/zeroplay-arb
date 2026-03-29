@@ -6,6 +6,7 @@ import { PinnacleAdapter } from '../adapters/pinnacle/pinnacle.adapter';
 import { StakeAdapter } from '../adapters/stake/stake.adapter';
 import { CloudbetAdapter } from '../adapters/cloudbet/cloudbet.adapter';
 import { PariAdapter } from '../adapters/pari/pari.adapter';
+import { FonbetAdapter } from '../adapters/fonbet/fonbet.adapter';
 import { SportsMatcher } from '../services/sports-matcher.service';
 import { SportsArbScanner } from '../services/sports-arb-scanner.service';
 import { SportsMatch, SportsArbitrageOpportunity, BmBmMatch } from '../interfaces/sports-arb.types';
@@ -68,6 +69,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   private stakeReady = false;
   private cloudbetReady = false;
   private pariReady = false;
+  private fonbetReady = false;
   private pmReady = false;
 
   /**
@@ -84,6 +86,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly stakeAdapter: StakeAdapter,
     private readonly cloudbetAdapter: CloudbetAdapter,
     private readonly pariAdapter: PariAdapter,
+    private readonly fonbetAdapter: FonbetAdapter,
     private readonly matcher: SportsMatcher,
     private readonly scanner: SportsArbScanner,
     @Optional() private readonly gateway: SportsArbGateway | null = null,
@@ -98,6 +101,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.stakeAdapter.onPriceUpdate = priceHandler;
     this.cloudbetAdapter.onPriceUpdate = priceHandler;
     this.pariAdapter.onPriceUpdate = priceHandler;
+    this.fonbetAdapter.onPriceUpdate = priceHandler;
 
     // If Pinnacle credentials are missing it will never fire onAllMarketsReady,
     // so mark it ready immediately to avoid blocking dex + stake.
@@ -142,6 +146,10 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       this.pariReady = true;
       this.checkAndTriggerMatchCycle('pari');
     };
+    this.fonbetAdapter.onAllMarketsReady = () => {
+      this.fonbetReady = true;
+      this.checkAndTriggerMatchCycle('fonbet');
+    };
   }
 
   onModuleDestroy(): void {
@@ -158,6 +166,8 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.cloudbetAdapter.onAllMarketsReady = null;
     this.pariAdapter.onPriceUpdate = null;
     this.pariAdapter.onAllMarketsReady = null;
+    this.fonbetAdapter.onPriceUpdate = null;
+    this.fonbetAdapter.onAllMarketsReady = null;
   }
 
   // ── Cron: hourly discovery reset ──────────────────────────────
@@ -191,6 +201,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.stakeReady = false;
     this.cloudbetReady = false;
     this.pariReady = false;
+    this.fonbetReady = false;
     this.pmReady = false;
 
     // If Pinnacle credentials are missing it will never fire onAllMarketsReady — skip it
@@ -250,6 +261,9 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
 
     // Pari: full reset — clears version, re-fetches snapshot on next poll tick
     this.pariAdapter.clearCache();
+
+    // Fonbet: full reset — clears version, re-fetches snapshot on next poll tick
+    this.fonbetAdapter.clearCache();
   }
 
   // ── Cron: Snapshot every 5 seconds ───────────────────────────
@@ -296,7 +310,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   private checkAndTriggerMatchCycle(source: string): void {
-    if (this.dexReady && this.pinnacleReady && this.stakeReady && this.cloudbetReady && this.pariReady && this.pmReady) {
+    if (this.dexReady && this.pinnacleReady && this.stakeReady && this.cloudbetReady && this.pariReady && this.fonbetReady && this.pmReady) {
       this.onBookmakerMarketsReady(source);
     }
   }
@@ -338,11 +352,13 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       const stakeEntries: Array<{ eventId: string; marketId: string }> = [];
       const cloudbetEntries: Array<{ eventId: string; marketId: string }> = [];
       const pariEntries: Array<{ eventId: string; marketId: string }> = [];
+      const fonbetEntries: Array<{ eventId: string; marketId: string }> = [];
       const dexTracked = new Set<string>();
       const pinnacleTracked = new Set<string>();
       const stakeTracked = new Set<string>();
       const cloudbetTracked = new Set<string>();
       const pariTracked = new Set<string>();
+      const fonbetTracked = new Set<string>();
 
       for (const m of this.currentMatches) {
         for (const mp of m.matchedMarkets) {
@@ -359,6 +375,9 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
           } else if (m.bookmakerPlatform === 'pari') {
             pariEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
             pariTracked.add(mp.dexMarket.marketId);
+          } else if (m.bookmakerPlatform === 'fonbet') {
+            fonbetEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
+            fonbetTracked.add(mp.dexMarket.marketId);
           } else {
             pinnacleEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
             pinnacleTracked.add(mp.dexMarket.marketId);
@@ -391,6 +410,9 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       if (pariEntries.length > 0) {
         this.pariAdapter.subscribeToMatchedMarkets(pariEntries);
       }
+      if (fonbetEntries.length > 0) {
+        this.fonbetAdapter.subscribeToMatchedMarkets(fonbetEntries);
+      }
 
       // Update tracked market IDs for debug logging
       this.dexAdapter.trackedMarketIds = dexTracked;
@@ -398,6 +420,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       this.stakeAdapter.trackedMarketIds = stakeTracked;
       this.cloudbetAdapter.trackedMarketIds = cloudbetTracked;
       this.pariAdapter.trackedMarketIds = pariTracked;
+      this.fonbetAdapter.trackedMarketIds = fonbetTracked;
 
       // Immediately scan after fresh match (no debounce — explicit trigger)
       this.runScanNow();
