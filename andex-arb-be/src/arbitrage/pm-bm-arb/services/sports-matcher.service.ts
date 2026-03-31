@@ -238,15 +238,16 @@ function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): D
             );
             if (directionMatch) return directionMatch;
 
-            const invertedDirection = valueMatches.some((dex) =>
-              dex.outcomes.some((o) => {
-                if (!o.name.includes('+')) return false;
-                const teamNorm = norm(o.name.replace(/\s*[+-][\d.]+$/, '').trim());
-                return matchesNegTeam(teamNorm);
-              }),
-            );
-            if (invertedDirection) return null;
+            // Direction inverted OR team names didn't match DEX outcomes at all.
+            // Either way we cannot confirm that both platforms agree on the favourite —
+            // returning the first value match would risk generating false arb where
+            // both legs can lose simultaneously (e.g. PM TeamA -1.5 + DEX TeamB -1.5).
+            return null;
           }
+
+          // Could not determine the PM negative team from the question or outcomeNames —
+          // reject spread market rather than accepting it blindly.
+          return null;
         }
 
         return valueMatches[0];
@@ -321,20 +322,17 @@ function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): D
           );
           if (directionMatch) return directionMatch;
 
-          // If PM's negative team appears with a POSITIVE sign on DEX the spread direction is
-          // inverted — the platforms disagree on who the favourite is. Matching them would
-          // produce false arb opportunities where both legs can lose simultaneously
-          // (e.g. PM Iowa -1.5 at 45¢ + DEX Ohio State -1.5 at 53¢ = 98¢ looks profitable,
-          // but both lose when Iowa wins by exactly 1 point).
-          const invertedDirection = valueMatches.some((dex) =>
-            dex.outcomes.some((o) => {
-              if (!o.name.includes('+')) return false;
-              const teamNorm = norm(o.name.replace(/\s*[+-][\d.]+$/, '').trim());
-              return matchesNegTeam(teamNorm);
-            }),
-          );
-          if (invertedDirection) return null;
+          // Direction inverted OR team names didn't match DEX outcomes at all.
+          // Either way we cannot confirm that both platforms agree on the favourite —
+          // returning the first value match would risk generating false arb where
+          // both legs can lose simultaneously (e.g. PM Iowa -1.5 at 45¢ + DEX Ohio State -1.5
+          // at 53¢ = 98¢ looks profitable, but both lose when Iowa wins by exactly 1 point).
+          return null;
         }
+
+        // Could not determine the PM negative team from the question or outcomeNames —
+        // reject spread market rather than accepting it blindly.
+        return null;
       }
 
       return valueMatches[0];
