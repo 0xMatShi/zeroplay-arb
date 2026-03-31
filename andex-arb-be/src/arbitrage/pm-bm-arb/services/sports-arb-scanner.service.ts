@@ -133,7 +133,7 @@ export class SportsArbScanner {
             decimalOdds: pmOut.probability > 0 ? 1 / pmOut.probability : 0,
             pmBestAskQty: pmOut.qty,
           });
-          totalCost += pmOut.probability;
+          totalCost += pmOut.probability * (1 + 0.03 * (1 - pmOut.probability));
         } else {
           legs.push({
             platform: match.bookmakerPlatform,
@@ -222,7 +222,10 @@ export class SportsArbScanner {
       if (cursors.some((c) => c.idx >= c.asks.length)) break;
 
       // Total cost at current PM levels + fixed DEX cost
-      const pmTotal = cursors.reduce((sum, c) => sum + c.asks[c.idx].price, 0);
+      const pmTotal = cursors.reduce((sum, c) => {
+        const price = c.asks[c.idx].price;
+        return sum + price * (1 + 0.03 * (1 - price));
+      }, 0);
       const totalCost = pmTotal + dexFixed;
       if (totalCost >= 1.0) break;
 
