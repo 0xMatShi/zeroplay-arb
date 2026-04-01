@@ -313,6 +313,7 @@ function SportsOpportunityCard({
       marketType: displayMarketType,
       eventName: opp.matchTitle,
       sport: sportLabel,
+      pmDisplayMode,
       ...(isBmBm && leftLeg ? { leftOdds: leftLeg.decimalOdds.toFixed(2), leftPlatform: leftLeg.platform } : {}),
     })
     if (leftLeg?.url) openTab(leftLeg.url)
@@ -469,6 +470,7 @@ function SportsOpportunityCard({
               marketType: displayMarketType,
               eventName: opp.matchTitle,
               sport: sportLabel,
+              pmDisplayMode,
               ...(isBmBm && leftLeg ? { leftOdds: leftLeg.decimalOdds.toFixed(2), leftPlatform: leftLeg.platform } : {}),
             })
           }}

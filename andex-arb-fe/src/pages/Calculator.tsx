@@ -35,6 +35,7 @@ export function Calculator() {
         marketType={params.get('marketType') ?? undefined}
         eventName={params.get('eventName') ?? undefined}
         sport={params.get('sport') ?? undefined}
+        pmDisplayMode={(params.get('pmDisplayMode') as 'shares' | 'odds') ?? 'shares'}
       />
     </div>
   )

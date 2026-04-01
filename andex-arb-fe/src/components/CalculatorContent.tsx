@@ -19,6 +19,8 @@ export interface CalcParams {
   eventName?: string
   /** Sport key for dashboard */
   sport?: string
+  /** Controls whether Polymarket side shows cents or decimal odds */
+  pmDisplayMode?: 'shares' | 'odds'
 }
 
 function platformLabel(platform: string | undefined): string {
@@ -56,6 +58,7 @@ export function CalculatorContent({
   leftPlatform,
   eventName,
   sport,
+  pmDisplayMode = 'shares',
 }: CalcParams) {
   const isBmBm = !!initLeftOdds
   const isRussianBM = dexPlatform === 'pari' || dexPlatform === 'fonbet'
@@ -163,6 +166,21 @@ export function CalculatorContent({
       toRub(newDex)
     }
   }
+
+  // When in odds mode: convert decimal odds → cents price and delegate to handlePmPrice
+  const handlePmOdds = (v: string) => {
+    const o = parseFloat(v)
+    if (!isNaN(o) && o > 1) {
+      handlePmPrice((100 / o).toFixed(2))
+    }
+  }
+
+  // Displayed value for PM odds input (derived from pmPrice)
+  const pmOddsDisplay = (() => {
+    const p = parseFloat(pmPrice)
+    if (!isNaN(p) && p > 0) return (100 / p).toFixed(2)
+    return ''
+  })()
 
   const handleDexOdds = (v: string) => {
     setDexOddsVal(v)
@@ -294,6 +312,14 @@ export function CalculatorContent({
                 <span className="calc-input-prefix">×</span>
                 <input className="calc-input calc-input--prefixed" type="number" min="1" step="0.01"
                   value={leftOddsVal} onChange={(e) => handleLeftOdds(e.target.value)} />
+              </div>
+            </div>
+          ) : pmDisplayMode === 'odds' ? (
+            <div className="calc-field">
+              <div className="calc-input-wrap">
+                <span className="calc-input-prefix">×</span>
+                <input className="calc-input calc-input--prefixed" type="number" min="1.01" step="0.01"
+                  value={pmOddsDisplay} onChange={(e) => handlePmOdds(e.target.value)} />
               </div>
             </div>
           ) : (

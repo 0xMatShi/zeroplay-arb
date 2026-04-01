@@ -112,6 +112,15 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
   /** Timeout to fire ready if not all phase 2 markets respond */
   private readyDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // ── Token-refresh reconnect state ───────────────────────────
+  /** Matched market entries saved across token-refresh reconnects */
+  private savedMatchedEntries: Array<{ eventId: string; marketId: string }> = [];
+  /**
+   * When true: the current reconnect is a token refresh, not a full cycle reset.
+   * fireAllMarketsReady will skip calling onAllMarketsReady to avoid a spurious match cycle.
+   */
+  private skipOnAllMarketsReady = false;
+
   // ── Callbacks ────────────────────────────────────────────────
   /** Called when any market price changes (set by scheduler) */
   onPriceUpdate: (() => void) | null = null;
@@ -202,6 +211,8 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     this.tokenRefreshTimer = setTimeout(() => {
       if (!this.destroyed) {
         this.logger.log('DexSport token expiring soon, reconnecting WS...');
+        // Mark as token-refresh reconnect so the match cycle is NOT restarted
+        this.skipOnAllMarketsReady = true;
         this.reconnect();
       }
     }, delay);
@@ -214,6 +225,9 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
    * Updates marketToEvent mapping and sends join messages for any new IDs.
    */
   subscribeToMatchedMarkets(entries: Array<{ eventId: string; marketId: string }>): void {
+    // Save entries so they can be re-subscribed after a token-refresh reconnect
+    this.savedMatchedEntries = [...entries];
+
     const newIds: string[] = [];
     for (const { eventId, marketId } of entries) {
       this.marketToEvent.set(marketId, eventId);
@@ -365,6 +379,23 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     if (ids.length > 0) {
       this.send(['join', 'discipline', ids]);
       this.logger.log(`DexSport: subscribing to ${ids.length / 2} disciplines`);
+    }
+
+    // After a token-refresh reconnect, immediately re-subscribe previously matched markets.
+    // The match cycle is NOT restarted — publicEvents objects remain valid and in-place.
+    if (this.savedMatchedEntries.length > 0) {
+      const marketIds: string[] = [];
+      for (const { eventId, marketId } of this.savedMatchedEntries) {
+        this.marketToEvent.set(marketId, eventId);
+        if (!this.subscribedMarkets.has(marketId)) {
+          this.subscribedMarkets.add(marketId);
+          marketIds.push(marketId);
+        }
+      }
+      if (marketIds.length > 0) {
+        this.send(['join', 'market', marketIds]);
+        this.logger.log(`DexSport: re-subscribed ${marketIds.length} matched market(s) after token refresh`);
+      }
     }
   }
 
@@ -675,6 +706,14 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     this.logger.log(
       `[DexSport WS] snapshot complete — ${this.eventMatchWinnerFound.size} events, ${totalMarkets} markets received`,
     );
+
+    // Token-refresh reconnect: skip the match cycle, prices are already flowing in-place
+    if (this.skipOnAllMarketsReady) {
+      this.logger.log('DexSport: skipping match cycle trigger (token refresh reconnect)');
+      this.skipOnAllMarketsReady = false;
+      return;
+    }
+
     this.onAllMarketsReady?.();
   }
 
@@ -692,6 +731,9 @@ export class DexsportAdapter implements OnModuleInit, OnModuleDestroy {
     this.eventToTournament.clear();
     this.marketToEvent.clear();
     this.trackedMarketIds.clear();
+    // Full cycle reset — clear saved matched entries and ensure match cycle fires after reconnect
+    this.savedMatchedEntries = [];
+    this.skipOnAllMarketsReady = false;
     this.reconnect();
   }
 

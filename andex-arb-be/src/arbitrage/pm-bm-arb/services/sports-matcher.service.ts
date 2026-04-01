@@ -481,11 +481,22 @@ export class SportsMatcher {
     dexEvents: DexSportsEvent[],
     bmPlatform: 'pinnacle' | 'stake' | 'cloudbet',
   ): BmBmMatch[] {
-    // Resolve dexsport sport slugs to canonical sport keys
-    const dexMapped = dexEvents.map((e) => ({
+    // Resolve dexsport sport slugs to canonical sport keys.
+    // Also deduplicate live vs pre-game: prefer live (2.X) over pre-game (1.X).
+    let dexMapped = dexEvents.map((e) => ({
       ...e,
       sportKey: DEX_SLUG_TO_SPORT.get(e.sportKey) ?? e.sportKey,
     }));
+
+    const liveBaseIds = new Set<string>();
+    for (const e of dexMapped) {
+      if (e.eventId.startsWith('2.')) liveBaseIds.add(e.eventId.slice(2));
+    }
+    if (liveBaseIds.size > 0) {
+      dexMapped = dexMapped.filter(
+        (e) => !e.eventId.startsWith('1.') || !liveBaseIds.has(e.eventId.slice(2)),
+      );
+    }
 
     const pairs: BmBmMatch[] = [];
 
@@ -584,10 +595,26 @@ export class SportsMatcher {
   ): SportsMatch[] {
     // Resolve dexsport sport slugs to canonical sport keys.
     // Pinnacle and Stake already set the canonical sportKey — DEX_SLUG_TO_SPORT is a no-op for them.
-    const bmMapped = bmEvents.map((e) => ({
+    let bmMapped = bmEvents.map((e) => ({
       ...e,
       sportKey: DEX_SLUG_TO_SPORT.get(e.sportKey) ?? e.sportKey,
     }));
+
+    // DexSport uses separate event IDs for pre-game (1.sport.id) and live (2.sport.id).
+    // When a game starts, the live event has current odds while the pre-game event freezes.
+    // Deduplicate: if both versions exist, keep only the live (2.X) event so the matcher
+    // always binds to live markets for in-progress games.
+    if (platform === 'dexsport') {
+      const liveBaseIds = new Set<string>();
+      for (const e of bmMapped) {
+        if (e.eventId.startsWith('2.')) liveBaseIds.add(e.eventId.slice(2));
+      }
+      if (liveBaseIds.size > 0) {
+        bmMapped = bmMapped.filter(
+          (e) => !e.eventId.startsWith('1.') || !liveBaseIds.has(e.eventId.slice(2)),
+        );
+      }
+    }
 
     const pairs: SportsMatch[] = [];
 
