@@ -48,7 +48,6 @@ from src.payments import (
     get_withdrawal_request,
     update_withdrawal_request,
     get_withdrawal_wallet,
-    get_recently_expired_subscription,
     set_user_admin,
     is_user_admin,
     ensure_admin_demo_link,
@@ -113,12 +112,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "subscribe_active": (
             "📝 У вас активная подписка до {expires} (МСК)\n\n"
             "При оплате новой подписки дни будут добавлены к текущей!\n\n"
-            "Выберите подписку для продления:{discount_note}"
-        ),
-        "subscribe_discount_note": "\n\nСкидка 20% действует, пока подписка активна.",
-        "subscribe_expired_discount": (
-            "Ваша подписка истекла, но скидка 20% на продление действует до {until} (МСК)!\n\n"
-            "Выберите подписку для оформления:"
+            "Выберите подписку для продления:"
         ),
         "profile_title": "Личный кабинет",
         "profile_sub_none": "отсутствует",
@@ -307,12 +301,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "subscribe_active": (
             "📝 Your subscription is active until {expires} (MSK)\n\n"
             "When you pay for a new subscription, days will be added to the current one!\n\n"
-            "Choose a subscription to renew:{discount_note}"
-        ),
-        "subscribe_discount_note": "\n\nThe 20% discount is valid while the subscription is active.",
-        "subscribe_expired_discount": (
-            "Your subscription has expired, but the 20% renewal discount is active until {until} (MSK)!\n\n"
-            "Choose a subscription:"
+            "Choose a subscription to renew:"
         ),
         "profile_title": "My Account",
         "profile_sub_none": "none",
@@ -932,7 +921,6 @@ async def show_plans(callback: CallbackQuery) -> None:
         message_text = tx(
             lang, "subscribe_active",
             expires=expires_msk.strftime("%d.%m.%Y %H:%M"),
-            discount_note="",
         )
     else:
         message_text = tx(lang, "subscribe_text")

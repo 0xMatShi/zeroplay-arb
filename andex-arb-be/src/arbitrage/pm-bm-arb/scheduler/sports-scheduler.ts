@@ -264,6 +264,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
 
     // Fonbet: full reset — clears version, re-fetches snapshot on next poll tick
     this.fonbetAdapter.clearCache();
+
   }
 
   // ── Cron: Snapshot every 5 seconds ───────────────────────────
