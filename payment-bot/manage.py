@@ -978,18 +978,167 @@ def menu_referral_stats() -> None:
     inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
 
 
+async def _do_broadcast(
+    user_ids: list[int],
+    text: str,
+    with_invite: bool,
+) -> None:
+    """Выполняет рассылку: для каждого пользователя отправляет сообщение,
+    при необходимости генерируя уникальную одноразовую ссылку в группу."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    group_id = int(os.getenv("PRIVATE_GROUP_ID", "0"))
+
+    if not token:
+        print("\n❌ TELEGRAM_BOT_TOKEN не задан в .env\n")
+        return
+
+    if with_invite and not group_id:
+        print("\n❌ PRIVATE_GROUP_ID не задан в .env\n")
+        return
+
+    bot = Bot(token=token)
+
+    sent = 0
+    failed = 0
+    blocked = 0
+
+    print()
+    for i, user_id in enumerate(user_ids, 1):
+        try:
+            if with_invite:
+                invite = await bot.create_chat_invite_link(
+                    chat_id=group_id,
+                    member_limit=1,
+                )
+                full_text = f"{text}\n\n{invite.invite_link}"
+            else:
+                full_text = text
+
+            await bot.send_message(chat_id=user_id, text=full_text)
+            sent += 1
+            print(f"  [{i}/{len(user_ids)}] ✅ {user_id}")
+        except Exception as e:
+            err = str(e)
+            if "bot was blocked by the user" in err or "user is deactivated" in err:
+                blocked += 1
+                print(f"  [{i}/{len(user_ids)}] ⛔ {user_id} (заблокировал бота)")
+            else:
+                failed += 1
+                print(f"  [{i}/{len(user_ids)}] ❌ {user_id}: {err}")
+
+        # Небольшая пауза, чтобы не попасть под flood control
+        await asyncio.sleep(0.05)
+
+    await bot.session.close()
+
+    print()
+    print("=" * 50)
+    print(f"  Отправлено:  {sent}")
+    print(f"  Заблокировал: {blocked}")
+    print(f"  Ошибок:      {failed}")
+    print("=" * 50)
+
+
+def menu_broadcast() -> None:
+    """Рассылка сообщений пользователям."""
+    import sys
+    sys.path.insert(0, ".")
+
+    clear()
+    print("=" * 60)
+    print("РАССЫЛКА СООБЩЕНИЙ")
+    print("=" * 60 + "\n")
+
+    # 1. Кому рассылать
+    audience = inquirer.select(  # type: ignore
+        message="Кому отправить рассылку?",
+        choices=[
+            "Всем пользователям",
+            "Только подписчикам (активная подписка)",
+            "< Отмена",
+        ],
+    ).execute()
+
+    if audience == "< Отмена":
+        return
+
+    if audience == "Всем пользователям":
+        users = get_all_users()
+    else:
+        users = get_active_users_list()
+
+    if not users:
+        print("\nНет пользователей для рассылки.\n")
+        inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
+        return
+
+    # 2. Прикрепить ссылку в группу?
+    invite_choice = inquirer.select(  # type: ignore
+        message="Добавить уникальную ссылку-приглашение в группу?",
+        choices=["Да", "Нет", "< Отмена"],
+    ).execute()
+
+    if invite_choice == "< Отмена":
+        return
+
+    with_invite = (invite_choice == "Да")
+
+    # 3. Текст рассылки
+    text = inquirer.text(  # type: ignore
+        message="Текст сообщения:",
+    ).execute()
+
+    if not text or not text.strip():
+        print("\n❌ Текст не может быть пустым.\n")
+        inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
+        return
+
+    text = text.strip()
+
+    # 4. Подтверждение
+    clear()
+    print("=" * 60)
+    print("ПОДТВЕРЖДЕНИЕ РАССЫЛКИ")
+    print("=" * 60)
+    print(f"  Получатели:   {len(users)} чел. ({audience})")
+    print(f"  Ссылка в группу: {'Да' if with_invite else 'Нет'}")
+    print(f"\n  Текст:\n  {text}\n")
+    print("=" * 60 + "\n")
+
+    confirm = inquirer.select(  # type: ignore
+        message="Начать рассылку?",
+        choices=["Да, отправить", "< Отмена"],
+    ).execute()
+
+    if confirm == "< Отмена":
+        return
+
+    user_ids = [u["user_id"] for u in users]
+
+    clear()
+    print("=" * 60)
+    print("РАССЫЛКА...")
+    print("=" * 60)
+    asyncio.run(_do_broadcast(user_ids, text, with_invite))
+    print()
+
+    inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
+
+
 def main() -> None:
     clear()
     while True:
         action = inquirer.select( # type: ignore
             message="Управление ботом:",
-            choices=["Users", "Active Users", "Check Balance", "View Master Wallets", "Export Master Wallets", "New Referral", "Referral Stats", "Admin Stats", "Exit"],
+            choices=["Users", "Active Users", "Broadcast", "Check Balance", "View Master Wallets", "Export Master Wallets", "New Referral", "Referral Stats", "Admin Stats", "Exit"],
         ).execute()
 
         if action == "Users":
             menu_users()
         elif action == "Active Users":
             menu_active_users()
+        elif action == "Broadcast":
+            menu_broadcast()
         elif action == "Check Balance":
             menu_check_balance()
         elif action == "View Master Wallets":
