@@ -1068,8 +1068,16 @@ def menu_broadcast() -> None:
     elif audience == "Только подписчикам (активная подписка)":
         users = get_active_users_list()
     else:
-        # Ручной выбор: загружаем всех, показываем чекбоксы
-        all_users = get_all_users()
+        # Ручной выбор: сначала спрашиваем из какого пула брать
+        pool_choice = inquirer.select(  # type: ignore
+            message="Выбирать из:",
+            choices=["Всех пользователей", "Только подписчиков", "< Отмена"],
+        ).execute()
+
+        if pool_choice == "< Отмена":
+            return
+
+        all_users = get_all_users() if pool_choice == "Всех пользователей" else get_active_users_list()
         if not all_users:
             print("\nНет пользователей.\n")
             inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
