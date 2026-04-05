@@ -102,15 +102,21 @@ export function CalculatorContent({
   const pmProb = parseFloat(pmPrice) / 100
   const dexO = parseFloat(dexOddsVal)
 
+  // Effective PM cost per $1 of guaranteed payout, accounting for 3% fee on winnings.
+  // Matches backend formula: p * (1 + 0.03 * (1 - p))
+  const pmEffectiveCost = (p: number) => p * (1 + 0.03 * (1 - p))
+
   const calcDexFromPm = (pm: string, prob = pmProb, oddsVal = dexO) => {
     const s = parseFloat(pm)
-    if (!isNaN(s) && s > 0 && prob > 0 && oddsVal > 0) return String(Math.round(s / (prob * oddsVal)))
+    const eff = pmEffectiveCost(prob)
+    if (!isNaN(s) && s > 0 && eff > 0 && oddsVal > 0) return String(Math.round(s / (eff * oddsVal)))
     return ''
   }
 
   const calcPmFromDex = (dex: string, prob = pmProb, oddsVal = dexO) => {
     const s = parseFloat(dex)
-    if (!isNaN(s) && s > 0 && prob > 0 && oddsVal > 0) return (s * oddsVal * prob).toFixed(2)
+    const eff = pmEffectiveCost(prob)
+    if (!isNaN(s) && s > 0 && eff > 0 && oddsVal > 0) return (s * oddsVal * eff).toFixed(2)
     return ''
   }
 
@@ -229,9 +235,10 @@ export function CalculatorContent({
     pmWinProfit = pmAmt > 0 && leftO > 0 && totalCost > 0 ? pmAmt * leftO - totalCost : 0
     dexWinProfit = dexAmt > 0 && rightO > 0 && totalCost > 0 ? dexAmt * rightO - totalCost : 0
   } else {
-    totalImplied = pmProb > 0 && dexO > 0 ? pmProb + 1 / dexO : 0
+    const eff = pmEffectiveCost(pmProb)
+    totalImplied = pmProb > 0 && dexO > 0 ? eff + 1 / dexO : 0
     profitPct = totalImplied > 0 ? ((1 - totalImplied) / totalImplied) * 100 : 0
-    pmWinProfit = pmAmt > 0 && pmProb > 0 && totalCost > 0 ? pmAmt / pmProb - totalCost : 0
+    pmWinProfit = pmAmt > 0 && eff > 0 && totalCost > 0 ? pmAmt / eff - totalCost : 0
     dexWinProfit = dexAmt > 0 && dexO > 0 && totalCost > 0 ? dexAmt * dexO - totalCost : 0
   }
 
