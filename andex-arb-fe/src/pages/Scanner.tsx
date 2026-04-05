@@ -335,13 +335,20 @@ function SportsOpportunityCard({
       pmDisplayMode,
       ...(isBmBm && leftLeg ? { leftOdds: leftLeg.decimalOdds.toFixed(2), leftPlatform: leftLeg.platform } : {}),
     })
-    const half = Math.floor(screen.width / 2)
+    const half = Math.floor(screen.availWidth / 2)
     const h = screen.availHeight
+    const reposition = (win: Window, left: number) => {
+      setTimeout(() => {
+        try { win.moveTo(left, 0); win.resizeTo(half, h) } catch { /* cross-origin */ }
+      }, 300)
+    }
     if (leftLeg?.url) {
-      window.open(leftLeg.url, '_blank', `popup,width=${half},height=${h},left=0,top=0`)
+      const w1 = window.open(leftLeg.url, '_blank', `popup,width=${half},height=${h},left=0,top=0`)
+      if (w1) reposition(w1, 0)
     }
     if (rightLeg?.url) {
-      window.open(rightLeg.url, '_blank', `popup,width=${half},height=${h},left=${half},top=0`)
+      const w2 = window.open(rightLeg.url, '_blank', `popup,width=${half},height=${h},left=${half},top=0`)
+      if (w2) reposition(w2, half)
     }
   }
 
