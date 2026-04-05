@@ -1055,6 +1055,7 @@ def menu_broadcast() -> None:
         choices=[
             "Всем пользователям",
             "Только подписчикам (активная подписка)",
+            "Выбрать пользователей вручную",
             "< Отмена",
         ],
     ).execute()
@@ -1064,8 +1065,31 @@ def menu_broadcast() -> None:
 
     if audience == "Всем пользователям":
         users = get_all_users()
-    else:
+    elif audience == "Только подписчикам (активная подписка)":
         users = get_active_users_list()
+    else:
+        # Ручной выбор: загружаем всех, показываем чекбоксы
+        all_users = get_all_users()
+        if not all_users:
+            print("\nНет пользователей.\n")
+            inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
+            return
+
+        choices = [
+            {"name": format_user_display(u), "value": u}
+            for u in all_users
+        ]
+        selected = inquirer.checkbox(  # type: ignore
+            message="Выберите пользователей (пробел — отметить, Enter — подтвердить):",
+            choices=choices,
+        ).execute()
+
+        if not selected:
+            print("\nНикто не выбран. Отмена.\n")
+            inquirer.select(message="", choices=["< Назад"]).execute()  # type: ignore
+            return
+
+        users = selected
 
     if not users:
         print("\nНет пользователей для рассылки.\n")
