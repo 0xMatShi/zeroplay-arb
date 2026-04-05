@@ -257,13 +257,16 @@ function SportsOpportunityCard({
   const profitPct = opp.profitPercentage
   const isNegative = profitPct <= 0
 
-  // Perfect amounts (proportional to leg probability)
-  const pmPerfect = leftLeg ? perfectAmount * (leftLeg.probability / totalCost) : 0
+  // Effective PM cost per $1 of payout (matches backend fee formula)
+  const pmEff = pmLeg ? pmLeg.probability * (1 + 0.03 * (1 - pmLeg.probability)) : 0
+
+  // Perfect amounts (proportional to leg cost; PM uses fee-adjusted cost)
+  const pmPerfect = leftLeg && !isBmBm ? perfectAmount * (pmEff / totalCost) : leftLeg ? perfectAmount * (leftLeg.probability / totalCost) : 0
   const dexPerfect = rightLeg ? perfectAmount * (rightLeg.probability / totalCost) : 0
 
   // Real amounts (limited by PM best ask qty; bm-bm has no order book)
   const pmQty = isBmBm ? 0 : (pmLeg?.pmBestAskQty ?? 0)
-  const pmReal = pmLeg ? pmQty * pmLeg.probability : 0
+  const pmReal = pmLeg ? pmQty * pmEff : 0
   const dexReal = rightLeg ? pmQty * rightLeg.probability : 0
   const realTotal = pmQty * totalCost
   const effectiveTotal = realTotal > 0 ? Math.min(realTotal, perfectAmount) : 0
