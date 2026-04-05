@@ -338,18 +338,10 @@ function SportsOpportunityCard({
     const half = Math.floor(screen.width / 2)
     const h = screen.availHeight
     if (leftLeg?.url) {
-      const win1 = window.open(leftLeg.url, '_blank', `width=${half},height=${h},left=0,top=0`)
-      if (win1) {
-        win1.moveTo(0, 0)
-        win1.resizeTo(half, h)
-      }
+      window.open(leftLeg.url, '_blank', `popup,width=${half},height=${h},left=0,top=0`)
     }
     if (rightLeg?.url) {
-      const win2 = window.open(rightLeg.url, '_blank', `width=${half},height=${h},left=${half},top=0`)
-      if (win2) {
-        win2.moveTo(half, 0)
-        win2.resizeTo(half, h)
-      }
+      window.open(rightLeg.url, '_blank', `popup,width=${half},height=${h},left=${half},top=0`)
     }
   }
 
