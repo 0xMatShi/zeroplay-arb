@@ -228,7 +228,7 @@
     "sortProfitUsd": "ПРИБЫЛЬ $",
     "sortNewest": "НОВЫЕ",
     "polymarketConfig": "POLYMARKET CONFIG",
-    "showPolymarketAbove50": "POLYMARKET ≥ 50¢",
+    "showPolymarketAbove50": "HIDE PRE > 50¢",
     "arbMode": "РЕЖИМ АРБИТРАЖА",
     "settings": "НАСТРОЙКИ",
     "settingsMinRoi": "MIN ROI",

@@ -320,6 +320,39 @@ function SportsOpportunityCard({
     if (rightLeg?.url) openTab(rightLeg.url)
   }
 
+  const handleOpenSideBySide = () => {
+    void openCalcWindow({
+      pmOutcome: leftLeg?.outcomeName ?? '',
+      dexOutcome: rightLeg?.outcomeName ?? '',
+      pmPrice: leftLeg ? (leftLeg.probability * 100).toFixed(0) : '50',
+      dexOdds: rightLeg ? rightLeg.decimalOdds.toFixed(2) : '2.00',
+      pmAmount: pmCalcAmount.toFixed(2),
+      dexAmount: dexCalcAmount.toFixed(2),
+      dexPlatform: rightLeg?.platform,
+      marketType: displayMarketType,
+      eventName: opp.matchTitle,
+      sport: sportLabel,
+      pmDisplayMode,
+      ...(isBmBm && leftLeg ? { leftOdds: leftLeg.decimalOdds.toFixed(2), leftPlatform: leftLeg.platform } : {}),
+    })
+    const half = Math.floor(screen.width / 2)
+    const h = screen.availHeight
+    if (leftLeg?.url) {
+      const win1 = window.open(leftLeg.url, '_blank', `width=${half},height=${h},left=0,top=0`)
+      if (win1) {
+        win1.moveTo(0, 0)
+        win1.resizeTo(half, h)
+      }
+    }
+    if (rightLeg?.url) {
+      const win2 = window.open(rightLeg.url, '_blank', `width=${half},height=${h},left=${half},top=0`)
+      if (win2) {
+        win2.moveTo(half, 0)
+        win2.resizeTo(half, h)
+      }
+    }
+  }
+
   let cardClass = 'opportunity-card sports-card'
   if (isPinned && !isStale) cardClass += ' sports-card--pinned'
   else if (isPinned && isStale) cardClass += ' sports-card--pinned-stale'
@@ -387,14 +420,15 @@ function SportsOpportunityCard({
             <div className="sports-price-row">
               {leftLeg ? (
                 <>
-                  {!isBmBm && (
-                    <span className={`sports-cents ${pmDisplayMode === 'odds' ? 'sports-cents--muted' : ''}`}>
+                  {!isBmBm && pmDisplayMode === 'shares' ? (
+                    <span className="sports-cents">
                       {(leftLeg.probability * 100).toFixed(0)}¢
                     </span>
+                  ) : (
+                    <span className="sports-odds">
+                      {leftLeg.decimalOdds.toFixed(2)}x
+                    </span>
                   )}
-                  <span className={`sports-odds ${!isBmBm && pmDisplayMode === 'shares' ? 'sports-odds--muted' : ''}`}>
-                    {leftLeg.decimalOdds.toFixed(2)}x
-                  </span>
                 </>
               ) : <span className="sports-cents">—</span>}
             </div>
@@ -420,7 +454,6 @@ function SportsOpportunityCard({
             <div className="sports-price-row">
               {dexLeg ? (
                 <>
-                  {!isBmBm && <span className="sports-cents sports-cents--muted">{(dexLeg.probability * 100).toFixed(0)}¢</span>}
                   <span className="sports-odds">{dexLeg.decimalOdds.toFixed(2)}x</span>
                 </>
               ) : <span className="sports-cents">—</span>}
@@ -481,7 +514,7 @@ function SportsOpportunityCard({
           className="sports-action-btn sports-action-btn--open"
           onClick={(e) => {
             e.stopPropagation()
-            handleOpenAll()
+            handleOpenSideBySide()
           }}
         >
           <ExternalLink size={28} />
@@ -786,7 +819,7 @@ export function Scanner() {
           const slug = leg.platformSlug.toLowerCase()
           const name = leg.platformName.toLowerCase()
           const isPolymarket = slug === 'polymarket' || name.includes('polymarket')
-          return isPolymarket && leg.price >= POLYMARKET_MIN_PRICE
+          return isPolymarket && leg.price > POLYMARKET_MIN_PRICE
         })
 
         if (hasLowPolymarketLeg) {

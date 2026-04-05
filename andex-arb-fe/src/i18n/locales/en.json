@@ -229,7 +229,7 @@
     "sortProfitUsd": "PROFIT $",
     "sortNewest": "NEWEST",
     "polymarketConfig": "POLYMARKET CONFIG",
-    "showPolymarketAbove50": "POLYMARKET ≥ 50¢",
+    "showPolymarketAbove50": "HIDE PRE > 50¢",
     "arbMode": "ARB MODE",
     "settings": "SETTINGS",
     "settingsMinRoi": "MIN ROI",
