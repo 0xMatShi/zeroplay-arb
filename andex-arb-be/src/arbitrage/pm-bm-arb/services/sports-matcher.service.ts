@@ -176,8 +176,16 @@ function extractDexValue(outcomes: Array<{ name: string; price: number }>): numb
   return null;
 }
 
+/**
+ * Checks whether a Dexsport market name matches a candidate from MARKET_MAP.
+ * Prefix '=' on the candidate requires an exact name match (case-insensitive).
+ * Without the prefix, a startsWith match is also accepted (e.g. "Match Winner" → "Match Winner (Live)").
+ */
 function dexNameMatchesCandidate(dexName: string, candidate: string): boolean {
   const dn = dexName.toLowerCase().trim();
+  if (candidate.startsWith('=')) {
+    return dn === candidate.slice(1).toLowerCase().trim();
+  }
   const cn = candidate.toLowerCase().trim();
   return dn === cn || dn.startsWith(cn);
 }
@@ -685,8 +693,11 @@ export class SportsMatcher {
         }
 
         if (bestBm) {
-          usedBm.add(bestBm.eventId);
           const matchedMarkets = matchMarketsForPair(pm, bestBm, sportKey);
+          // Only claim this Dexsport event as used when at least one market was matched.
+          // This lets PM child events (spreads/totals) also bind to the same Dexsport event
+          // even if the PM parent event (moneyline-only) found no matchable markets.
+          if (matchedMarkets.length > 0) usedBm.add(bestBm.eventId);
           const id = createHash('sha256')
             .update(`${platform}:${pm.id}:${bestBm.eventId}`)
             .digest('hex')

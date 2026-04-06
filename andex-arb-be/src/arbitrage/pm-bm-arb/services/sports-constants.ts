@@ -6,6 +6,7 @@ export const SPORTS: Record<string, SportDef> = {
   basketball: { label: 'Basketball', dexSlugs: ['basketball'], pmTags: ['basketball'] },
   tennis:     { label: 'Tennis',     dexSlugs: ['tennis'],     pmTags: ['tennis'] },
   hockey:     { label: 'Hockey',     dexSlugs: ['hockey'],     pmTags: ['hockey'] },
+  football:   { label: 'Football',   dexSlugs: ['football'],   pmTags: ['soccer'] },
   csgo:       { label: 'CS2',        dexSlugs: ['csgo'],       pmTags: ['counter-strike-2'] },
   boxing:     { label: 'Boxing',     dexSlugs: ['boxing'],     pmTags: ['ufc', 'zuffa'] },
   dota2:      { label: 'Dota 2',     dexSlugs: ['dota2'],      pmTags: ['dota-2'] },
@@ -64,6 +65,15 @@ export const MARKET_MAP: Record<string, Record<string, string[]>> = {
     map_handicap:    ['Handicap'],
     totals:          ['Total maps'],
   },
+  // Candidate names prefixed with '=' require exact (non-prefix) name match against Dexsport.
+  // This prevents false positives like "Total" matching "Total. 1-st half" or
+  // "Handicap" matching "Asian Handicap" / "Handicap 0:1" etc.
+  football: {
+    spreads:             ['=Handicap'],
+    totals:              ['=Total'],
+    both_teams_to_score: ['=Both to score'],
+    total_corners:       ['=Corners. Total'],
+  },
   baseball: {
     moneyline: ['Match Winner'],
   },
@@ -82,7 +92,7 @@ export const MARKET_MAP: Record<string, Record<string, string[]>> = {
 
 /** Types that carry a numeric value (totals, spreads, handicaps) and need value comparison. */
 export const VALUE_TYPES = new Set([
-  'totals', 'spreads',
+  'totals', 'spreads', 'total_corners',
   'tennis_set_totals', 'tennis_match_totals', 'tennis_set_handicap',
   'tennis_first_set_totals',
   'first_half_totals', 'first_half_spreads',

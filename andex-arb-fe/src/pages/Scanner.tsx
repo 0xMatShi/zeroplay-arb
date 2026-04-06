@@ -280,6 +280,7 @@ function SportsOpportunityCard({
   const dexCalcAmount = useRealForCalc ? dexReal : dexPerfect
 
   const SPORT_DISPLAY: Record<string, string> = {
+    football:   'Football',
     csgo:       'CS2',
     dota2:      'Dota 2',
     lol:        'League of Legends',
@@ -1353,6 +1354,7 @@ export function Scanner() {
                     <div className={`collapsible-body ${sportsOpen ? 'collapsible-body--open' : ''}`}>
                       <div className="platform-buttons">
                         {([
+                          { key: 'football',   label: 'Football' },
                           { key: 'basketball', label: 'Basketball' },
                           { key: 'baseball',   label: 'Baseball' },
                           { key: 'tennis',     label: 'Tennis' },
@@ -1371,10 +1373,10 @@ export function Scanner() {
                               className={`sidebar-mode-button ${isActive ? 'active' : ''}`}
                               onClick={() => setSportFilter((prev) => {
                                 const next = new Set(prev.size === 0
-                                  ? ['basketball','tennis','hockey','csgo','boxing','dota2','cod','baseball','lol','valorant']
+                                  ? ['football','basketball','tennis','hockey','csgo','boxing','dota2','cod','baseball','lol','valorant']
                                   : prev)
                                 if (next.has(key)) next.delete(key); else next.add(key)
-                                if (next.size === 10) return new Set()
+                                if (next.size === 11) return new Set()
                                 return next
                               })}
                             >

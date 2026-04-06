@@ -33,7 +33,7 @@ const PHASE2_TIMEOUT_MS = 5_000;
 
 /** Sports we track for arbitrage */
 const TARGET_SPORTS = [
-  'basketball', 'tennis', 'hockey', 'csgo', 'boxing',
+  'basketball', 'tennis', 'hockey', 'football', 'csgo', 'boxing',
   'dota2', 'call-of-duty', 'baseball', 'lol', 'valorant',
 ];
 

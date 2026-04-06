@@ -285,7 +285,7 @@ function TradeModal({ initialForm, editId, onClose }: TradeModalProps) {
               <label>{t('andexDashboard.sport')}</label>
               <select value={form.sport} onChange={(e) => set('sport', e.target.value)}>
                 <option value="">—</option>
-                {['Basketball', 'Baseball', 'Tennis', 'Hockey', 'Boxing', 'CS2', 'Valorant', 'Dota 2', 'League of Legends', 'Call of Duty'].map((s) => (
+                {['Football', 'Basketball', 'Baseball', 'Tennis', 'Hockey', 'Boxing', 'CS2', 'Valorant', 'Dota 2', 'League of Legends', 'Call of Duty'].map((s) => (
                   <option key={s} value={s.toLowerCase()}>{s}</option>
                 ))}
               </select>
