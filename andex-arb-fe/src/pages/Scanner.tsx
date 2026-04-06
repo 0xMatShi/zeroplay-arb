@@ -1522,7 +1522,7 @@ export function Scanner() {
               PNL Tracker
             </button>
             <a
-              href={`https://docs.subline.space?key=${localStorage.getItem('apiKey') ?? ''}`}
+              href="https://docs.subline.space"
               target="_blank"
               rel="noopener noreferrer"
               className="profile-action-btn"
