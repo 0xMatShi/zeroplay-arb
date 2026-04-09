@@ -22,6 +22,8 @@ import {
   MARKET_MAP,
   VALUE_TYPES,
   SPREAD_TYPES,
+  PLAYER_PROP_TYPES,
+  PLAYER_PROP_DEX_SUFFIXES,
   MATCH_THRESHOLD,
   MIN_SHARED_WORDS,
   TEAM_ALIASES,
@@ -190,6 +192,44 @@ function dexNameMatchesCandidate(dexName: string, candidate: string): boolean {
   return dn === cn || dn.startsWith(cn);
 }
 
+/**
+ * Match a player prop PM market (points/assists/rebounds) against Dexsport markets.
+ * Dexsport names are dynamic: "{PlayerName} Total Points. With overtime" etc.
+ * We extract the player name from the PM question and find the matching Dex market by suffix + value.
+ */
+function matchPlayerProp(pm: PmMarket, dexMarkets: DexMarket[]): DexMarket | null {
+  const type = pm.sportsMarketType!;
+  const suffix = PLAYER_PROP_DEX_SUFFIXES[type];
+  if (!suffix) return null;
+
+  // PM question format: "Player Name: Points O/U 21.5"
+  const nameMatch = pm.question.match(/^(.+?):\s*(?:Points|Assists|Rebounds)\s+O\/U/i);
+  if (!nameMatch) return null;
+  const pmPlayerNorm = nameMatch[1].trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const pmValue = extractPmValue(pm.question);
+
+  // Filter dex markets whose name ends with the expected suffix
+  const suffixMatches = dexMarkets.filter((d) => d.name.toLowerCase().endsWith(suffix));
+  if (suffixMatches.length === 0) return null;
+
+  // Among those, find one whose player name portion matches
+  const playerMatches = suffixMatches.filter((d) => {
+    const playerPart = d.name.slice(0, d.name.length - suffix.length).toLowerCase().replace(/[^a-z0-9]/g, '');
+    return playerPart.includes(pmPlayerNorm) || pmPlayerNorm.includes(playerPart);
+  });
+  if (playerMatches.length === 0) return null;
+
+  if (pmValue !== null) {
+    return playerMatches.find((d) => {
+      const dv = extractDexValue(d.outcomes);
+      return dv !== null && Math.abs(pmValue - dv) < 0.01;
+    }) ?? null;
+  }
+
+  return playerMatches[0];
+}
+
 function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): DexMarket | null {
   const type = pm.sportsMarketType;
   if (!type) return null;
@@ -263,6 +303,11 @@ function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): D
     }
 
     return typeMatches[0];
+  }
+
+  // ── Player prop path: points / assists / rebounds ───────────────────────
+  if (PLAYER_PROP_TYPES.has(type)) {
+    return matchPlayerProp(pm, dexMarkets);
   }
 
   // ── Name-based path: DexSport (market names come from API) ──────────────
@@ -417,7 +462,7 @@ function matchDexMarketsForBmPair(bmEvent: DexSportsEvent, dexEvent: DexSportsEv
   const usedDex = new Set<string>();
 
   for (const bmMarket of bmEvent.markets) {
-    if (bmMarket.marketType !== 'moneyline') continue;
+    if (!bmMarket.marketType) continue;
     const dexMarket = matchTypedToDex(
       bmMarket,
       dexEvent.markets.filter((d) => !usedDex.has(d.name)),

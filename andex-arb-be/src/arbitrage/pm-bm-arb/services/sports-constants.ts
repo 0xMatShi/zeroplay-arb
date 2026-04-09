@@ -69,10 +69,11 @@ export const MARKET_MAP: Record<string, Record<string, string[]>> = {
   // This prevents false positives like "Total" matching "Total. 1-st half" or
   // "Handicap" matching "Asian Handicap" / "Handicap 0:1" etc.
   football: {
-    spreads:             ['=Handicap'],
-    totals:              ['=Total'],
-    both_teams_to_score: ['=Both to score'],
-    total_corners:       ['=Corners. Total'],
+    spreads:                    ['=Handicap'],
+    totals:                     ['=Total'],
+    football_first_half_totals: ['=Total. 1-st half'],
+    both_teams_to_score:        ['=Both to score'],
+    total_corners:              ['=Corners. Total'],
   },
   baseball: {
     moneyline: ['Match Winner'],
@@ -92,12 +93,26 @@ export const MARKET_MAP: Record<string, Record<string, string[]>> = {
 
 /** Types that carry a numeric value (totals, spreads, handicaps) and need value comparison. */
 export const VALUE_TYPES = new Set([
-  'totals', 'spreads', 'total_corners',
+  'totals', 'spreads', 'total_corners', 'football_first_half_totals',
+  'points', 'assists', 'rebounds',
   'tennis_set_totals', 'tennis_match_totals', 'tennis_set_handicap',
   'tennis_first_set_totals',
   'first_half_totals', 'first_half_spreads',
   'map_handicap',
 ]);
+
+/**
+ * Player prop market types that use dynamic Dexsport market names (include the player name).
+ * Matching is done by extracting the player name from the PM question, not by fixed MARKET_MAP entries.
+ */
+export const PLAYER_PROP_TYPES = new Set(['points', 'assists', 'rebounds']);
+
+/** Dexsport name suffix for each player prop type (lowercase, after the player name). */
+export const PLAYER_PROP_DEX_SUFFIXES: Record<string, string> = {
+  points:   ' total points. with overtime',
+  assists:  ' total assists. with overtime',
+  rebounds: '. rebounds. with overtime',
+};
 
 /** Types where sign can differ (spread from team A = -X, from team B = +X). Compare by abs value. */
 export const SPREAD_TYPES = new Set([

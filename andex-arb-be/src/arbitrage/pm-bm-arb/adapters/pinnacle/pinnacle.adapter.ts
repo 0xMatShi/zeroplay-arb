@@ -28,6 +28,7 @@ const WS_RECONNECT_DELAY_MS = 5_000;
 
 /** Sports to track: sportId → sportKey (for regular sports) */
 const REGULAR_SPORTS: Array<{ sportId: number; sportKey: string }> = [
+  { sportId: 29, sportKey: 'football' },
   { sportId: 4,  sportKey: 'basketball' },
   { sportId: 33, sportKey: 'tennis' },
   { sportId: 19, sportKey: 'hockey' },
@@ -750,10 +751,18 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    // ── Totals and Handicap — period 0 (full match/series) only ───
-    if (period !== 0) return;
+    // ── Totals and Handicap ─────────────────────────────────────
+    // Period 0 = full match; period 1 = 1st half (football only).
+    if (sportKey === 'football') {
+      this.logger.debug(`RAW football period ${period}: ${JSON.stringify(data)}`);
+    }
+    const isFirstHalf = period === 1 && sportKey === 'football';
+    if (period !== 0 && !isFirstHalf) return;
 
-    const { totalsType, handicapType } = this.resolveTypedMarketTypes(sportKey, resultingUnit);
+    const { totalsType: matchTotalsType, handicapType: matchHandicapType } =
+      this.resolveTypedMarketTypes(sportKey, resultingUnit);
+    const totalsType   = isFirstHalf ? 'football_first_half_totals' : matchTotalsType;
+    const handicapType = isFirstHalf ? null : matchHandicapType;
 
     // ── Over/Under (totals) ────────────────────────────────────
     if (totalsType && data.overUnder?.length) {
@@ -769,7 +778,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         if (!isFinite(points) || !isFinite(overOdds) || !isFinite(underOdds)) continue;
         if (overOdds <= 1 || underOdds <= 1) continue;
         markets.push({
-          marketId:   `${eventId}_p0_ou_${ou.points}`,
+          marketId:   `${eventId}_p${period}_ou_${ou.points}`,
           marketType: totalsType,
           name:       totalsType,
           outcomes: [
@@ -798,7 +807,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         const homeSpreadStr = homeSpreadNum >= 0 ? `+${homeSpreadNum}` : `${homeSpreadNum}`;
         const awaySpreadStr = awaySpreadNum >= 0 ? `+${awaySpreadNum}` : `${awaySpreadNum}`;
         markets.push({
-          marketId:   `${eventId}_p0_hdp_${hdp.homeSpread}`,
+          marketId:   `${eventId}_p${period}_hdp_${hdp.homeSpread}`,
           marketType: handicapType,
           name:       handicapType,
           outcomes: [
@@ -820,6 +829,8 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     resultingUnit?: string,
   ): { totalsType: string | null; handicapType: string | null } {
     switch (sportKey) {
+      case 'football':
+        return { totalsType: 'totals', handicapType: 'spreads' };
       case 'basketball':
       case 'hockey':
         return { totalsType: 'totals', handicapType: 'spreads' };
