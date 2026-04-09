@@ -852,13 +852,15 @@ export function Scanner() {
         if (!sportFilter.has(sOpp.sportKey)) return false
       }
 
-      // REAL MIN filter — hide cards where PM liquidity is below threshold
+      // REAL MIN filter — hide cards where PM liquidity is below threshold (pm-bm only, not bm-bm)
       if (arbMode === 'pm-bm' && realMinAmount > 0) {
         const sOpp = opp as SportsOpportunity
         if (sOpp.sportsLegs?.length > 0) {
           const pmLeg = sOpp.sportsLegs.find(l => l.platform === 'polymarket')
-          const realTotal = (pmLeg?.pmBestAskQty ?? 0) * opp.totalCost
-          if (realTotal < realMinAmount) return false
+          if (pmLeg) {
+            const realTotal = (pmLeg.pmBestAskQty ?? 0) * opp.totalCost
+            if (realTotal < realMinAmount) return false
+          }
         }
       }
 
