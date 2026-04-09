@@ -447,10 +447,32 @@ function matchTypedToDex(typedMarket: DexMarket, dexMarkets: DexMarket[], sportK
   if (VALUE_TYPES.has(type)) {
     const typedValue = extractDexValue(typedMarket.outcomes);
     if (typedValue !== null) {
-      return nameMatches.find((dex) => {
+      const valueMatches = nameMatches.filter((dex) => {
         const dexValue = extractDexValue(dex.outcomes);
-        return dexValue !== null && Math.abs(typedValue - dexValue) < 0.01;
-      }) ?? null;
+        return dexValue !== null && Math.abs(Math.abs(typedValue) - Math.abs(dexValue)) < 0.01;
+      });
+      if (valueMatches.length === 0) return null;
+
+      // For spread/handicap: verify both platforms agree on which team has the negative sign.
+      if (SPREAD_TYPES.has(type)) {
+        const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const typedNegTeam = typedMarket.outcomes
+          .find((o) => /\s-[\d.]+$/.test(o.name))
+          ?.name.replace(/\s*-[\d.]+$/, '').trim();
+
+        if (!typedNegTeam) return null;
+        const typedNegNorm = norm(typedNegTeam);
+
+        return valueMatches.find((dex) =>
+          dex.outcomes.some((o) => {
+            if (!/\s-[\d.]+$/.test(o.name)) return false;
+            const teamNorm = norm(o.name.replace(/\s*-[\d.]+$/, '').trim());
+            return teamNorm.includes(typedNegNorm) || typedNegNorm.includes(teamNorm);
+          }),
+        ) ?? null;
+      }
+
+      return valueMatches[0];
     }
   }
 
