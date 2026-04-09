@@ -753,10 +753,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
 
     // ── Totals and Handicap ─────────────────────────────────────
     // Period 0 = full match; period 1 = 1st half (football only).
-    if (sportKey === 'football') {
-      this.logger.debug(`RAW football period ${period}: ${JSON.stringify(data)}`);
-    }
-    const isFirstHalf = period === 1 && sportKey === 'football';
+const isFirstHalf = period === 1 && sportKey === 'football';
     if (period !== 0 && !isFirstHalf) return;
 
     const { totalsType: matchTotalsType, handicapType: matchHandicapType } =
