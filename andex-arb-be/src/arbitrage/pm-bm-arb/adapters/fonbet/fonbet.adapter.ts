@@ -382,24 +382,32 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      // Replace totals/handicap markets wholesale (indices 1+), logging any price changes
+      // Update totals/handicap markets in-place so matchedMarkets[].dexMarket references stay valid.
       const prevExtra = existing.markets.slice(1);
-      for (const newMarket of extraMarkets) {
-        const prev = prevExtra.find((m) => m.marketId === newMarket.marketId);
-        if (!prev) continue;
-        for (let i = 0; i < Math.min(prev.outcomes.length, newMarket.outcomes.length); i++) {
-          const np = newMarket.outcomes[i].price;
-          if (np !== prev.outcomes[i].price) {
-            const arrow = np > prev.outcomes[i].price ? '↑' : '↓';
+      const newById = new Map(extraMarkets.map((m) => [m.marketId, m]));
+      const keptMarkets: DexMarket[] = [];
+
+      for (const prevM of prevExtra) {
+        const newM = newById.get(prevM.marketId);
+        if (!newM) continue;
+        for (let i = 0; i < Math.min(prevM.outcomes.length, newM.outcomes.length); i++) {
+          const np = newM.outcomes[i].price;
+          if (np !== prevM.outcomes[i].price) {
+            const arrow = np > prevM.outcomes[i].price ? '↑' : '↓';
             this.logger.log(
-              `[Fonbet] ${existing.name}: ${newMarket.outcomes[i].name} ` +
-              `${prev.outcomes[i].price?.toFixed(3)} → ${np.toFixed(3)} ${arrow}`,
+              `[Fonbet] ${existing.name}: ${newM.outcomes[i].name} ` +
+              `${prevM.outcomes[i].price?.toFixed(3)} → ${np.toFixed(3)} ${arrow}`,
             );
+            prevM.outcomes[i] = { ...prevM.outcomes[i], price: np };
             priceChanged = true;
           }
         }
+        keptMarkets.push(prevM);
+        newById.delete(prevM.marketId);
       }
-      existing.markets.splice(1, existing.markets.length - 1, ...extraMarkets);
+      for (const newM of newById.values()) keptMarkets.push(newM);
+
+      existing.markets.splice(1, existing.markets.length - 1, ...keptMarkets);
 
       if (priceChanged && this.initialStateFired) this.onPriceUpdate?.();
     } else {
