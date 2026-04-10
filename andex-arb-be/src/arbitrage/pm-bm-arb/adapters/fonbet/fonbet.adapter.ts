@@ -269,9 +269,13 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
           const prev = prevMap.get(f.f);
           if (f.v === 0) {
             if (prevMap.has(f.f)) { prevMap.delete(f.f); changed = true; }
-          } else if (prev?.v !== f.v || prev?.pt !== f.pt) {
-            prevMap.set(f.f, { v: f.v, pt: f.pt });
-            changed = true;
+          } else {
+            // Preserve existing pt if delta doesn't include it (pt only sent on initial snapshot)
+            const pt = f.pt !== undefined ? f.pt : prev?.pt;
+            if (prev?.v !== f.v || prev?.pt !== pt) {
+              prevMap.set(f.f, { v: f.v, pt });
+              changed = true;
+            }
           }
         }
         this.oddsCache.set(item.e, prevMap);
