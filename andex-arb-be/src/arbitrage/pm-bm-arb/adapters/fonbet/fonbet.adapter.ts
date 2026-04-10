@@ -74,8 +74,8 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
   /** eventId → raw fonbet event */
   private readonly eventMeta = new Map<number, FonbetEvent>();
 
-  /** eventId → { factorId → decimal odds } — only moneyline factors */
-  private readonly oddsCache = new Map<number, Map<number, number>>();
+  /** eventId → { factorId → { v: decimal odds, pt: handicap/total line text } } */
+  private readonly oddsCache = new Map<number, Map<number, { v: number; pt?: string }>>();
 
   /** eventId → DexSportsEvent (exposed to pipeline) */
   private readonly eventCache = new Map<string, DexSportsEvent>();
@@ -260,17 +260,17 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
 
       if (event && this.isTargetMatch(event)) {
         // ── Target main match ─────────────────────────────────────────────────
+        // Store ALL factors (totals and handicaps use non-moneyline factor IDs).
         this.eventLastSeen.set(String(item.e), Date.now());
 
-        const prevMap = this.oddsCache.get(item.e) ?? new Map<number, number>();
+        const prevMap = this.oddsCache.get(item.e) ?? new Map<number, { v: number; pt?: string }>();
         let changed = false;
         for (const f of item.factors) {
-          if (!TRACKED_FACTORS.has(f.f)) continue;
           const prev = prevMap.get(f.f);
           if (f.v === 0) {
             if (prevMap.has(f.f)) { prevMap.delete(f.f); changed = true; }
-          } else if (prev !== f.v) {
-            prevMap.set(f.f, f.v);
+          } else if (prev?.v !== f.v || prev?.pt !== f.pt) {
+            prevMap.set(f.f, { v: f.v, pt: f.pt });
             changed = true;
           }
         }
@@ -283,15 +283,15 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
         // ── Esport map sub-event (level=2) ────────────────────────────────────
         this.eventLastSeen.set(String(item.e), Date.now());
 
-        const prevMap = this.oddsCache.get(item.e) ?? new Map<number, number>();
+        const prevMap = this.oddsCache.get(item.e) ?? new Map<number, { v: number; pt?: string }>();
         let changed = false;
         for (const f of item.factors) {
           if (f.f !== 921 && f.f !== 923) continue; // only home/away for map outcomes
           const prev = prevMap.get(f.f);
           if (f.v === 0) {
             if (prevMap.has(f.f)) { prevMap.delete(f.f); changed = true; }
-          } else if (prev !== f.v) {
-            prevMap.set(f.f, f.v);
+          } else if (prev?.v !== f.v) {
+            prevMap.set(f.f, { v: f.v });
             changed = true;
           }
         }
@@ -302,11 +302,11 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
         }
       } else {
         // ── Non-target event: update odds cache only (event meta may arrive later) ──
-        const map = this.oddsCache.get(item.e) ?? new Map<number, number>();
+        const map = this.oddsCache.get(item.e) ?? new Map<number, { v: number; pt?: string }>();
         for (const f of item.factors) {
           if (!TRACKED_FACTORS.has(f.f)) continue;
           if (f.v === 0) map.delete(f.f);
-          else map.set(f.f, f.v);
+          else map.set(f.f, { v: f.v, pt: f.pt });
         }
         this.oddsCache.set(item.e, map);
       }
@@ -333,6 +333,7 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
     }
 
     const moneylineMarket = this.buildMoneylineMarket(id, event, odds, hasDraw);
+    const extraMarkets = this.buildTotalsAndHandicaps(id, event, odds);
 
     this.eventLastSeen.set(eventId, now);
 
@@ -349,7 +350,7 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
         isLive: event.place === 'live',
         startTime: event.startTime,
         url: this.buildEventUrl(event, sportKey),
-        markets: [moneylineMarket],
+        markets: [moneylineMarket, ...extraMarkets],
         updatedAt: now,
       });
       return;
@@ -377,9 +378,13 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
         }
       }
 
+      // Replace totals/handicap markets wholesale (indices 1+)
+      existing.markets.splice(1, existing.markets.length - 1, ...extraMarkets);
+
       if (priceChanged && this.initialStateFired) this.onPriceUpdate?.();
     } else {
       existing.markets[0] = moneylineMarket;
+      existing.markets.splice(1, existing.markets.length - 1, ...extraMarkets);
     }
   }
 
@@ -391,8 +396,8 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
     const sportKey = this.getSportKey(parent)!;
     const mapN = FonbetAdapter.parseMapNumber(event.name)!;
     const odds = this.oddsCache.get(id);
-    const p1 = odds?.get(921);
-    const p2 = odds?.get(923);
+    const p1 = odds?.get(921)?.v;
+    const p2 = odds?.get(923)?.v;
     const now = Date.now();
     const eventId = String(id);
 
@@ -480,17 +485,77 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
     return `https://fon.bet/sports/${slug}/${event.sportId}/${event.id}`;
   }
 
+  private buildTotalsAndHandicaps(
+    id: number,
+    event: FonbetEvent,
+    odds: Map<number, { v: number; pt?: string }> | undefined,
+  ): DexMarket[] {
+    if (!odds) return [];
+
+    const markets: DexMarket[] = [];
+
+    const totalsByPt      = new Map<string, Array<{ f: number; v: number }>>();
+    const handicapsByAbs  = new Map<string, Array<{ f: number; v: number; pt: string }>>();
+
+    for (const [factorId, entry] of odds) {
+      if (!entry.pt || entry.v === 0) continue;
+      const pt = entry.pt.trim();
+      if (pt.startsWith('+') || pt.startsWith('-')) {
+        const absVal = pt.replace(/^[+-]/, '');
+        const arr = handicapsByAbs.get(absVal) ?? [];
+        arr.push({ f: factorId, v: entry.v, pt });
+        handicapsByAbs.set(absVal, arr);
+      } else {
+        const arr = totalsByPt.get(pt) ?? [];
+        arr.push({ f: factorId, v: entry.v });
+        totalsByPt.set(pt, arr);
+      }
+    }
+
+    for (const [ptValue, factors] of totalsByPt) {
+      if (factors.length !== 2) continue;
+      factors.sort((a, b) => a.f - b.f);
+      const [over, under] = factors;
+      markets.push({
+        marketId:   `fonbet_${id}_total_${ptValue}`,
+        marketType: 'totals',
+        name:       'Total',
+        outcomes: [
+          { name: `Over ${ptValue}`,  price: over.v },
+          { name: `Under ${ptValue}`, price: under.v },
+        ],
+      });
+    }
+
+    for (const [, factors] of handicapsByAbs) {
+      if (factors.length !== 2) continue;
+      factors.sort((a, b) => a.f - b.f);
+      const [t1, t2] = factors;
+      markets.push({
+        marketId:   `fonbet_${id}_hcp_${t1.pt}`,
+        marketType: 'spreads',
+        name:       'Handicap',
+        outcomes: [
+          { name: `${event.team1} ${t1.pt}`,             price: t1.v },
+          { name: `${event.team2 ?? 'Team 2'} ${t2.pt}`, price: t2.v },
+        ],
+      });
+    }
+
+    return markets;
+  }
+
   private buildMoneylineMarket(
     id: number,
     event: FonbetEvent,
-    odds: Map<number, number> | undefined,
+    odds: Map<number, { v: number; pt?: string }> | undefined,
     hasDraw: boolean,
   ): DexMarket | null {
     if (!odds) return null;
 
     const [f1, f2] = hasDraw ? [7035, 7036] : [921, 923];
-    const p1 = odds.get(f1);
-    const p2 = odds.get(f2);
+    const p1 = odds.get(f1)?.v;
+    const p2 = odds.get(f2)?.v;
     if (!p1 || !p2) return null;
 
     const marketSuffix = hasDraw ? '_winner_ot' : '_moneyline';

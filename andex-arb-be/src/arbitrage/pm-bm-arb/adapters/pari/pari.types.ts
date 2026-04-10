@@ -20,8 +20,9 @@ export interface PariEvent {
 }
 
 export interface PariFactor {
-  f: number; // factor ID
-  v: number; // decimal odds (0 = suspended)
+  f: number;    // factor ID
+  v: number;    // decimal odds (0 = suspended)
+  pt?: string;  // handicap/total line text (e.g. "+5.5", "-5.5", "223.5")
 }
 
 export interface PariCustomFactors {

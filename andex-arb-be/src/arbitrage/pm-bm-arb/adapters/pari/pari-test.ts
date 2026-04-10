@@ -134,8 +134,14 @@ const liveInfoCache = new Map<number, PariLiveInfo>();
 /** Moneyline factor IDs */
 const MONEYLINE_FACTORS = new Set([921, 922, 923]);
 
-/** eventId → { factorId → currentOdds } — только moneyline (921/922/923) */
-const oddsCache = new Map<number, Map<number, number>>();
+/** eventId → { factorId → {value, pt} } — все факторы */
+const oddsCache = new Map<number, Map<number, { v: number; pt?: string }>>();
+
+/**
+ * Factor discovery: factorId → { count, samples[] }
+ * Собираем статистику по всем неизвестным factor ID для целевых матчей.
+ */
+const factorDiscovery = new Map<number, { count: number; samples: Array<{ v: number; pt?: string }> }>();
 
 let currentVersion = 0;
 let pollCount = 0;
@@ -212,67 +218,73 @@ function applyLiveInfos(infos: PariLiveInfo[]): void {
   for (const info of infos) liveInfoCache.set(info.eventId, info);
 }
 
-function applyCustomFactors(
-  customFactors: PariCustomFactors[],
-): Array<{ eventName: string; sportKey: string; score: string; place: string; moneyline: string; changes: string[] }> {
-  const updates: Array<{ eventName: string; sportKey: string; score: string; place: string; moneyline: string; changes: string[] }> = [];
-
+function applyCustomFactors(customFactors: PariCustomFactors[]): void {
   for (const item of customFactors) {
     const event = eventCache.get(item.e);
-    const sportKey = event ? getSportKey(event) : null;
     const isTarget = !!event && isTargetMatch(event);
+    if (!isTarget) continue;
 
-    // Читаем предыдущие значения ДО обновления
-    const prevMap = oddsCache.get(item.e) ?? new Map<number, number>();
+    const prevMap = oddsCache.get(item.e) ?? new Map<number, { v: number; pt?: string }>();
 
-    // Обрабатываем только moneyline факторы (921/922/923)
-    const changes: string[] = [];
     for (const factor of item.factors) {
-      if (!MONEYLINE_FACTORS.has(factor.f)) continue;
+      if (factor.v === 0) {
+        prevMap.delete(factor.f);
+      } else {
+        prevMap.set(factor.f, { v: factor.v, pt: factor.pt });
 
-      if (isTarget) {
-        const before = prevMap.get(factor.f);
-        if (before !== undefined && before !== factor.v) {
-          const name = factor.f === 921 ? 'П1' : factor.f === 922 ? 'X' : 'П2';
-          if (factor.v === 0) {
-            changes.push(`  ${name}  ${before.toFixed(3)} → SUSPENDED`);
-          } else {
-            const arrow = factor.v > before ? '↑' : '↓';
-            changes.push(`  ${name}  ${before.toFixed(3)} → ${factor.v.toFixed(3)} ${arrow}`);
-          }
+        // Collect into discovery map (skip moneyline — already known)
+        if (!MONEYLINE_FACTORS.has(factor.f)) {
+          const entry = factorDiscovery.get(factor.f) ?? { count: 0, samples: [] };
+          entry.count++;
+          if (entry.samples.length < 3) entry.samples.push({ v: factor.v, pt: factor.pt });
+          factorDiscovery.set(factor.f, entry);
         }
       }
-
-      if (factor.v === 0) prevMap.delete(factor.f);
-      else prevMap.set(factor.f, factor.v);
     }
     oddsCache.set(item.e, prevMap);
-
-    if (isTarget && changes.length > 0) {
-      const p1 = prevMap.get(921);
-      const draw = prevMap.get(922);
-      const p2 = prevMap.get(923);
-      if (!p1 && !p2) continue; // moneyline снят — пропускаем
-
-      const moneyline = [
-        p1 ? `П1:${p1.toFixed(2)}` : null,
-        draw ? `X:${draw.toFixed(2)}` : null,
-        p2 ? `П2:${p2.toFixed(2)}` : null,
-      ].filter(Boolean).join(' / ');
-
-      const liveInfo = liveInfoCache.get(item.e);
-      updates.push({
-        eventName: `${event!.team1} vs ${event!.team2}`,
-        sportKey: sportKey!,
-        score: liveInfo?.scoreComment ?? '',
-        place: event!.place === 'live' ? 'LIVE' : 'pre',
-        moneyline,
-        changes,
-      });
-    }
   }
+}
 
-  return updates;
+// ── Factor discovery display ───────────────────────────────────────────────────
+
+function printDiscovery(): void {
+  if (factorDiscovery.size === 0) { console.log('  (no unknown factors yet)'); return; }
+
+  // Sort by factor ID
+  const sorted = [...factorDiscovery.entries()].sort((a, b) => a[0] - b[0]);
+
+  console.log(`\n${'─'.repeat(75)}`);
+  console.log(`[FACTOR DISCOVERY] ${sorted.length} unknown factor IDs found across target events:`);
+  console.log(`  factorId  count  samples (value  pt)`);
+  console.log(`  ${'─'.repeat(60)}`);
+  for (const [fid, data] of sorted) {
+    const samplesStr = data.samples
+      .map(s => `${s.v.toFixed(3)}${s.pt ? `(${s.pt})` : ''}`)
+      .join('  ');
+    console.log(`  ${String(fid).padEnd(9)} ${String(data.count).padEnd(6)} ${samplesStr}`);
+  }
+  console.log(`${'─'.repeat(75)}\n`);
+}
+
+// ── Per-event factor dump ──────────────────────────────────────────────────────
+
+function printEventFactors(sportKeyFilter?: string): void {
+  const targets = [...eventCache.values()].filter(e =>
+    isTargetMatch(e) && (!sportKeyFilter || getSportKey(e) === sportKeyFilter),
+  );
+  if (targets.length === 0) { console.log('  No matching events'); return; }
+
+  const sample = targets[0];
+  const factors = oddsCache.get(sample.id);
+  if (!factors) { console.log('  No factors for event'); return; }
+
+  console.log(`\n[EVENT FACTORS] ${sample.team1} vs ${sample.team2} (${getSportKey(sample)})`);
+  const sorted = [...factors.entries()].sort((a, b) => a[0] - b[0]);
+  for (const [fid, { v, pt }] of sorted) {
+    const known = MONEYLINE_FACTORS.has(fid) ? ' ← moneyline' : '';
+    console.log(`  f=${String(fid).padEnd(6)} v=${v.toFixed(3).padEnd(8)} pt=${(pt ?? '').padEnd(12)}${known}`);
+  }
+  console.log('');
 }
 
 // ── Display ────────────────────────────────────────────────────────────────────
@@ -319,9 +331,9 @@ function printSnapshot(): void {
     const score = liveInfo?.scoreComment ?? '';
     const timer = liveInfo?.timer ? `[${liveInfo.timer}]` : '';
     const odds = oddsCache.get(e.id);
-    const p1 = odds?.get(921);
-    const draw = odds?.get(922);
-    const p2 = odds?.get(923);
+    const p1 = odds?.get(921)?.v;
+    const draw = odds?.get(922)?.v;
+    const p2 = odds?.get(923)?.v;
     const oddsStr = [
       p1 ? `П1:${p1.toFixed(2)}` : null,
       draw ? `X:${draw.toFixed(2)}` : null,
@@ -344,29 +356,21 @@ async function poll(): Promise<void> {
     if (data.events?.length) applyEvents(data.events);
     if (data.liveEventInfos?.length) applyLiveInfos(data.liveEventInfos);
 
-    const updates = data.customFactors?.length ? applyCustomFactors(data.customFactors) : [];
+    if (data.customFactors?.length) applyCustomFactors(data.customFactors);
 
     if (currentVersion === 0) {
       const targets = Array.from(eventCache.values()).filter(isTargetMatch);
       console.log(`[INIT] version=${data.packetVersion}  allEvents=${eventCache.size}  target=${targets.length}  segments=${segmentSportKey.size}`);
       printSnapshot();
-    } else if (updates.length > 0) {
-      totalChanges += updates.length;
-      const cfCount = data.customFactors?.length ?? 0;
-      console.log(`[POLL #${pollCount}] Δv=${data.packetVersion - currentVersion}  cf=${cfCount}  changed=${updates.length}`);
-
-      for (const upd of updates.slice(0, MAX_EVENTS_PER_UPDATE)) {
-        const label = SPORT_LABEL[upd.sportKey] ?? upd.sportKey;
-        const score = upd.score ? `  ${upd.score}` : '';
-        console.log(`  [${upd.place}] ${label} ${upd.eventName}${score}  →  ${upd.moneyline}`);
-        upd.changes.forEach(c => console.log(c));
-      }
-      if (updates.length > MAX_EVENTS_PER_UPDATE) {
-        console.log(`  ... ещё ${updates.length - MAX_EVENTS_PER_UPDATE}`);
-      }
-    } else if (pollCount % 10 === 0) {
+      // Print all factors for first basketball and hockey event
+      printEventFactors('basketball');
+      printEventFactors('hockey');
+    } else if (pollCount % 30 === 0) {
+      // Every 30 polls (~30s) print discovery summary
+      printDiscovery();
+    } else {
       const liveCount = Array.from(eventCache.values()).filter(e => isTargetMatch(e) && e.place === 'live').length;
-      process.stdout.write(`\r[POLL #${pollCount}] targetLive=${liveCount}  totalChanges=${totalChanges}  version=${data.packetVersion}   `);
+      process.stdout.write(`\r[POLL #${pollCount}] targetLive=${liveCount}  discovered=${factorDiscovery.size} factor IDs  version=${data.packetVersion}   `);
     }
 
     currentVersion = data.packetVersion;
