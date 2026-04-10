@@ -382,7 +382,23 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      // Replace totals/handicap markets wholesale (indices 1+)
+      // Replace totals/handicap markets wholesale (indices 1+), logging any price changes
+      const prevExtra = existing.markets.slice(1);
+      for (const newMarket of extraMarkets) {
+        const prev = prevExtra.find((m) => m.marketId === newMarket.marketId);
+        if (!prev) continue;
+        for (let i = 0; i < Math.min(prev.outcomes.length, newMarket.outcomes.length); i++) {
+          const np = newMarket.outcomes[i].price;
+          if (np !== prev.outcomes[i].price) {
+            const arrow = np > prev.outcomes[i].price ? '↑' : '↓';
+            this.logger.log(
+              `[Fonbet] ${existing.name}: ${newMarket.outcomes[i].name} ` +
+              `${prev.outcomes[i].price?.toFixed(3)} → ${np.toFixed(3)} ${arrow}`,
+            );
+            priceChanged = true;
+          }
+        }
+      }
       existing.markets.splice(1, existing.markets.length - 1, ...extraMarkets);
 
       if (priceChanged && this.initialStateFired) this.onPriceUpdate?.();
