@@ -272,19 +272,59 @@ function printEventFactors(sportKeyFilter?: string): void {
   const targets = [...eventCache.values()].filter(e =>
     isTargetMatch(e) && (!sportKeyFilter || getSportKey(e) === sportKeyFilter),
   );
-  if (targets.length === 0) { console.log('  No matching events'); return; }
+  if (targets.length === 0) { console.log(`  No matching events for sport=${sportKeyFilter}`); return; }
 
-  const sample = targets[0];
-  const factors = oddsCache.get(sample.id);
-  if (!factors) { console.log('  No factors for event'); return; }
+  // Print up to 3 events for the sport
+  for (const sample of targets.slice(0, 3)) {
+    const factors = oddsCache.get(sample.id);
+    if (!factors) continue;
 
-  console.log(`\n[EVENT FACTORS] ${sample.team1} vs ${sample.team2} (${getSportKey(sample)})`);
-  const sorted = [...factors.entries()].sort((a, b) => a[0] - b[0]);
-  for (const [fid, { v, pt }] of sorted) {
-    const known = MONEYLINE_FACTORS.has(fid) ? ' ← moneyline' : '';
-    console.log(`  f=${String(fid).padEnd(6)} v=${v.toFixed(3).padEnd(8)} pt=${(pt ?? '').padEnd(12)}${known}`);
+    console.log(`\n[EVENT FACTORS] ${sample.team1} vs ${sample.team2} (${getSportKey(sample)})`);
+    const sorted = [...factors.entries()].sort((a, b) => a[0] - b[0]);
+    for (const [fid, { v, pt }] of sorted) {
+      const known = MONEYLINE_FACTORS.has(fid) ? ' ← moneyline' : '';
+      console.log(`  f=${String(fid).padEnd(6)} v=${v.toFixed(3).padEnd(8)} pt=${(pt ?? '(none)').padEnd(12)}${known}`);
+    }
+
+    // Simulate buildTotalsAndHandicaps grouping
+    const totalsByPt = new Map<string, Array<{ f: number; v: number }>>();
+    const handicapsByAbs = new Map<string, Array<{ f: number; v: number; pt: string }>>();
+    for (const [fid, entry] of factors) {
+      if (!entry.pt || entry.v === 0) continue;
+      const pt = entry.pt.trim();
+      if (pt.startsWith('+') || pt.startsWith('-')) {
+        const abs = pt.replace(/^[+-]/, '');
+        const arr = handicapsByAbs.get(abs) ?? [];
+        arr.push({ f: fid, v: entry.v, pt });
+        handicapsByAbs.set(abs, arr);
+      } else {
+        const arr = totalsByPt.get(pt) ?? [];
+        arr.push({ f: fid, v: entry.v });
+        totalsByPt.set(pt, arr);
+      }
+    }
+
+    console.log(`  ── Totals (${totalsByPt.size} lines) ──`);
+    for (const [ptValue, fs] of [...totalsByPt.entries()].sort()) {
+      fs.sort((a, b) => a.f - b.f);
+      const ok = fs.length === 2 ? '✓' : `✗ (${fs.length} factors!)`;
+      const detail = fs.map(f => `f${f.f}=${f.v.toFixed(3)}`).join(' / ');
+      console.log(`  pt=${ptValue.padEnd(8)} ${ok}  ${detail}`);
+    }
+
+    console.log(`  ── Handicaps (${handicapsByAbs.size} abs lines) ──`);
+    for (const [absVal, fs] of [...handicapsByAbs.entries()].sort()) {
+      fs.sort((a, b) => a.f - b.f);
+      const ok = fs.length === 2 ? '✓' : `✗ (${fs.length} factors!)`;
+      const detail = fs.map(f => `f${f.f}(${f.pt})=${f.v.toFixed(3)}`).join(' / ');
+      console.log(`  abs=${absVal.padEnd(6)} ${ok}  ${detail}`);
+      if (fs.length === 2) {
+        const [t1, t2] = fs;
+        console.log(`         → "${sample.team1} ${t1.pt}" @ ${t1.v.toFixed(3)}  |  "${sample.team2} ${t2.pt}" @ ${t2.v.toFixed(3)}`);
+      }
+    }
+    console.log('');
   }
-  console.log('');
 }
 
 // ── Display ────────────────────────────────────────────────────────────────────
@@ -362,9 +402,8 @@ async function poll(): Promise<void> {
       const targets = Array.from(eventCache.values()).filter(isTargetMatch);
       console.log(`[INIT] version=${data.packetVersion}  allEvents=${eventCache.size}  target=${targets.length}  segments=${segmentSportKey.size}`);
       printSnapshot();
-      // Print all factors for first basketball and hockey event
-      printEventFactors('basketball');
-      printEventFactors('hockey');
+      // Print all factors with pt for first baseball event
+      printEventFactors('baseball');
     } else if (pollCount % 30 === 0) {
       // Every 30 polls (~30s) print discovery summary
       printDiscovery();

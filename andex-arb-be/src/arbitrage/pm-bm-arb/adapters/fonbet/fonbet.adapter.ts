@@ -517,9 +517,13 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
     }
 
     for (const [ptValue, factors] of totalsByPt) {
-      if (factors.length !== 2) continue;
       factors.sort((a, b) => a.f - b.f);
-      const [over, under] = factors;
+      let over: typeof factors[0] | undefined;
+      let under: typeof factors[0] | undefined;
+      for (let i = 0; i < factors.length - 1; i++) {
+        if (factors[i + 1].f - factors[i].f === 1) { over = factors[i]; under = factors[i + 1]; break; }
+      }
+      if (!over || !under) continue;
       markets.push({
         marketId:   `fonbet_${id}_total_${ptValue}`,
         marketType: 'totals',
