@@ -708,12 +708,39 @@ export class StakeAdapter implements OnModuleInit, OnModuleDestroy {
     existing.isLive  = fixture.status === 'live';
     existing.updatedAt = now;
 
+    // Also collect suspended market IDs so we can mark them in-place.
+    // wsMarkets contains ALL markets from the update (including suspended ones).
+    const suspendedIds = new Set(
+      wsMarkets.filter((m) => m.status === 'suspended').map((m) => m.id),
+    );
+
     const newById = new Map(newMarkets.map((m) => [m.marketId, m]));
     const changes: string[] = [];
 
     for (const cached of existing.markets) {
       const updated = newById.get(cached.marketId);
-      if (!updated) continue;
+
+      if (!updated) {
+        // Market not present in active newMarkets.
+        // If it appears in the WS update as suspended — mark it in-place.
+        // If it's absent from the update entirely (pruneStale=false) — leave as-is.
+        if (suspendedIds.has(cached.marketId) && !cached.isSuspended) {
+          cached.isSuspended = true;
+          cached.outcomes = [];
+          changes.push(`[${cached.name}] suspended`);
+        }
+        continue;
+      }
+
+      // Market present and active — lift suspension if it was previously suspended.
+      if (cached.isSuspended) {
+        cached.isSuspended = false;
+        // Restore outcomes from the fresh data (they were cleared on suspension).
+        cached.outcomes = [...updated.outcomes];
+        changes.push(`[${cached.name}] resumed`);
+        newById.delete(cached.marketId);
+        continue;
+      }
 
       // Update outcomes in-place — match by name to avoid index-order issues
       for (let i = 0; i < cached.outcomes.length; i++) {

@@ -449,13 +449,28 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
 
     this.eventLastSeen.set(eventId, now);
 
+    const existing = this.eventCache.get(eventId);
+
     if (!mlMarket) {
       // Moneyline temporarily unavailable (suspended / no valid selections) —
-      // keep last known good state so the scanner doesn't lose the reference.
+      // mark all markets as suspended in-place so the scanner skips them,
+      // but keep the objects so matchedMarkets[].dexMarket references stay valid.
+      if (existing) {
+        let changed = false;
+        for (const m of existing.markets) {
+          if (!m.isSuspended) {
+            m.isSuspended = true;
+            m.outcomes = [];
+            changed = true;
+          }
+        }
+        if (changed) {
+          existing.updatedAt = now;
+          if (this.initialStateFired) this.onPriceUpdate?.();
+        }
+      }
       return;
     }
-
-    const existing = this.eventCache.get(eventId);
     if (!existing) {
       // Parse startTime: ISO string → Unix seconds
       let startTime: number | undefined;
@@ -490,6 +505,11 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
 
     const changes: string[] = [];
     if (prevMarket) {
+      // Lift moneyline suspension if previously suspended
+      if (prevMarket.isSuspended) {
+        prevMarket.isSuspended = false;
+        changes.push(`${prevMarket.name}: resumed`);
+      }
       for (let i = 0; i < Math.min(prevMarket.outcomes.length, mlMarket.outcomes.length); i++) {
         const np = mlMarket.outcomes[i].price;
         if (np !== prevMarket.outcomes[i].price && isFinite(np) && np > 1) {
@@ -505,17 +525,31 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
     }
 
     // Update typed markets in-place so SportsMatch references stay valid.
-    // New markets (new line) are appended; markets no longer offered are kept to avoid
-    // orphaning references held by currentMatches (same policy as Stake/Pinnacle adapters).
+    // New markets (new line) are appended; markets no longer offered are suspended in-place
+    // to avoid orphaning references held by currentMatches.
     let hasTypedChanges = false;
+    const typedById = new Map(typedMarkets.map((m) => [m.marketId, m]));
     const prevTypedMap = new Map(existing.markets.slice(1).map((m) => [m.marketId, m]));
 
-    for (const tm of typedMarkets) {
-      const prev = prevTypedMap.get(tm.marketId);
-      if (!prev) {
-        // New line — append to markets list
-        existing.markets.push(tm);
+    // Handle existing cached typed markets
+    for (const prev of prevTypedMap.values()) {
+      const tm = typedById.get(prev.marketId);
+      if (!tm) {
+        // Market no longer offered (all selections suspended/disabled) — mark in-place.
+        if (!prev.isSuspended) {
+          prev.isSuspended = true;
+          prev.outcomes = [];
+          hasTypedChanges = true;
+        }
+        continue;
+      }
+      // Market present — lift suspension if needed.
+      if (prev.isSuspended) {
+        prev.isSuspended = false;
+        // Restore outcomes from fresh data (they were cleared on suspension).
+        prev.outcomes = [...tm.outcomes];
         hasTypedChanges = true;
+        typedById.delete(prev.marketId);
         continue;
       }
       // Update outcomes in-place
@@ -529,6 +563,13 @@ export class CloudbetAdapter implements OnModuleInit, OnModuleDestroy {
           prev.outcomes[i] = { ...prev.outcomes[i], price: tm.outcomes[i].price };
         }
       }
+      typedById.delete(prev.marketId);
+    }
+
+    // Append truly new lines
+    for (const tm of typedById.values()) {
+      existing.markets.push(tm);
+      hasTypedChanges = true;
     }
 
     if (changes.length > 0) {

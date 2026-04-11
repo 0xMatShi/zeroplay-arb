@@ -406,7 +406,27 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
 
       for (const prevM of prevExtra) {
         const newM = newById.get(prevM.marketId);
-        if (!newM) continue;
+        if (!newM) {
+          // Market disappeared (line closed) — suspend in-place so scanner skips it
+          // but the reference held by matchedMarkets[].dexMarket stays valid.
+          if (!prevM.isSuspended) {
+            prevM.isSuspended = true;
+            prevM.outcomes = [];
+            priceChanged = true;
+          }
+          keptMarkets.push(prevM);
+          continue;
+        }
+        // Market present — lift suspension if it was previously suspended.
+        if (prevM.isSuspended) {
+          prevM.isSuspended = false;
+          // Restore outcomes from the fresh data (they were cleared on suspension).
+          prevM.outcomes = [...newM.outcomes];
+          priceChanged = true;
+          keptMarkets.push(prevM);
+          newById.delete(prevM.marketId);
+          continue;
+        }
         for (let i = 0; i < Math.min(prevM.outcomes.length, newM.outcomes.length); i++) {
           const np = newM.outcomes[i].price;
           if (np !== prevM.outcomes[i].price) {

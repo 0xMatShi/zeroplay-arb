@@ -583,14 +583,18 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
 
     const changes: string[] = [];
 
-    // For UPDATE_ODDS: log offline markets but keep them in cache with last known prices.
-    // Removing them here would orphan the reference held by currentMatches — same bug as
-    // Cloudbet/Stake adapters. When the market comes back online it is updated in-place below.
+    // For UPDATE_ODDS: suspend offline markets in-place so the scanner skips them,
+    // but keep the objects so matchedMarkets[].dexMarket references stay valid.
+    // When the market comes back online it is updated in-place below (isSuspended lifted).
     if (isPartial) {
       const offlineIds = this.collectOfflineMarketIds(event);
-      for (const cached of existing.markets) {
-        if (offlineIds.has(cached.marketId)) {
-          changes.push(`[${cached.name}] offline (kept in cache)`);
+      if (offlineIds.size > 0) {
+        for (const cached of existing.markets) {
+          if (offlineIds.has(cached.marketId) && !cached.isSuspended) {
+            cached.isSuspended = true;
+            cached.outcomes = [];
+            changes.push(`[${cached.name}] offline → suspended`);
+          }
         }
       }
     }
@@ -612,6 +616,15 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     for (const cached of existing.markets) {
       const updated = newById.get(cached.marketId);
       if (updated) {
+        // Market present — lift suspension if it was previously marked offline.
+        if (cached.isSuspended) {
+          cached.isSuspended = false;
+          // Restore outcomes from the fresh data (they were cleared on suspension).
+          cached.outcomes = [...updated.outcomes];
+          changes.push(`[${cached.name}] back online`);
+          newById.delete(cached.marketId);
+          continue;
+        }
         // Update outcomes in-place — match by name to avoid index-order issues.
         // This handles partial UPDATE_ODDS where only one price (e.g. awayPrice) is sent.
         for (let i = 0; i < cached.outcomes.length; i++) {
