@@ -108,16 +108,7 @@ export class SportsArbGateway implements OnGatewayConnection, OnGatewayDisconnec
     const { bookmakerPlatform, dexEvent } = match;
 
     if (bookmakerPlatform === 'pinnacle') {
-      const sportPath = SportsArbGateway.PINNACLE_SPORT_PATH[dexEvent.sportKey];
-      if (!sportPath) return 'https://www.gentleflame47.xyz/en/standard/sports';
-
-      // Pinnacle ignores the league/match slugs — only eventId matters for routing.
-      const leagueSlug = (dexEvent.tournamentName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      const eventId = dexEvent.eventId;
-
-      return eventId
-        ? `https://www.gentleflame47.xyz/en/standard/${sportPath}/${leagueSlug}/vs/${eventId}#all`
-        : `https://www.gentleflame47.xyz/en/standard/${sportPath}`;
+      return dexEvent.url ?? 'https://www.gentleflame47.xyz/en/standard/sports';
     }
 
     if (bookmakerPlatform === 'stake') {
