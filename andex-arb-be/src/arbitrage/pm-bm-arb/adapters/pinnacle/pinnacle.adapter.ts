@@ -43,6 +43,18 @@ const ESPORT_GAME_CODE_TO_SPORT_KEY: Record<string, string> = {
   'valorant': 'valorant',
 };
 
+/** sportKey → URL path segment used on Pinnacle's site */
+const SPORT_KEY_TO_URL_SEGMENT: Record<string, string> = {
+  football:   'soccer',
+  basketball: 'basketball',
+  tennis:     'tennis',
+  hockey:     'hockey',
+  baseball:   'baseball',
+  csgo:       'esports',
+  dota2:      'esports',
+  valorant:   'esports',
+};
+
 /** All sport IDs we connect to */
 const ALL_SPORT_IDS = [...REGULAR_SPORTS.map((s) => s.sportId), ESPORTS_SPORT_ID];
 
@@ -570,6 +582,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         isLive: event.live,
         startTime: Math.floor(event.time / 1000),
         tournamentName: league.name,
+        url: this.buildEventUrl(eventId, sportKey, league, homeName, awayName),
         markets,
         updatedAt: Date.now(),
       });
@@ -603,7 +616,10 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     if (!markets.length) return changes;
 
     // Update scalar fields in-place
-    if (homeName && awayName) existing.name = `${homeName} vs ${awayName}`;
+    if (homeName && awayName) {
+      existing.name = `${homeName} vs ${awayName}`;
+      existing.url = this.buildEventUrl(eventId, sportKey, league, homeName, awayName);
+    }
     existing.isLive = event.live;
     existing.startTime = Math.floor(event.time / 1000);
     existing.updatedAt = Date.now();
@@ -883,6 +899,38 @@ const isFirstHalf = period === 1 && sportKey === 'football';
   private sportLabel(sportId: number): string {
     if (sportId === ESPORTS_SPORT_ID) return 'Esports';
     return REGULAR_SPORTS.find((s) => s.sportId === sportId)?.sportKey ?? String(sportId);
+  }
+
+  /** Convert a string to the kebab-case slug used in Pinnacle URLs */
+  private toPinnacleSlug(s: string): string {
+    return s
+      .toLowerCase()
+      .replace(/['']/g, '')        // remove apostrophes
+      .replace(/[^a-z0-9]+/g, '-') // non-alphanum → dash
+      .replace(/^-+|-+$/g, '');    // trim leading/trailing dashes
+  }
+
+  /** Build the direct event URL for Pinnacle.
+   *  Regular:  /en/standard/soccer/brazil-serie-a/mirassol-vs-bahia/123#all
+   *  Esports:  /en/standard/esports/games/cs2/cs2-european-pro-league/lavked-vs-bebop/123
+   */
+  private buildEventUrl(
+    eventId: string,
+    sportKey: string,
+    league: PinnacleLeague,
+    homeName: string,
+    awayName: string,
+  ): string {
+    const leagueSlug = this.toPinnacleSlug(league.name);
+    const matchSlug = `${this.toPinnacleSlug(homeName)}-vs-${this.toPinnacleSlug(awayName)}`;
+
+    if (league.sportId === ESPORTS_SPORT_ID) {
+      const gameCode = league.gameCode ?? sportKey;
+      return `${BASE_URL}/en/standard/esports/games/${gameCode}/${leagueSlug}/${matchSlug}/${eventId}`;
+    }
+
+    const sport = SPORT_KEY_TO_URL_SEGMENT[sportKey] ?? sportKey;
+    return `${BASE_URL}/en/standard/${sport}/${leagueSlug}/${matchSlug}/${eventId}#all`;
   }
 
   // ── Timers ────────────────────────────────────────────────────
