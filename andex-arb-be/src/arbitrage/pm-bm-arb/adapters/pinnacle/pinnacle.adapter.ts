@@ -618,7 +618,11 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     // Update scalar fields in-place
     if (homeName && awayName) {
       existing.name = `${homeName} vs ${awayName}`;
-      existing.url = this.buildEventUrl(eventId, sportKey, league);
+      // URL is set once on creation (FULL_ODDS always has league.name).
+      // Do not overwrite on UPDATE_ODDS — league.name is often absent there.
+      if (!existing.url) {
+        existing.url = this.buildEventUrl(eventId, sportKey, league);
+      }
     }
     existing.isLive = event.live;
     existing.startTime = Math.floor(event.time / 1000);
@@ -918,14 +922,17 @@ const isFirstHalf = period === 1 && sportKey === 'football';
    */
   private buildEventUrl(eventId: string, sportKey: string, league: PinnacleLeague): string {
     const leagueSlug = this.toPinnacleSlug(league.name);
+    const segments = leagueSlug ? ['vs', eventId] : [eventId];
 
     if (league.sportId === ESPORTS_SPORT_ID) {
       const gameCode = league.gameCode ?? sportKey;
-      return `${BASE_URL}/en/standard/esports/games/${gameCode}/${leagueSlug}/vs/${eventId}`;
+      return [BASE_URL, 'en', 'standard', 'esports', 'games', gameCode, leagueSlug, ...segments]
+        .filter(Boolean).join('/');
     }
 
     const sport = SPORT_KEY_TO_URL_SEGMENT[sportKey] ?? sportKey;
-    return `${BASE_URL}/en/standard/${sport}/${leagueSlug}/vs/${eventId}#all`;
+    return [BASE_URL, 'en', 'standard', sport, leagueSlug, ...segments]
+      .filter(Boolean).join('/') + '#all';
   }
 
   // ── Timers ────────────────────────────────────────────────────
