@@ -582,7 +582,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         isLive: event.live,
         startTime: Math.floor(event.time / 1000),
         tournamentName: league.name,
-        url: this.buildEventUrl(eventId, sportKey, league, homeName, awayName),
+        url: this.buildEventUrl(eventId, sportKey, league),
         markets,
         updatedAt: Date.now(),
       });
@@ -618,7 +618,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     // Update scalar fields in-place
     if (homeName && awayName) {
       existing.name = `${homeName} vs ${awayName}`;
-      existing.url = this.buildEventUrl(eventId, sportKey, league, homeName, awayName);
+      existing.url = this.buildEventUrl(eventId, sportKey, league);
     }
     existing.isLive = event.live;
     existing.startTime = Math.floor(event.time / 1000);
@@ -902,7 +902,8 @@ const isFirstHalf = period === 1 && sportKey === 'football';
   }
 
   /** Convert a string to the kebab-case slug used in Pinnacle URLs */
-  private toPinnacleSlug(s: string): string {
+  private toPinnacleSlug(s: string | undefined | null): string {
+    if (!s) return '';
     return s
       .toLowerCase()
       .replace(/['']/g, '')        // remove apostrophes
@@ -911,26 +912,20 @@ const isFirstHalf = period === 1 && sportKey === 'football';
   }
 
   /** Build the direct event URL for Pinnacle.
-   *  Regular:  /en/standard/soccer/brazil-serie-a/mirassol-vs-bahia/123#all
-   *  Esports:  /en/standard/esports/games/cs2/cs2-european-pro-league/lavked-vs-bebop/123
+   *  Regular:  /en/standard/soccer/brazil-serie-b/vs/123#all
+   *  Esports:  /en/standard/esports/games/cs2/cs2-european-pro-league/vs/123
+   *  The match slug doesn't affect routing — eventId is the key, "vs" is a stable placeholder.
    */
-  private buildEventUrl(
-    eventId: string,
-    sportKey: string,
-    league: PinnacleLeague,
-    homeName: string,
-    awayName: string,
-  ): string {
+  private buildEventUrl(eventId: string, sportKey: string, league: PinnacleLeague): string {
     const leagueSlug = this.toPinnacleSlug(league.name);
-    const matchSlug = `${this.toPinnacleSlug(homeName)}-vs-${this.toPinnacleSlug(awayName)}`;
 
     if (league.sportId === ESPORTS_SPORT_ID) {
       const gameCode = league.gameCode ?? sportKey;
-      return `${BASE_URL}/en/standard/esports/games/${gameCode}/${leagueSlug}/${matchSlug}/${eventId}`;
+      return `${BASE_URL}/en/standard/esports/games/${gameCode}/${leagueSlug}/vs/${eventId}`;
     }
 
     const sport = SPORT_KEY_TO_URL_SEGMENT[sportKey] ?? sportKey;
-    return `${BASE_URL}/en/standard/${sport}/${leagueSlug}/${matchSlug}/${eventId}#all`;
+    return `${BASE_URL}/en/standard/${sport}/${leagueSlug}/vs/${eventId}#all`;
   }
 
   // ── Timers ────────────────────────────────────────────────────
