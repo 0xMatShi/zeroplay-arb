@@ -58,6 +58,11 @@ export interface DexMarket {
    *  When present, matcher uses this directly instead of name-based MARKET_MAP lookup. */
   marketType?: string;
   outcomes: DexOutcome[];
+  /**
+   * True when the bookmaker has suspended this market (v=0 for all relevant factors).
+   * The scanner skips any arbitrage leg that references a suspended market.
+   */
+  isSuspended?: boolean;
 }
 
 export interface DexSportsEvent {

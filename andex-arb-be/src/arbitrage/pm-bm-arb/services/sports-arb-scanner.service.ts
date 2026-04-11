@@ -61,6 +61,9 @@ export class SportsArbScanner {
   ): SportsArbitrageOpportunity[] {
     const { pmMarket, dexMarket } = mp;
 
+    // Skip suspended bookmaker markets (e.g. Fonbet/Pari pausing lines for recalculation).
+    if (dexMarket.isSuspended) return [];
+
     // Skip resolved PM markets: if any outcome price is near 0 (<2¢),
     // the market is already settled (e.g. completed CS:GO map) — not a real arb.
     if (Math.min(...pmMarket.outcomePrices) < 0.02) return [];
@@ -251,6 +254,9 @@ export class SportsArbScanner {
 
   private analyzeBmBmMarketPair(match: BmBmMatch, mp: BmBmMarketPair): SportsArbitrageOpportunity[] {
     const { dexMarket, bmMarket } = mp;
+
+    // Skip suspended bookmaker markets.
+    if (dexMarket.isSuspended || bmMarket.isSuspended) return [];
 
     const dexOutcomes = dexMarket.outcomes.map((o) => ({
       name: o.name,

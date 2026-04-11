@@ -353,7 +353,16 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     this.eventLastSeen.set(eventId, now);
 
     if (!moneylineMarket) {
-      // Odds suspended — keep last known state in cache (don't remove)
+      // Moneyline suspended — mark all markets as suspended so scanner skips them.
+      const existing = this.eventCache.get(eventId);
+      if (existing) {
+        const wasAlreadySuspended = existing.markets.every((m) => m.isSuspended);
+        if (!wasAlreadySuspended) {
+          for (const m of existing.markets) m.isSuspended = true;
+          existing.updatedAt = now;
+          if (this.initialStateFired) this.onPriceUpdate?.();
+        }
+      }
       return;
     }
 
@@ -379,6 +388,13 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     const prevMarket = existing.markets[0];
     if (prevMarket) {
       let priceChanged = false;
+
+      // If event was previously suspended, lift suspension flag and signal re-scan.
+      const wasSuspended = existing.markets.some((m) => m.isSuspended);
+      if (wasSuspended) {
+        for (const m of existing.markets) m.isSuspended = false;
+        priceChanged = true;
+      }
 
       // Update prices in-place so SportsMatch.matchedMarkets[].dexMarket references stay valid.
       // Never replace markets[0] with a new object — the matcher holds a direct reference to it.
@@ -426,7 +442,8 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
 
       existing.markets.splice(1, existing.markets.length - 1, ...keptMarkets);
 
-      if (priceChanged && this.initialStateFired) this.onPriceUpdate?.();
+      const marketsCountChanged = keptMarkets.length !== prevExtra.length || newById.size > 0;
+      if ((priceChanged || marketsCountChanged) && this.initialStateFired) this.onPriceUpdate?.();
     } else {
       existing.markets[0] = moneylineMarket;
       existing.markets.splice(1, existing.markets.length - 1, ...extraMarkets);
@@ -453,7 +470,16 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     this.eventLastSeen.set(eventId, now);
 
     if (!p1 || !p2) {
-      // Suspended — keep last known state
+      // Map market suspended — mark as suspended so scanner skips it.
+      const existing = this.eventCache.get(eventId);
+      if (existing) {
+        const wasAlreadySuspended = existing.markets.every((m) => m.isSuspended);
+        if (!wasAlreadySuspended) {
+          for (const m of existing.markets) m.isSuspended = true;
+          existing.updatedAt = now;
+          if (this.initialStateFired) this.onPriceUpdate?.();
+        }
+      }
       return;
     }
 
@@ -489,6 +515,13 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     const prevMarket = existing.markets[0];
     if (prevMarket) {
       let priceChanged = false;
+
+      // Lift suspension if event was previously suspended.
+      if (prevMarket.isSuspended) {
+        prevMarket.isSuspended = false;
+        priceChanged = true;
+      }
+
       for (let i = 0; i < Math.min(prevMarket.outcomes.length, mapMarket.outcomes.length); i++) {
         const np = mapMarket.outcomes[i].price;
         if (np !== prevMarket.outcomes[i].price) {
@@ -590,9 +623,9 @@ export class PariAdapter implements OnModuleInit, OnModuleDestroy {
     for (const [factorId, entry] of odds) {
       if (!entry.pt || entry.v === 0) continue;
       const pt = entry.pt.trim();
-      if (pt.startsWith('+') || pt.startsWith('-')) {
+      if (pt.startsWith('+') || pt.startsWith('-') || pt.startsWith('\u2212')) {
         // Handicap factor
-        const absVal = pt.replace(/^[+-]/, '');
+        const absVal = pt.replace(/^[+\-\u2212]/, '');
         const arr = handicapsByAbs.get(absVal) ?? [];
         arr.push({ f: factorId, v: entry.v, pt });
         handicapsByAbs.set(absVal, arr);

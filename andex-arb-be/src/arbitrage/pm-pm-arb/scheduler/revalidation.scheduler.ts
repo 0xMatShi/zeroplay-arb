@@ -59,15 +59,21 @@ export class RevalidationScheduler implements OnModuleInit {
         }
       }
 
-      // Expire opportunities whose prices are no longer profitable
-      const expiredIds = await this.opportunityService.revalidateActive();
+      // Expire opportunities whose prices are no longer profitable, update changed ones
+      const { expiredIds, updatedOpps } = await this.opportunityService.revalidateActive();
 
       for (const id of expiredIds) {
         this.gateway.emitOpportunityExpired(id);
       }
 
-      if (newIds.length > 0 || expiredIds.length > 0) {
-        this.logger.log(`Scan cycle: ${newIds.length} new, ${expiredIds.length} expired`);
+      for (const opp of updatedOpps) {
+        this.gateway.emitOpportunityUpdated(opp);
+      }
+
+      if (newIds.length > 0 || expiredIds.length > 0 || updatedOpps.length > 0) {
+        this.logger.log(
+          `Scan cycle: ${newIds.length} new, ${expiredIds.length} expired, ${updatedOpps.length} updated`,
+        );
       }
     } catch (error) {
       this.logger.error(`Scan cycle failed: ${error.message}`);

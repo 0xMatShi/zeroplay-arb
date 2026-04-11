@@ -342,6 +342,16 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
     this.eventLastSeen.set(eventId, now);
 
     if (!moneylineMarket) {
+      // Moneyline suspended — mark all markets as suspended so scanner skips them.
+      const existing = this.eventCache.get(eventId);
+      if (existing) {
+        const wasAlreadySuspended = existing.markets.every((m) => m.isSuspended);
+        if (!wasAlreadySuspended) {
+          for (const m of existing.markets) m.isSuspended = true;
+          existing.updatedAt = now;
+          if (this.initialStateFired) this.onPriceUpdate?.();
+        }
+      }
       return;
     }
 
@@ -366,6 +376,13 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
     const prevMarket = existing.markets[0];
     if (prevMarket) {
       let priceChanged = false;
+
+      // If event was previously suspended, lift suspension flag and signal re-scan.
+      const wasSuspended = existing.markets.some((m) => m.isSuspended);
+      if (wasSuspended) {
+        for (const m of existing.markets) m.isSuspended = false;
+        priceChanged = true;
+      }
 
       for (let i = 0; i < Math.min(prevMarket.outcomes.length, moneylineMarket.outcomes.length); i++) {
         const np = moneylineMarket.outcomes[i].price;
@@ -409,7 +426,8 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
 
       existing.markets.splice(1, existing.markets.length - 1, ...keptMarkets);
 
-      if (priceChanged && this.initialStateFired) this.onPriceUpdate?.();
+      const marketsCountChanged = keptMarkets.length !== prevExtra.length || newById.size > 0;
+      if ((priceChanged || marketsCountChanged) && this.initialStateFired) this.onPriceUpdate?.();
     } else {
       existing.markets[0] = moneylineMarket;
       existing.markets.splice(1, existing.markets.length - 1, ...extraMarkets);
@@ -432,6 +450,16 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
     this.eventLastSeen.set(eventId, now);
 
     if (!p1 || !p2) {
+      // Map market suspended — mark as suspended so scanner skips it.
+      const existing = this.eventCache.get(eventId);
+      if (existing) {
+        const wasAlreadySuspended = existing.markets.every((m) => m.isSuspended);
+        if (!wasAlreadySuspended) {
+          for (const m of existing.markets) m.isSuspended = true;
+          existing.updatedAt = now;
+          if (this.initialStateFired) this.onPriceUpdate?.();
+        }
+      }
       return;
     }
 
@@ -466,6 +494,13 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
     const prevMarket = existing.markets[0];
     if (prevMarket) {
       let priceChanged = false;
+
+      // Lift suspension if event was previously suspended.
+      if (prevMarket.isSuspended) {
+        prevMarket.isSuspended = false;
+        priceChanged = true;
+      }
+
       for (let i = 0; i < Math.min(prevMarket.outcomes.length, mapMarket.outcomes.length); i++) {
         const np = mapMarket.outcomes[i].price;
         if (np !== prevMarket.outcomes[i].price) {
@@ -528,8 +563,8 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
     for (const [factorId, entry] of odds) {
       if (!entry.pt || entry.v === 0) continue;
       const pt = entry.pt.trim();
-      if (pt.startsWith('+') || pt.startsWith('-')) {
-        const absVal = pt.replace(/^[+-]/, '');
+      if (pt.startsWith('+') || pt.startsWith('-') || pt.startsWith('\u2212')) {
+        const absVal = pt.replace(/^[+\-\u2212]/, '');
         const arr = handicapsByAbs.get(absVal) ?? [];
         arr.push({ f: factorId, v: entry.v, pt });
         handicapsByAbs.set(absVal, arr);

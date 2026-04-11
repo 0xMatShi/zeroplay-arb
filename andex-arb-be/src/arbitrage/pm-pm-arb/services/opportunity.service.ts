@@ -75,9 +75,9 @@ export class OpportunityService {
   /**
    * Revalidate all active opportunities.
    * Re-checks current prices and expires opportunities that no longer exist.
-   * Returns IDs of expired opportunities.
+   * Returns expired IDs and updated opportunities separately.
    */
-  async revalidateActive(): Promise<string[]> {
+  async revalidateActive(): Promise<{ expiredIds: string[]; updatedOpps: ArbitrageOpportunity[] }> {
     const activeOpps = await this.opportunityRepo.find({
       where: { status: OpportunityStatus.ACTIVE },
       relations: [
@@ -88,7 +88,7 @@ export class OpportunityService {
       ],
     });
 
-    if (activeOpps.length === 0) return [];
+    if (activeOpps.length === 0) return { expiredIds: [], updatedOpps: [] };
 
     // Prices are already fresh — refreshed via orderbooks by the scheduler
     // before this method is called. Just re-scan with current DB prices.
@@ -105,6 +105,7 @@ export class OpportunityService {
     });
 
     const expiredIds: string[] = [];
+    const updatedOpps: ArbitrageOpportunity[] = [];
     const now = new Date();
 
     // Group opportunities by match to avoid scanning the same match multiple times
@@ -150,22 +151,32 @@ export class OpportunityService {
           this.logger.log(`Opportunity expired: ${opp.id} for "${match.title}"`);
         } else {
           // Update with latest numbers
+          const prevProfit = opp.profitPercentage;
+          const prevLegsJson = JSON.stringify(opp.legs);
           opp.profitPercentage = freshDetails.profitPercentage;
           opp.totalCost = freshDetails.totalCost;
           opp.legs = freshDetails.legs;
           opp.lastValidatedAt = now;
           await this.opportunityRepo.save(opp);
+          // Track as updated if numbers actually changed
+          if (
+            Number(prevProfit) !== Number(freshDetails.profitPercentage) ||
+            prevLegsJson !== JSON.stringify(freshDetails.legs)
+          ) {
+            updatedOpps.push(opp);
+          }
         }
       }
     }
 
-    if (expiredIds.length > 0) {
+    if (expiredIds.length > 0 || updatedOpps.length > 0) {
       this.logger.log(
-        `Revalidation: ${expiredIds.length}/${refreshedOpps.length} opportunities expired`,
+        `Revalidation: ${expiredIds.length}/${refreshedOpps.length} expired, ` +
+          `${updatedOpps.length} updated`,
       );
     }
 
-    return expiredIds;
+    return { expiredIds, updatedOpps };
   }
 
   // ==================== CRUD ====================
@@ -178,7 +189,7 @@ export class OpportunityService {
     limit = 50,
     offset = 0,
   ): Promise<{ items: ArbitrageOpportunity[]; total: number }> {
-    await this.revalidateActive();
+    await this.revalidateActive(); // return value intentionally ignored here
     return this.getActive(limit, offset);
   }
 
