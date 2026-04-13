@@ -234,6 +234,10 @@ function matchMarket(pm: PmMarket, dexMarkets: DexMarket[], sportKey: string): D
   const type = pm.sportsMarketType;
   if (!type) return null;
 
+  // Football moneyline has 3 outcomes (Home/Draw/Away) on bookmakers like Pinnacle,
+  // while PM moneyline questions are binary — skip to avoid incorrect matching.
+  if (type === 'moneyline' && sportKey === 'football') return null;
+
   // ── Fast path: adapter knows exact market type (e.g. Pinnacle, Stake) ───
   const explicitMarkets = dexMarkets.filter((d) => d.marketType !== undefined);
   if (explicitMarkets.length > 0) {
