@@ -48,6 +48,10 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   private scanDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly SCAN_DEBOUNCE_MS = 200;
 
+  /** Interval timer for Pinnacle specials (BTTS, DC) REST refresh */
+  private specialsIntervalTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly SPECIALS_INTERVAL_MS = 30_000;
+
   /** Guard against concurrent match cycles */
   private matchingInProgress = false;
 
@@ -150,10 +154,14 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       this.fonbetReady = true;
       this.checkAndTriggerMatchCycle('fonbet');
     };
+
+    // Refresh Pinnacle specials every 30s for currently matched events only.
+    this.specialsIntervalTimer = setInterval(() => void this.refreshMatchedSpecials(), this.SPECIALS_INTERVAL_MS);
   }
 
   onModuleDestroy(): void {
     if (this.scanDebounceTimer) { clearTimeout(this.scanDebounceTimer); this.scanDebounceTimer = null; }
+    if (this.specialsIntervalTimer) { clearInterval(this.specialsIntervalTimer); this.specialsIntervalTimer = null; }
     this.polyAdapter.onPriceUpdate = null;
     this.dexAdapter.onPriceUpdate = null;
     this.dexAdapter.onAllMarketsReady = null;
@@ -168,6 +176,23 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.pariAdapter.onAllMarketsReady = null;
     this.fonbetAdapter.onPriceUpdate = null;
     this.fonbetAdapter.onAllMarketsReady = null;
+  }
+
+  // ── Pinnacle specials refresh (every 30s, matched events only) ─
+
+  private async refreshMatchedSpecials(): Promise<void> {
+    const matchedIds = [
+      ...new Set(
+        this.currentBmBmMatches
+          .filter((m) => m.bmPlatform === 'pinnacle')
+          .map((m) => m.bmEvent.eventId),
+      ),
+    ];
+    if (!matchedIds.length) return;
+
+    this.logger.log(`Refreshing Pinnacle specials for ${matchedIds.length} matched events`);
+    await this.pinnacleAdapter.refreshSpecialsForEvents(matchedIds);
+    this.scheduleScan();
   }
 
   // ── Cron: hourly discovery reset ──────────────────────────────
@@ -336,16 +361,6 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
 
   async runMatchCycle(): Promise<void> {
     try {
-      // Refresh Pinnacle specials (BTTS, Double Chance) for all football events via REST
-      // before running BmBm matching, so the matcher sees the full market list.
-      const pinnacleFootballIds = this.pinnacleAdapter.getEvents()
-        .filter((e) => e.sportKey === 'football')
-        .map((e) => e.eventId);
-      if (pinnacleFootballIds.length > 0) {
-        this.logger.log(`Refreshing Pinnacle specials for ${pinnacleFootballIds.length} football events`);
-        await this.pinnacleAdapter.refreshSpecialsForEvents(pinnacleFootballIds);
-      }
-
       this.currentMatches = this.matcher.findMatches();
       this.currentBmBmMatches = this.matcher.findBmBmMatches();
 
