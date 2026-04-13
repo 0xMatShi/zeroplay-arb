@@ -945,7 +945,8 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     resultingUnit?: string,
   ): void {
     // ── Money line ─────────────────────────────────────────────
-    const ml = data.moneyLine;
+    // Skip 1st half moneyline (period=1 for football) — not used in arb scanning.
+    const ml = period === 0 ? data.moneyLine : null;
     if (ml && !ml.unavailable && !ml.offline) {
       // UPDATE_ODDS can send partial prices (e.g. only awayPrice, homePrice absent → NaN).
       // Allow NaN prices through — mergeEvent will only update outcomes with valid new prices.
