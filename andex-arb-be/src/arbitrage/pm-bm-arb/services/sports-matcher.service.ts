@@ -498,6 +498,44 @@ function matchDexMarketsForBmPair(bmEvent: DexSportsEvent, dexEvent: DexSportsEv
   return results;
 }
 
+/**
+ * For football only: creates cross-type BmBmMarketPair entries that link a
+ * Double Chance market on one platform with a 3-way moneyline on the other.
+ *
+ * DexSport names: DC = "Double chance", ML = "Match Winner"
+ * Pinnacle/BM:    DC has marketType="double_chance", ML has marketType="moneyline"
+ *
+ * Two pairs are emitted (when both markets exist on both sides):
+ *   dexMarket=DexDC,  bmMarket=BmML
+ *   dexMarket=DexML,  bmMarket=BmDC
+ */
+function matchDcVsMoneylinePairs(bmEvent: DexSportsEvent, dexEvent: DexSportsEvent, sportKey: string): BmBmMarketPair[] {
+  if (sportKey !== 'football') return [];
+
+  const pairs: BmBmMarketPair[] = [];
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // DexSport markets — identified by name
+  const dexDc = dexEvent.markets.find((m) => !m.isSuspended && norm(m.name) === 'doublechance');
+  const dexMl = dexEvent.markets.find((m) => !m.isSuspended && norm(m.name) === 'matchwinner');
+
+  // BM (Pinnacle/Stake/Cloudbet) markets — identified by marketType set by the adapter
+  const bmDc = bmEvent.markets.find((m) => !m.isSuspended && m.marketType === 'double_chance');
+  const bmMl = bmEvent.markets.find((m) => !m.isSuspended && m.marketType === 'moneyline' && m.outcomes.length >= 3);
+
+  // DexSport DC × BM ML
+  if (dexDc && bmMl && dexDc.outcomes.length >= 3) {
+    pairs.push({ marketType: 'dc_vs_moneyline', dexMarket: dexDc, bmMarket: bmMl });
+  }
+
+  // BM DC × DexSport ML
+  if (bmDc && dexMl && bmDc.outcomes.length >= 3 && dexMl.outcomes.length >= 3) {
+    pairs.push({ marketType: 'dc_vs_moneyline', dexMarket: dexMl, bmMarket: bmDc });
+  }
+
+  return pairs;
+}
+
 // ── Service ──────────────────────────────────────────────────
 
 @Injectable()
@@ -640,7 +678,10 @@ export class SportsMatcher {
 
         if (bestBm) {
           usedBm.add(bestBm.eventId);
-          const matchedMarkets = matchDexMarketsForBmPair(bestBm, dex, sportKey);
+          const matchedMarkets = [
+            ...matchDexMarketsForBmPair(bestBm, dex, sportKey),
+            ...matchDcVsMoneylinePairs(bestBm, dex, sportKey),
+          ];
           const id = createHash('sha256')
             .update(`bmbm:${bmPlatform}:${dex.eventId}:${bestBm.eventId}`)
             .digest('hex')

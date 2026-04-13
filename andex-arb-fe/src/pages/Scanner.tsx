@@ -206,6 +206,7 @@ const MARKET_TYPE_LABELS: Record<string, string> = {
   totals: 'Total',
   spreads: 'Handicap',
   child_moneyline: 'Map Winner',
+  dc_vs_moneyline: 'Double Chance | Moneyline',
 }
 
 function formatMarketType(mt: string): string {
@@ -550,7 +551,10 @@ export function Scanner() {
 
   // Filters
   const [searchQuery] = useState('')
-  const [minRoi, setMinRoi] = useLocalStorage('scanner:minRoi', 0)
+  const [minRoiInput, setMinRoiInput] = useLocalStorage('scanner:minRoi', '')
+  const [maxRoiInput, setMaxRoiInput] = useLocalStorage('scanner:maxRoi', '')
+  const minRoi = minRoiInput !== '' ? Number(minRoiInput) : 0
+  const maxRoi = maxRoiInput !== '' ? Number(maxRoiInput) : Infinity
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({})
   const [typeFilter] = useState<TypeFilter>('all')
   const [liveFilter, setLiveFilter] = useLocalStorage<LiveFilter>('scanner:liveFilter', 'all')
@@ -790,9 +794,8 @@ export function Scanner() {
         : Number(opp.weightedAvgProfit ?? opp.profitPercentage) || 0
       // pm-bm: never show non-profitable arbs in main list (negative/zero arbs are only for pinned cards)
       if (arbMode === 'pm-bm' && effectiveRoi <= 0) return false
-      if (effectiveRoi < minRoi) {
-        return false
-      }
+      if (effectiveRoi < minRoi) return false
+      if (effectiveRoi > maxRoi) return false
 
       // Type filter (pm-pm only)
       if (arbMode === 'pm-pm' && typeFilter !== 'all' && opp.type !== typeFilter) {
@@ -910,7 +913,7 @@ export function Scanner() {
     })
 
     return result
-  }, [pmpmQuery.data, pmbmQuery.data, searchQuery, minRoi, typeFilter, liveFilter, effectivePlatforms, sortMode, showPolymarketMin50c, arbMode, realMinAmount, sportFilter, maxDaysUntilStart, platformPairFilter])
+  }, [pmpmQuery.data, pmbmQuery.data, searchQuery, minRoi, maxRoi, typeFilter, liveFilter, effectivePlatforms, sortMode, showPolymarketMin50c, arbMode, realMinAmount, sportFilter, maxDaysUntilStart, platformPairFilter])
 
   // PM-BM display list: pinned cards first, then non-pinned filtered cards
   const displayPmBmOpps = useMemo(() => {
@@ -1193,20 +1196,33 @@ export function Scanner() {
 
               <div className="settings-sliders">
                 <div className="settings-slider-row">
-                  <div className="settings-slider-head">
-                    <span className="settings-slider-label">{t('scanner.settingsMinRoi')}</span>
-                    <span className="settings-slider-value">{minRoi.toFixed(1)}%</span>
+                  <div className="settings-roi-row">
+                    <div className="settings-roi-field">
+                      <span className="settings-slider-label">Min ROI (%)</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        value={minRoiInput}
+                        onChange={(e) => setMinRoiInput(e.target.value)}
+                        className="settings-number-input"
+                      />
+                    </div>
+                    <span className="settings-roi-sep">—</span>
+                    <div className="settings-roi-field">
+                      <span className="settings-slider-label">Max ROI (%)</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        placeholder="∞"
+                        value={maxRoiInput}
+                        onChange={(e) => setMaxRoiInput(e.target.value)}
+                        className="settings-number-input"
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={20}
-                    step={0.1}
-                    value={minRoi}
-                    onChange={(e) => setMinRoi(Number(e.target.value))}
-                    className="settings-range"
-                    style={{ '--fill': `${(minRoi / 20) * 100}%` } as React.CSSProperties}
-                  />
                 </div>
               </div>
 

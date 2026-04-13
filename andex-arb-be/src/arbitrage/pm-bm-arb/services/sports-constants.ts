@@ -74,6 +74,8 @@ export const MARKET_MAP: Record<string, Record<string, string[]>> = {
     football_first_half_totals: ['=Total. 1-st half'],
     both_teams_to_score:        ['=Both to score'],
     total_corners:              ['=Corners. Total'],
+    total_corners_1h:           ['=Corners. Total. 1-st half'],
+    double_chance:              ['=Double Chance'],
   },
   baseball: {
     moneyline: ['Match Winner'],
@@ -93,7 +95,7 @@ export const MARKET_MAP: Record<string, Record<string, string[]>> = {
 
 /** Types that carry a numeric value (totals, spreads, handicaps) and need value comparison. */
 export const VALUE_TYPES = new Set([
-  'totals', 'spreads', 'total_corners', 'football_first_half_totals',
+  'totals', 'spreads', 'total_corners', 'total_corners_1h', 'football_first_half_totals',
   'points', 'assists', 'rebounds',
   'tennis_set_totals', 'tennis_match_totals', 'tennis_set_handicap',
   'tennis_first_set_totals',

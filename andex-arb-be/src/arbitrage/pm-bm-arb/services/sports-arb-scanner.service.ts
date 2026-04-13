@@ -47,8 +47,11 @@ export class SportsArbScanner {
 
     for (const match of matches) {
       for (const mp of match.matchedMarkets) {
-        const opps = this.analyzeBmBmMarketPair(match, mp);
-        opportunities.push(...opps);
+        if (mp.marketType === 'dc_vs_moneyline') {
+          opportunities.push(...this.analyzeDcVsMoneylinePair(match, mp));
+        } else {
+          opportunities.push(...this.analyzeBmBmMarketPair(match, mp));
+        }
       }
     }
 
@@ -332,6 +335,116 @@ export class SportsArbScanner {
         pmQuestion: bmMarket.name,
         dexMarketName: dexMarket.name,
         legs,
+        totalCost,
+        profitPercent,
+        maxInvestment: 0,
+        maxProfit: 0,
+        detectedAt: Date.now(),
+        firstDetectedAt: Date.now(),
+        isLive: match.dexEvent.isLive ||
+          (match.dexEvent.startTime != null && Date.now() > match.dexEvent.startTime * 1000),
+      });
+    }
+
+    return opportunities;
+  }
+
+  /**
+   * Cross-type arb: Double Chance on one platform × 3-way Moneyline on the other.
+   *
+   * The BmBmMarketPair convention for dc_vs_moneyline:
+   *   - dexMarket / bmMarket can be either DC or ML — we detect by outcome names.
+   *
+   * Valid 2-leg combinations (each covers all three football outcomes):
+   *   "1X" (home+draw)  + ML Away  → complement = away win
+   *   "X2" (away+draw)  + ML Home  → complement = home win
+   *   "12" (home+away)  + ML Draw  → complement = draw
+   *
+   * Home/Away team names are resolved from the event name ("Liverpool vs PSG").
+   */
+  private analyzeDcVsMoneylinePair(match: BmBmMatch, mp: BmBmMarketPair): SportsArbitrageOpportunity[] {
+    const { dexMarket, bmMarket } = mp;
+    if (dexMarket.isSuspended || bmMarket.isSuspended) return [];
+
+    const DC_NAMES = new Set(['1X', 'X2', '12']);
+    const isDcMarket = (m: typeof dexMarket) => m.outcomes.some((o) => DC_NAMES.has(o.name));
+
+    const dcMarket = isDcMarket(dexMarket) ? dexMarket : bmMarket;
+    const mlMarket = isDcMarket(dexMarket) ? bmMarket : dexMarket;
+    const dcPlatform = isDcMarket(dexMarket) ? 'dexsport' : match.bmPlatform;
+    const mlPlatform = isDcMarket(dexMarket) ? match.bmPlatform : 'dexsport';
+
+    // DC outcomes by canonical name
+    const dcByName = new Map(dcMarket.outcomes.map((o) => [o.name, o]));
+    const dc1X = dcByName.get('1X');
+    const dcX2 = dcByName.get('X2');
+    const dc12 = dcByName.get('12');
+    if (!dc1X || !dcX2 || !dc12) return [];
+
+    // Resolve home/away team names from event name "Home vs Away"
+    const [rawHome = '', rawAway = ''] = match.dexEvent.name.split(' vs ');
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normHome = norm(rawHome);
+    const normAway = norm(rawAway);
+
+    const mlHome = mlMarket.outcomes.find((o) => {
+      const n = norm(o.name);
+      return n !== 'draw' && (n.includes(normHome) || normHome.includes(n));
+    });
+    const mlAway = mlMarket.outcomes.find((o) => {
+      const n = norm(o.name);
+      return n !== 'draw' && (n.includes(normAway) || normAway.includes(n));
+    });
+    const mlDraw = mlMarket.outcomes.find((o) => norm(o.name) === 'draw');
+
+    if (!mlHome || !mlAway || !mlDraw) return [];
+
+    const opportunities: SportsArbitrageOpportunity[] = [];
+
+    // Enumerate the 3 valid combos
+    const combos: Array<{ dcOut: typeof dc1X; mlOut: typeof mlHome; key: string }> = [
+      { dcOut: dc1X, mlOut: mlAway, key: '1X_away' },
+      { dcOut: dcX2, mlOut: mlHome, key: 'X2_home' },
+      { dcOut: dc12, mlOut: mlDraw, key: '12_draw' },
+    ];
+
+    for (const { dcOut, mlOut, key } of combos) {
+      const dcProb = dcOut.price > 0 ? 1 / dcOut.price : 0;
+      const mlProb = mlOut.price > 0 ? 1 / mlOut.price : 0;
+      if (dcProb <= 0 || mlProb <= 0) continue;
+
+      const totalCost = dcProb + mlProb;
+      const profitPercent = totalCost > 0 ? ((1 - totalCost) / totalCost) * 100 : -100;
+      if (profitPercent < this.MIN_PROFIT_PCT) continue;
+
+      const id = createHash('sha256')
+        .update(`dcml:${match.id}:${dcMarket.marketId}:${mlMarket.marketId}:${key}`)
+        .digest('hex')
+        .slice(0, 16);
+
+      opportunities.push({
+        id,
+        matchId: match.id,
+        sportKey: match.sportKey,
+        eventName: match.dexEvent.name,
+        marketType: 'dc_vs_moneyline',
+        pmQuestion: `DC ${dcOut.name} + ML ${mlOut.name}`,
+        // "Double Chance | Moneyline" when DexSport holds DC (left box), "Moneyline | Double Chance" otherwise.
+        dexMarketName: dcPlatform === 'dexsport' ? 'Double Chance | Moneyline' : 'Moneyline | Double Chance',
+        legs: [
+          {
+            platform: dcPlatform as SportsArbLeg['platform'],
+            outcomeName: dcOut.name,
+            probability: dcProb,
+            decimalOdds: dcOut.price,
+          },
+          {
+            platform: mlPlatform as SportsArbLeg['platform'],
+            outcomeName: mlOut.name,
+            probability: mlProb,
+            decimalOdds: mlOut.price,
+          },
+        ],
         totalCost,
         profitPercent,
         maxInvestment: 0,

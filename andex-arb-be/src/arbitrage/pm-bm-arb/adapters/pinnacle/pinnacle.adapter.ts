@@ -444,7 +444,10 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
                 oddsType: 2, version: 0, eventType: 0, locale: 'en_US', periodNum: '0,8,39,3,4,5,6,7' },
       }));
     } else {
-      const body = { dpJCA: this.dpJCA, sportId: sid, oddsType: 2, version: 0, periodNum: 0, locale: 'en_US' };
+      // Football (sportId 29): subscribe to periods 0 (full match) and 1 (1st half) to receive
+      // corners sub-events with 1H totals alongside the main event period-1 markets.
+      const periodNum = sportId === 29 ? '0,1' : 0;
+      const body = { dpJCA: this.dpJCA, sportId: sid, oddsType: 2, version: 0, periodNum, locale: 'en_US' };
       ws.send(JSON.stringify({ type: 'SUBSCRIBE', destination: 'MATCHUPS_EURO_ODDS', body }));
       ws.send(JSON.stringify({ type: 'SUBSCRIBE', destination: 'LIVE_EURO_ODDS', body }));
     }
@@ -537,6 +540,16 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
   // ── Merge ─────────────────────────────────────────────────────
 
   private mergeEvent(event: PinnacleEvent, league: PinnacleLeague, isPartial = false, pruneStale = false): string[] {
+    // Corners/Bookings sub-events have parentId != 0.
+    // For corners: extract totals markets and merge them into the parent event in-place.
+    // Do NOT create a separate cache entry — the matcher uses the parent event ID.
+    if (event.parentId !== 0 && event.resultingUnit === 'Corners') {
+      this.mergeCornersIntoParent(event);
+      return [];
+    }
+    // Ignore other sub-events (Bookings etc.) we don't use.
+    if (event.parentId !== 0) return [];
+
     const eventId = String(event.id);
     const sportKey = this.resolveSportKey(league);
     if (!sportKey) return [];
@@ -713,6 +726,162 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       }
     }
     return ids;
+  }
+
+  // ── Corners merge ─────────────────────────────────────────────
+
+  /**
+   * Extracts corners totals from a WS corners sub-event and merges them into the
+   * parent event's market list in-place.
+   * Period 0 → total_corners, Period 1 → total_corners_1h.
+   */
+  private mergeCornersIntoParent(cornersEvent: PinnacleEvent): void {
+    const parentId = String(cornersEvent.parentId);
+    const parentEvent = this.eventCache.get(parentId);
+    if (!parentEvent) return;
+
+    const newMarkets: DexMarket[] = [];
+    for (const [periodStr, period] of Object.entries(cornersEvent.periods)) {
+      const periodNum = Number(periodStr);
+      if (periodNum !== 0 && periodNum !== 1) continue;
+      const marketType = periodNum === 1 ? 'total_corners_1h' : 'total_corners';
+
+      for (const entry of period.overUnder ?? []) {
+        if (!('points' in entry)) continue;
+        const ou = entry as import('./pinnacle.types').PinnacleOverUnder;
+        if (ou.unavailable || ou.offline) continue;
+        const points     = parseFloat(ou.points);
+        const overOdds   = parseFloat(ou.overOdds) + 1;
+        const underOdds  = parseFloat(ou.underOdds) + 1;
+        if (!isFinite(points) || overOdds <= 1 || underOdds <= 1) continue;
+        newMarkets.push({
+          marketId: `${cornersEvent.id}_corners_p${periodNum}_ou_${ou.points}`,
+          marketType,
+          name: marketType,
+          outcomes: [
+            { name: `Over ${ou.points}`,  price: overOdds },
+            { name: `Under ${ou.points}`, price: underOdds },
+          ],
+        });
+      }
+    }
+
+    if (!newMarkets.length) return;
+
+    const newById = new Map(newMarkets.map((m) => [m.marketId, m]));
+    for (const cached of parentEvent.markets) {
+      const updated = newById.get(cached.marketId);
+      if (updated) {
+        cached.outcomes = [...updated.outcomes];
+        newById.delete(cached.marketId);
+      }
+    }
+    for (const m of newById.values()) parentEvent.markets.push(m);
+    parentEvent.updatedAt = Date.now();
+  }
+
+  // ── Specials (BTTS, Double Chance) via REST ───────────────────
+
+  /**
+   * Fetches the REST odds/event endpoint for each event ID and merges
+   * specials markets (BTTS, Double Chance) into the event cache.
+   * Called by the scheduler before BmBm matching, for all Pinnacle football events.
+   */
+  async refreshSpecialsForEvents(eventIds: string[]): Promise<void> {
+    const BATCH = 8;
+    for (let i = 0; i < eventIds.length; i += BATCH) {
+      await Promise.allSettled(
+        eventIds.slice(i, i + BATCH).map((id) => this.fetchAndMergeSpecials(id)),
+      );
+    }
+  }
+
+  private async fetchAndMergeSpecials(eventId: string): Promise<void> {
+    const event = this.eventCache.get(eventId);
+    if (!event) return;
+
+    try {
+      const resp = await this.httpClient.get('/sports-service/sv/euro/odds/event', {
+        params: { eventId, oddsType: 2, version: 0, specialVersion: 0, locale: 'en_US', withCredentials: true },
+      });
+      const data = resp.data;
+      if (!data?.specials) return;
+
+      const newMarkets: DexMarket[] = [];
+      for (const group of data.specials as any[]) {
+        for (const ev of group.events as any[] ?? []) {
+          if (ev.status !== 'O') continue;
+          const market = this.buildSpecialMarket(ev, eventId);
+          if (market) newMarkets.push(market);
+        }
+      }
+
+      if (!newMarkets.length) return;
+
+      const newById = new Map(newMarkets.map((m) => [m.marketId, m]));
+      for (const cached of event.markets) {
+        const updated = newById.get(cached.marketId);
+        if (updated) {
+          cached.outcomes = [...updated.outcomes];
+          newById.delete(cached.marketId);
+        }
+      }
+      for (const m of newById.values()) event.markets.push(m);
+      event.updatedAt = Date.now();
+    } catch (err: any) {
+      this.logger.warn(`Pinnacle: specials fetch failed for event ${eventId}: ${err.message}`);
+    }
+  }
+
+  /**
+   * Converts a Pinnacle specials event object into a DexMarket.
+   * Returns null for specials we don't track.
+   */
+  private buildSpecialMarket(ev: any, parentEventId: string): DexMarket | null {
+    const evName: string = ev.name ?? '';
+    let marketType: string | null = null;
+
+    if (evName === 'Both Teams To Score?')       marketType = 'both_teams_to_score';
+    else if (evName === 'Double Chance')          marketType = 'double_chance';
+    else return null;
+
+    const contestants: Array<{ n: string; p: string }> = ev.contestants ?? [];
+    if (contestants.length < 2) return null;
+
+    const outcomes: DexOutcome[] = contestants
+      .map((c) => {
+        const hk = parseFloat(c.p);
+        if (!isFinite(hk)) return null;
+        const price = hk + 1; // HK odds → decimal
+        const name = marketType === 'double_chance'
+          ? this.normalizeDoubleChanceName(c.n)
+          : c.n; // BTTS: "Yes" / "No"
+        return price > 1 ? ({ name, price } as DexOutcome) : null;
+      })
+      .filter((o): o is DexOutcome => o !== null);
+
+    if (outcomes.length < 2) return null;
+
+    return {
+      marketId:   `${parentEventId}_special_${ev.id}`,
+      marketType,
+      name:       marketType,
+      outcomes,
+    };
+  }
+
+  /**
+   * Maps a Pinnacle Double Chance contestant name (e.g. "Liverpool Or Draw") to
+   * the canonical label used by Dexsport: "1X", "X2", or "12".
+   */
+  private normalizeDoubleChanceName(name: string): string {
+    const lower = name.toLowerCase();
+    // "Liverpool Or Draw" / "Home Or Draw" → 1X
+    if (lower.endsWith(' or draw') || lower.startsWith('home or draw')) return '1X';
+    // "Draw Or Paris Saint-Germain" / "Draw Or Away" → X2
+    if (lower.startsWith('draw or ')) return 'X2';
+    // "Liverpool Or Paris Saint-Germain" (no Draw) → 12
+    return '12';
   }
 
   // ── Market building ───────────────────────────────────────────

@@ -336,6 +336,16 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
 
   async runMatchCycle(): Promise<void> {
     try {
+      // Refresh Pinnacle specials (BTTS, Double Chance) for all football events via REST
+      // before running BmBm matching, so the matcher sees the full market list.
+      const pinnacleFootballIds = this.pinnacleAdapter.getEvents()
+        .filter((e) => e.sportKey === 'football')
+        .map((e) => e.eventId);
+      if (pinnacleFootballIds.length > 0) {
+        this.logger.log(`Refreshing Pinnacle specials for ${pinnacleFootballIds.length} football events`);
+        await this.pinnacleAdapter.refreshSpecialsForEvents(pinnacleFootballIds);
+      }
+
       this.currentMatches = this.matcher.findMatches();
       this.currentBmBmMatches = this.matcher.findBmBmMatches();
 
