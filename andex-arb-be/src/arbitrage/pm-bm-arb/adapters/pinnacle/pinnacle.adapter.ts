@@ -520,7 +520,10 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
           const changes = this.mergeEvent(event, league, isRefreshAll ? false : true);
           this.eventLastSeen.set(String(event.id), now);
           if (changes.length) {
-            const name = this.eventCache.get(String(event.id))?.name ?? `event#${event.id}`;
+            const name =
+              this.eventCache.get(String(event.id))?.name ??
+              (event.parentId ? this.eventCache.get(String(event.parentId))?.name : undefined) ??
+              `event#${event.id}`;
             for (const c of changes) changeLines.push(`  ${name}: ${c}`);
           }
         }
@@ -544,8 +547,7 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
     // For corners: extract totals markets and merge them into the parent event in-place.
     // Do NOT create a separate cache entry — the matcher uses the parent event ID.
     if (event.parentId !== 0 && event.resultingUnit === 'Corners') {
-      this.mergeCornersIntoParent(event);
-      return [];
+      return this.mergeCornersIntoParent(event);
     }
     // Ignore other sub-events (Bookings etc.) we don't use.
     if (event.parentId !== 0) return [];
@@ -735,10 +737,10 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
    * parent event's market list in-place.
    * Period 0 → total_corners, Period 1 → total_corners_1h.
    */
-  private mergeCornersIntoParent(cornersEvent: PinnacleEvent): void {
+  private mergeCornersIntoParent(cornersEvent: PinnacleEvent): string[] {
     const parentId = String(cornersEvent.parentId);
     const parentEvent = this.eventCache.get(parentId);
-    if (!parentEvent) return;
+    if (!parentEvent) return [];
 
     const newMarkets: DexMarket[] = [];
     for (const [periodStr, period] of Object.entries(cornersEvent.periods)) {
@@ -766,18 +768,34 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    if (!newMarkets.length) return;
+    if (!newMarkets.length) return [];
 
+    const changes: string[] = [];
     const newById = new Map(newMarkets.map((m) => [m.marketId, m]));
     for (const cached of parentEvent.markets) {
       const updated = newById.get(cached.marketId);
       if (updated) {
-        cached.outcomes = [...updated.outcomes];
+        for (let i = 0; i < cached.outcomes.length; i++) {
+          const updatedOutcome = updated.outcomes.find((o) => o.name === cached.outcomes[i].name);
+          if (!updatedOutcome) continue;
+          const newPrice = updatedOutcome.price;
+          if (isFinite(newPrice) && newPrice > 0 && cached.outcomes[i].price !== newPrice) {
+            const arrow = newPrice > cached.outcomes[i].price ? '↑' : '↓';
+            changes.push(
+              `[${cached.marketType}] ${cached.outcomes[i].name}: ${cached.outcomes[i].price?.toFixed(3)} → ${newPrice.toFixed(3)} ${arrow}`,
+            );
+            cached.outcomes[i] = { ...cached.outcomes[i], price: newPrice };
+          }
+        }
         newById.delete(cached.marketId);
       }
     }
-    for (const m of newById.values()) parentEvent.markets.push(m);
+    for (const m of newById.values()) {
+      parentEvent.markets.push(m);
+      changes.push(`[${m.marketType}] online (${m.outcomes.map(o => `${o.name}=${o.price.toFixed(3)}`).join(', ')})`);
+    }
     parentEvent.updatedAt = Date.now();
+    return changes;
   }
 
   // ── Specials (BTTS, Double Chance) via REST ───────────────────
