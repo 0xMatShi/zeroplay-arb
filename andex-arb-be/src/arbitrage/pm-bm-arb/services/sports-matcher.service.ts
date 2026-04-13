@@ -485,6 +485,8 @@ function matchDexMarketsForBmPair(bmEvent: DexSportsEvent, dexEvent: DexSportsEv
 
   for (const bmMarket of bmEvent.markets) {
     if (!bmMarket.marketType) continue;
+    // For football: moneyline is covered by dc_vs_moneyline cross-type pairs only
+    if (sportKey === 'football' && bmMarket.marketType === 'moneyline') continue;
     const dexMarket = matchTypedToDex(
       bmMarket,
       dexEvent.markets.filter((d) => !usedDex.has(d.name)),
