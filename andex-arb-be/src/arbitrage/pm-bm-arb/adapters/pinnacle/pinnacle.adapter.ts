@@ -788,11 +788,15 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
    * Called by the scheduler before BmBm matching, for all Pinnacle football events.
    */
   async refreshSpecialsForEvents(eventIds: string[]): Promise<void> {
-    const BATCH = 8;
+    const BATCH = 3;
+    const DELAY_MS = 600;
     for (let i = 0; i < eventIds.length; i += BATCH) {
       await Promise.allSettled(
         eventIds.slice(i, i + BATCH).map((id) => this.fetchAndMergeSpecials(id)),
       );
+      if (i + BATCH < eventIds.length) {
+        await new Promise((r) => setTimeout(r, DELAY_MS));
+      }
     }
   }
 
