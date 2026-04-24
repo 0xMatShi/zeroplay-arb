@@ -217,12 +217,35 @@ function effectiveIsLive(opp: SportsOpportunity): boolean {
   return opp.isLive || (opp.startTime != null && Date.now() > opp.startTime)
 }
 
+// --- Platform bank constants ---
+
+type SportsPlatform = 'polymarket' | 'dexsport' | 'pinnacle' | 'stake' | 'cloudbet' | 'pari' | 'fonbet'
+const ALL_SPORTS_PLATFORMS: SportsPlatform[] = ['polymarket', 'dexsport', 'pinnacle', 'stake', 'cloudbet', 'pari', 'fonbet']
+const PLATFORM_LABELS: Record<SportsPlatform, string> = {
+  polymarket: 'Polymarket',
+  dexsport: 'Dexsport',
+  pinnacle: 'Pinnacle',
+  stake: 'Stake',
+  cloudbet: 'Cloudbet',
+  pari: 'Pari',
+  fonbet: 'Fonbet',
+}
+const DEFAULT_PLATFORM_BANKS: Record<SportsPlatform, string> = {
+  polymarket: '100',
+  dexsport: '100',
+  pinnacle: '100',
+  stake: '100',
+  cloudbet: '100',
+  pari: '100',
+  fonbet: '100',
+}
+
 // --- Sports Opportunity Card (PM-BM) ---
 
 function SportsOpportunityCard({
   opp,
   index,
-  perfectAmount,
+  platformBanks,
   isPinned,
   isStale,
   pmDisplayMode,
@@ -231,7 +254,7 @@ function SportsOpportunityCard({
 }: {
   opp: SportsOpportunity
   index: number
-  perfectAmount: number
+  platformBanks: Record<string, number>
   isPinned: boolean
   isStale: boolean
   pmDisplayMode: 'shares' | 'odds'
@@ -261,22 +284,33 @@ function SportsOpportunityCard({
   // Effective PM cost per $1 of payout (matches backend fee formula)
   const pmEff = pmLeg ? pmLeg.probability * (1 + 0.03 * (1 - pmLeg.probability)) : 0
 
+  // Per-platform bank constraints → effective total bank
+  const leftPlatform = isBmBm ? (leftLeg?.platform ?? '') : 'polymarket'
+  const rightPlatform = rightLeg?.platform ?? ''
+  const leftBank = platformBanks[leftPlatform] ?? 0
+  const rightBank = platformBanks[rightPlatform] ?? 0
+  const leftRatio = isBmBm ? (leftLeg ? leftLeg.probability / totalCost : 0) : pmEff / totalCost
+  const rightRatio = rightLeg ? rightLeg.probability / totalCost : 0
+  const maxFromLeft = leftRatio > 0 ? leftBank / leftRatio : Infinity
+  const maxFromRight = rightRatio > 0 ? rightBank / rightRatio : Infinity
+  const effectivePerfectAmount = Math.min(maxFromLeft, maxFromRight)
+
   // Perfect amounts (proportional to leg cost; PM uses fee-adjusted cost)
-  const pmPerfect = leftLeg && !isBmBm ? perfectAmount * (pmEff / totalCost) : leftLeg ? perfectAmount * (leftLeg.probability / totalCost) : 0
-  const dexPerfect = rightLeg ? perfectAmount * (rightLeg.probability / totalCost) : 0
+  const pmPerfect = leftLeg && !isBmBm ? effectivePerfectAmount * (pmEff / totalCost) : leftLeg ? effectivePerfectAmount * (leftLeg.probability / totalCost) : 0
+  const dexPerfect = rightLeg ? effectivePerfectAmount * (rightLeg.probability / totalCost) : 0
 
   // Real amounts (limited by PM best ask qty; bm-bm has no order book)
   const pmQty = isBmBm ? 0 : (pmLeg?.pmBestAskQty ?? 0)
   const pmReal = pmLeg ? pmQty * pmEff : 0
   const dexReal = rightLeg ? pmQty * rightLeg.probability : 0
   const realTotal = pmQty * totalCost
-  const effectiveTotal = realTotal > 0 ? Math.min(realTotal, perfectAmount) : 0
+  const effectiveTotal = realTotal > 0 ? Math.min(realTotal, effectivePerfectAmount) : 0
   const profitUsd = isBmBm
-    ? perfectAmount * (profitPct / 100)
+    ? effectivePerfectAmount * (profitPct / 100)
     : effectiveTotal > 0 ? effectiveTotal * (profitPct / 100) : 0
 
   // Effective amounts for calculator (same min logic as profitUsd)
-  const useRealForCalc = realTotal > 0 && realTotal <= perfectAmount
+  const useRealForCalc = realTotal > 0 && realTotal <= effectivePerfectAmount
   const pmCalcAmount = useRealForCalc ? pmReal : pmPerfect
   const dexCalcAmount = useRealForCalc ? dexReal : dexPerfect
 
@@ -595,7 +629,8 @@ export function Scanner() {
 
   // PM-BM settings
   const [pmDisplayMode, setPmDisplayMode] = useLocalStorage<'shares' | 'odds'>('scanner:pmDisplayMode', 'shares')
-  const [perfectAmountInput, setPerfectAmountInput] = useLocalStorage('scanner:perfectAmountInput', '100')
+  const [platformBanksInput, setPlatformBanksInput] = useLocalStorage<Record<string, string>>('scanner:platformBanks', DEFAULT_PLATFORM_BANKS)
+  const [bankExpanded, setBankExpanded] = useState(false)
   const [realMinAmountInput, setRealMinAmountInput] = useLocalStorage('scanner:realMinAmountInput', '0')
   const [maxDaysInput, setMaxDaysInput] = useLocalStorage('scanner:maxDaysInput', '')
   useEffect(() => {
@@ -605,7 +640,10 @@ export function Scanner() {
     try { localStorage.setItem('scanner:platformPairFilter', JSON.stringify([...platformPairFilter])) } catch { /* ignore */ }
   }, [platformPairFilter])
 
-  const perfectAmount = perfectAmountInput === '' ? 0 : Math.max(0, Number(perfectAmountInput) || 0)
+  const platformBanks: Record<string, number> = Object.fromEntries(
+    ALL_SPORTS_PLATFORMS.map(p => [p, Math.max(0, Number(platformBanksInput[p] ?? '0') || 0)])
+  )
+  const totalBank = ALL_SPORTS_PLATFORMS.reduce((sum, p) => sum + platformBanks[p], 0)
   const realMinAmount = realMinAmountInput === '' ? 0 : Math.max(0, Number(realMinAmountInput) || 0)
   const maxDaysUntilStart = maxDaysInput === '' ? null : Math.max(0, Number(maxDaysInput) || 0)
   const [pinnedOpps, setPinnedOpps] = useState<Map<string, SportsOpportunity>>(new Map())
@@ -891,17 +929,31 @@ export function Scanner() {
         return pb - pa
       }
       if (sortMode === 'profitUsd') {
+        const getEffectivePerfect = (sOpp: SportsOpportunity): number => {
+          const pmLeg = sOpp.sportsLegs?.find(l => l.platform === 'polymarket')
+          const isBmBm = !pmLeg
+          const leftLeg = isBmBm ? sOpp.sportsLegs?.find(l => l.platform === 'dexsport') : pmLeg
+          const rightLeg = isBmBm
+            ? sOpp.sportsLegs?.find(l => l.platform !== 'dexsport')
+            : sOpp.sportsLegs?.find(l => l.platform !== 'polymarket')
+          const pmEff = pmLeg ? pmLeg.probability * (1 + 0.03 * (1 - pmLeg.probability)) : 0
+          const lp = isBmBm ? (leftLeg?.platform ?? '') : 'polymarket'
+          const rp = rightLeg?.platform ?? ''
+          const lb = platformBanks[lp] ?? 0
+          const rb = platformBanks[rp] ?? 0
+          const lr = isBmBm ? (leftLeg ? leftLeg.probability / sOpp.totalCost : 0) : pmEff / sOpp.totalCost
+          const rr = rightLeg ? rightLeg.probability / sOpp.totalCost : 0
+          return Math.min(lr > 0 ? lb / lr : Infinity, rr > 0 ? rb / rr : Infinity)
+        }
         const getRealProfit = (o: Opportunity): number => {
           if (arbMode === 'pm-bm') {
             const sOpp = o as SportsOpportunity
             const pmLeg = sOpp.sportsLegs?.find(l => l.platform === 'polymarket')
-            if (!pmLeg) {
-              // bm-bm: profit is based on perfectAmount (bank)
-              return perfectAmount * (Number(o.profitPercentage) || 0) / 100
-            }
+            const eff = getEffectivePerfect(sOpp)
+            if (!pmLeg) return eff * (Number(o.profitPercentage) || 0) / 100
             const pmQty = pmLeg.pmBestAskQty ?? 0
             const realTotal = pmQty * o.totalCost
-            const effectiveTotal = realTotal > 0 ? Math.min(realTotal, perfectAmount) : 0
+            const effectiveTotal = realTotal > 0 ? Math.min(realTotal, eff) : 0
             return effectiveTotal * (Number(o.profitPercentage) || 0) / 100
           }
           return Number(o.totalGrossProfit) || 0
@@ -913,7 +965,7 @@ export function Scanner() {
     })
 
     return result
-  }, [pmpmQuery.data, pmbmQuery.data, searchQuery, minRoi, maxRoi, typeFilter, liveFilter, effectivePlatforms, sortMode, showPolymarketMin50c, arbMode, realMinAmount, sportFilter, maxDaysUntilStart, platformPairFilter])
+  }, [pmpmQuery.data, pmbmQuery.data, searchQuery, minRoi, maxRoi, typeFilter, liveFilter, effectivePlatforms, sortMode, showPolymarketMin50c, arbMode, realMinAmount, sportFilter, maxDaysUntilStart, platformPairFilter, platformBanks])
 
   // PM-BM display list: pinned cards first, then non-pinned filtered cards
   const displayPmBmOpps = useMemo(() => {
@@ -1142,18 +1194,31 @@ export function Scanner() {
               {arbMode === 'pm-bm' && (
                 <div className="settings-sliders">
                   <div className="settings-slider-row">
-                    <div className="settings-slider-head">
+                    <div
+                      className="settings-slider-head settings-bank-toggle"
+                      onClick={() => setBankExpanded(v => !v)}
+                    >
                       <span className="settings-slider-label">BANK ($)</span>
-                      <span className="settings-slider-value">${perfectAmount}</span>
+                      <span className={`collapsible-arrow ${bankExpanded ? 'open' : ''}`}>▾</span>
                     </div>
-                    <input
-                      type="number"
-                      min="0"
-                      step="100"
-                      value={perfectAmountInput}
-                      onChange={(e) => setPerfectAmountInput(e.target.value)}
-                      className="settings-number-input"
-                    />
+                    <div className={`collapsible-body ${bankExpanded ? 'collapsible-body--open' : ''}`}>
+                      <div className="settings-bank-platforms">
+                        {ALL_SPORTS_PLATFORMS.map(platform => (
+                          <div key={platform} className="settings-bank-platform-row">
+                            <span className="settings-bank-platform-label">{PLATFORM_LABELS[platform]}</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="10"
+                              value={platformBanksInput[platform] ?? ''}
+                              onChange={(e) => setPlatformBanksInput(prev => ({ ...prev, [platform]: e.target.value }))}
+                              className="settings-number-input settings-number-input--small"
+                              placeholder="0"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                   <div className="settings-slider-row">
                     <div className="settings-slider-head">
@@ -1438,7 +1503,7 @@ export function Scanner() {
                   <SportsOpportunityCard
                     opp={opp}
                     index={index}
-                    perfectAmount={perfectAmount}
+                    platformBanks={platformBanks}
                     isPinned={pinnedOpps.has(opp.id)}
                     isStale={isStale}
                     pmDisplayMode={pmDisplayMode}

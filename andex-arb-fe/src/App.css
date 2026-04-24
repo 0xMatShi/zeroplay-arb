@@ -5684,6 +5684,47 @@
   flex-shrink: 0;
 }
 
+.settings-bank-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-bank-toggle:hover .settings-slider-label,
+.settings-bank-toggle:hover .settings-slider-value {
+  opacity: 0.85;
+}
+
+
+.settings-bank-platforms {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.settings-bank-platform-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-bank-platform-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.settings-number-input--small {
+  width: 80px !important;
+  flex-shrink: 0;
+}
+
 /* Card base */
 .sports-card {
   cursor: default;
