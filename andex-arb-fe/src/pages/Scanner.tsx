@@ -643,7 +643,7 @@ export function Scanner() {
   const platformBanks: Record<string, number> = Object.fromEntries(
     ALL_SPORTS_PLATFORMS.map(p => [p, Math.max(0, Number(platformBanksInput[p] ?? '0') || 0)])
   )
-  const totalBank = ALL_SPORTS_PLATFORMS.reduce((sum, p) => sum + platformBanks[p], 0)
+
   const realMinAmount = realMinAmountInput === '' ? 0 : Math.max(0, Number(realMinAmountInput) || 0)
   const maxDaysUntilStart = maxDaysInput === '' ? null : Math.max(0, Number(maxDaysInput) || 0)
   const [pinnedOpps, setPinnedOpps] = useState<Map<string, SportsOpportunity>>(new Map())
