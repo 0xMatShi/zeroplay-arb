@@ -665,14 +665,22 @@ export class MatchingService {
    * No fallback on high-confidence PENDING matches.
    */
   async getScannableMatches(): Promise<EventMatch[]> {
-    const verified = await this.verifiedMatchRepo.find({
-      relations: [
-        'eventMatch',
-        'eventMatch.events',
-        'eventMatch.events.outcomes',
-        'eventMatch.events.platform',
-      ],
-    });
+    const verified = await this.verifiedMatchRepo
+      .createQueryBuilder('vm')
+      .innerJoinAndSelect('vm.eventMatch', 'em')
+      .innerJoinAndSelect('em.events', 'ev')
+      .innerJoinAndSelect('ev.platform', 'pl')
+      .innerJoinAndSelect('ev.outcomes', 'oc')
+      .select([
+        'vm.id',
+        'em.id', 'em.title', 'em.outcomeMapping', 'em.status', 'em.confidence',
+        'ev.id', 'ev.externalId', 'ev.title', 'ev.status', 'ev.outcomeType',
+        'ev.platformId', 'ev.url', 'ev.endDate',
+        'pl.id', 'pl.slug', 'pl.name',
+        'oc.id', 'oc.externalId', 'oc.name', 'oc.price', 'oc.volume24h',
+        'oc.metadata',
+      ])
+      .getMany();
 
     return verified.map((v) => v.eventMatch).filter((m) => m != null);
   }

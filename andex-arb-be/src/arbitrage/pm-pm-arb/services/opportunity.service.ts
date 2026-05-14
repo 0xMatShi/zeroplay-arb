@@ -78,22 +78,6 @@ export class OpportunityService {
    * Returns expired IDs and updated opportunities separately.
    */
   async revalidateActive(): Promise<{ expiredIds: string[]; updatedOpps: ArbitrageOpportunity[] }> {
-    const activeOpps = await this.opportunityRepo.find({
-      where: { status: OpportunityStatus.ACTIVE },
-      relations: [
-        'eventMatch',
-        'eventMatch.events',
-        'eventMatch.events.outcomes',
-        'eventMatch.events.platform',
-      ],
-    });
-
-    if (activeOpps.length === 0) return { expiredIds: [], updatedOpps: [] };
-
-    // Prices are already fresh — refreshed via orderbooks by the scheduler
-    // before this method is called. Just re-scan with current DB prices.
-
-    // ── Re-load opportunities with fresh prices from DB ──
     const refreshedOpps = await this.opportunityRepo.find({
       where: { status: OpportunityStatus.ACTIVE },
       relations: [
@@ -103,6 +87,8 @@ export class OpportunityService {
         'eventMatch.events.platform',
       ],
     });
+
+    if (refreshedOpps.length === 0) return { expiredIds: [], updatedOpps: [] };
 
     const expiredIds: string[] = [];
     const updatedOpps: ArbitrageOpportunity[] = [];
