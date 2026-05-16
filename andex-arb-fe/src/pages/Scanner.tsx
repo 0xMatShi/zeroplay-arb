@@ -792,7 +792,7 @@ export function Scanner() {
     // Sound is handled via useEffect watching filteredOpportunities
   }, [])
 
-  const { authError: sportsWsAuthError } = useSportsArbSocket({
+  const { isConnected: isSportsConnected, authError: sportsWsAuthError } = useSportsArbSocket({
     onNewOpportunity: handleNewSportsOpportunity,
     paused: isPaused,
     apiKey: apiKeyState,
@@ -1046,9 +1046,9 @@ export function Scanner() {
           <div className="scanner-status">
             <span className="status-label">{t('scanner.systemLabel')}</span>
             <span className="status-value">
-              {isPaused ? t('scanner.paused') : isConnected ? t('scanner.scanning') : t('scanner.wsReconnecting')}
+              {isPaused ? t('scanner.paused') : (isConnected || isSportsConnected) ? t('scanner.scanning') : t('scanner.wsReconnecting')}
             </span>
-            <span className={`status-pulse ${isPaused ? 'status-pulse--paused' : isConnected ? '' : 'status-pulse--offline'}`}></span>
+            <span className={`status-pulse ${isPaused ? 'status-pulse--paused' : (isConnected || isSportsConnected) ? '' : 'status-pulse--offline'}`}></span>
           </div>
         </div>
         <div className="scanner-header-right">
