@@ -278,12 +278,14 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
       this.logger.log('Pinnacle: navigating to sports page...');
       await page.goto(`${BASE_URL}/en/standard/home`, { waitUntil: 'networkidle2', timeout: 30_000 });
 
-      // Fill and submit header login form
-      const HEADER_USER = '#top-header input[name="username"]';
-      const HEADER_PASS = '#top-header input[name="password"]';
-      const HEADER_BTN  = '#top-header button[type="submit"]';
+      // Fill and submit header login form.
+      // Pinnacle uses styled-components — class names are auto-generated and change
+      // on each deploy, so we select by form structure + stable name attributes only.
+      const HEADER_USER = 'form input[name="username"]';
+      const HEADER_PASS = 'form input[name="password"]';
+      const HEADER_BTN  = 'form button[type="submit"]';
 
-      await page.waitForSelector(HEADER_USER, { timeout: 10_000 });
+      await page.waitForSelector(HEADER_USER, { timeout: 20_000 });
       await page.click(HEADER_USER);
       await page.type(HEADER_USER, username, { delay: 50 });
       await page.click(HEADER_PASS);
@@ -325,9 +327,13 @@ export class PinnacleAdapter implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`Pinnacle: login complete, dpJCA=${this.dpJCA}`);
       } else {
         this.logger.error('Pinnacle: WS URL not intercepted — login may have failed');
+        this.onAllMarketsReady?.();
       }
     } catch (err: any) {
       this.logger.error(`Pinnacle: login failed — ${err.message}`);
+      // Fire onAllMarketsReady even on failure so the rest of the pipeline
+      // (Dexsport, Cloudbet, Pari, Fonbet) is not blocked waiting for Pinnacle.
+      this.onAllMarketsReady?.();
     } finally {
       if (browser) await browser.close().catch(() => {});
     }

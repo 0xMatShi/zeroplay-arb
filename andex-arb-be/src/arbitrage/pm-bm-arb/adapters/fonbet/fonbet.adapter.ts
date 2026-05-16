@@ -387,13 +387,6 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
       for (let i = 0; i < Math.min(prevMarket.outcomes.length, moneylineMarket.outcomes.length); i++) {
         const np = moneylineMarket.outcomes[i].price;
         if (np !== prevMarket.outcomes[i].price) {
-          if (this.trackedMarketIds.has(prevMarket.marketId)) {
-            const arrow = np > prevMarket.outcomes[i].price ? '↑' : '↓';
-            this.logger.log(
-              `[Fonbet] ${existing.name}: ${prevMarket.outcomes[i].name} ` +
-              `${prevMarket.outcomes[i].price?.toFixed(3)} → ${np.toFixed(3)} ${arrow}`,
-            );
-          }
           prevMarket.outcomes[i] = { ...prevMarket.outcomes[i], price: np };
           priceChanged = true;
         }
@@ -430,11 +423,6 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
         for (let i = 0; i < Math.min(prevM.outcomes.length, newM.outcomes.length); i++) {
           const np = newM.outcomes[i].price;
           if (np !== prevM.outcomes[i].price) {
-            const arrow = np > prevM.outcomes[i].price ? '↑' : '↓';
-            this.logger.log(
-              `[Fonbet] ${existing.name}: ${newM.outcomes[i].name} ` +
-              `${prevM.outcomes[i].price?.toFixed(3)} → ${np.toFixed(3)} ${arrow}`,
-            );
             prevM.outcomes[i] = { ...prevM.outcomes[i], price: np };
             priceChanged = true;
           }
@@ -524,13 +512,6 @@ export class FonbetAdapter implements OnModuleInit, OnModuleDestroy {
       for (let i = 0; i < Math.min(prevMarket.outcomes.length, mapMarket.outcomes.length); i++) {
         const np = mapMarket.outcomes[i].price;
         if (np !== prevMarket.outcomes[i].price) {
-          if (this.trackedMarketIds.has(prevMarket.marketId)) {
-            const arrow = np > prevMarket.outcomes[i].price ? '↑' : '↓';
-            this.logger.log(
-              `[Fonbet Map${mapN}] ${existing.name}: ${prevMarket.outcomes[i].name} ` +
-              `${prevMarket.outcomes[i].price?.toFixed(3)} → ${np.toFixed(3)} ${arrow}`,
-            );
-          }
           prevMarket.outcomes[i] = { ...prevMarket.outcomes[i], price: np };
           priceChanged = true;
         }

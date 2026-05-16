@@ -11,7 +11,7 @@ const CLOB_WS = 'wss://ws-subscriptions-clob.polymarket.com/ws/market';
 const FETCH_INTERVAL_MS = 10 * 60_000;
 const WS_RECONNECT_DELAY_MS = 1_000;
 const WS_PING_INTERVAL_MS = 9_000;
-const PM_PAGE = 500;
+const PM_PAGE = 100; // Gamma API hard cap is 100 per page
 
 /**
  * Fetches Polymarket sports events (all market types) and keeps
