@@ -4,7 +4,7 @@ import { Module } from '@nestjs/common';
 import { PolymarketSportsAdapter } from './adapters/polymarket-sports/polymarket-sports.adapter';
 import { DexsportAdapter } from './adapters/dexsport/dexsport.adapter';
 import { PinnacleAdapter } from './adapters/pinnacle/pinnacle.adapter';
-import { StakeAdapter } from './adapters/stake/stake.adapter';
+// import { StakeAdapter } from './adapters/stake/stake.adapter';
 import { CloudbetAdapter } from './adapters/cloudbet/cloudbet.adapter';
 import { PariAdapter } from './adapters/pari/pari.adapter';
 import { FonbetAdapter } from './adapters/fonbet/fonbet.adapter';
@@ -47,7 +47,7 @@ import { SubscriptionsModule } from '../../subscriptions/subscriptions.module';
     PolymarketSportsAdapter,
     DexsportAdapter,
     PinnacleAdapter,
-    StakeAdapter,
+    // StakeAdapter,
     CloudbetAdapter,
     PariAdapter,
     FonbetAdapter,

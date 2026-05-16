@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import { PolymarketSportsAdapter } from '../adapters/polymarket-sports/polymarket-sports.adapter';
 import { DexsportAdapter } from '../adapters/dexsport/dexsport.adapter';
 import { PinnacleAdapter } from '../adapters/pinnacle/pinnacle.adapter';
-import { StakeAdapter } from '../adapters/stake/stake.adapter';
+// import { StakeAdapter } from '../adapters/stake/stake.adapter';
 import { CloudbetAdapter } from '../adapters/cloudbet/cloudbet.adapter';
 import { PariAdapter } from '../adapters/pari/pari.adapter';
 import { FonbetAdapter } from '../adapters/fonbet/fonbet.adapter';
@@ -552,7 +552,7 @@ export class SportsMatcher {
     private readonly polyAdapter: PolymarketSportsAdapter,
     private readonly dexAdapter: DexsportAdapter,
     private readonly pinnacleAdapter: PinnacleAdapter,
-    private readonly stakeAdapter: StakeAdapter,
+
     private readonly cloudbetAdapter: CloudbetAdapter,
     private readonly pariAdapter: PariAdapter,
     private readonly fonbetAdapter: FonbetAdapter,
@@ -563,16 +563,15 @@ export class SportsMatcher {
 
     const dexMatches      = this.matchBookmakerEvents(this.dexAdapter.getEvents(),      pmEvents, 'dexsport');
     const pinnacleMatches = this.matchBookmakerEvents(this.pinnacleAdapter.getEvents(), pmEvents, 'pinnacle');
-    const stakeMatches    = this.matchBookmakerEvents(this.stakeAdapter.getEvents(),    pmEvents, 'stake');
     const cloudbetMatches = this.matchBookmakerEvents(this.cloudbetAdapter.getEvents(), pmEvents, 'cloudbet');
     const pariMatches     = this.matchBookmakerEvents(this.pariAdapter.getEvents(),     pmEvents, 'pari');
     const fonbetMatches   = this.matchBookmakerEvents(this.fonbetAdapter.getEvents(),   pmEvents, 'fonbet');
 
-    const all = [...dexMatches, ...pinnacleMatches, ...stakeMatches, ...cloudbetMatches, ...pariMatches, ...fonbetMatches];
+    const all = [...dexMatches, ...pinnacleMatches, ...cloudbetMatches, ...pariMatches, ...fonbetMatches];
     const totalMarkets = all.reduce((s, p) => s + p.matchedMarkets.length, 0);
     this.logger.log(
       `SportsMatcher: ${pmEvents.length} PM | dexsport=${dexMatches.length} pinnacle=${pinnacleMatches.length}` +
-      ` stake=${stakeMatches.length} cloudbet=${cloudbetMatches.length} pari=${pariMatches.length}` +
+      ` cloudbet=${cloudbetMatches.length} pari=${pariMatches.length}` +
       ` fonbet=${fonbetMatches.length} → ${all.length} matched events, ${totalMarkets} matched markets`,
     );
     return all;
@@ -582,14 +581,13 @@ export class SportsMatcher {
     const dexEvents = this.dexAdapter.getEvents();
 
     const pinnacleMatches = this.matchDexToBookmakerEvents(this.pinnacleAdapter.getEvents(), dexEvents, 'pinnacle');
-    const stakeMatches    = this.matchDexToBookmakerEvents(this.stakeAdapter.getEvents(),    dexEvents, 'stake');
     const cloudbetMatches = this.matchDexToBookmakerEvents(this.cloudbetAdapter.getEvents(), dexEvents, 'cloudbet');
 
-    const all = [...pinnacleMatches, ...stakeMatches, ...cloudbetMatches];
+    const all = [...pinnacleMatches, ...cloudbetMatches];
     const totalMarkets = all.reduce((s, p) => s + p.matchedMarkets.length, 0);
     this.logger.log(
       `SportsMatcher BM-BM: dex=${dexEvents.length} events | pinnacle=${pinnacleMatches.length}` +
-      ` stake=${stakeMatches.length} cloudbet=${cloudbetMatches.length}` +
+      ` cloudbet=${cloudbetMatches.length}` +
       ` → ${all.length} matched pairs, ${totalMarkets} matched markets`,
     );
     return all;
@@ -598,7 +596,7 @@ export class SportsMatcher {
   private matchDexToBookmakerEvents(
     bmEvents: DexSportsEvent[],
     dexEvents: DexSportsEvent[],
-    bmPlatform: 'pinnacle' | 'stake' | 'cloudbet',
+    bmPlatform: 'pinnacle' | 'cloudbet',
   ): BmBmMatch[] {
     // Resolve dexsport sport slugs to canonical sport keys.
     // Also deduplicate live vs pre-game: prefer live (2.X) over pre-game (1.X).

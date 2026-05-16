@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PolymarketSportsAdapter } from '../adapters/polymarket-sports/polymarket-sports.adapter';
 import { DexsportAdapter } from '../adapters/dexsport/dexsport.adapter';
 import { PinnacleAdapter } from '../adapters/pinnacle/pinnacle.adapter';
-import { StakeAdapter } from '../adapters/stake/stake.adapter';
+// import { StakeAdapter } from '../adapters/stake/stake.adapter';
 import { CloudbetAdapter } from '../adapters/cloudbet/cloudbet.adapter';
 import { PariAdapter } from '../adapters/pari/pari.adapter';
 import { FonbetAdapter } from '../adapters/fonbet/fonbet.adapter';
@@ -67,7 +67,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   /** Track which adapters have completed at least one full fetch */
   private dexReady = false;
   private pinnacleReady = false;
-  private stakeReady = false;
+
   private cloudbetReady = false;
   private pariReady = false;
   private fonbetReady = false;
@@ -84,7 +84,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly polyAdapter: PolymarketSportsAdapter,
     private readonly dexAdapter: DexsportAdapter,
     private readonly pinnacleAdapter: PinnacleAdapter,
-    private readonly stakeAdapter: StakeAdapter,
+
     private readonly cloudbetAdapter: CloudbetAdapter,
     private readonly pariAdapter: PariAdapter,
     private readonly fonbetAdapter: FonbetAdapter,
@@ -99,7 +99,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.polyAdapter.onPriceUpdate = priceHandler;
     this.dexAdapter.onPriceUpdate = priceHandler;
     this.pinnacleAdapter.onPriceUpdate = priceHandler;
-    this.stakeAdapter.onPriceUpdate = priceHandler;
+
     this.cloudbetAdapter.onPriceUpdate = priceHandler;
     this.pariAdapter.onPriceUpdate = priceHandler;
     this.fonbetAdapter.onPriceUpdate = priceHandler;
@@ -133,10 +133,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       this.logger.warn('Pinnacle: session expired — resetting pinnacleReady until re-login completes');
       this.pinnacleReady = false;
     };
-    this.stakeAdapter.onAllMarketsReady = () => {
-      this.stakeReady = true;
-      this.checkAndTriggerMatchCycle('stake');
-    };
+
     this.cloudbetAdapter.onAllMarketsReady = () => {
       this.cloudbetReady = true;
       this.checkAndTriggerMatchCycle('cloudbet');
@@ -160,8 +157,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     this.pinnacleAdapter.onPriceUpdate = null;
     this.pinnacleAdapter.onAllMarketsReady = null;
     this.pinnacleAdapter.onSessionExpired = null;
-    this.stakeAdapter.onPriceUpdate = null;
-    this.stakeAdapter.onAllMarketsReady = null;
+
     this.cloudbetAdapter.onPriceUpdate = null;
     this.cloudbetAdapter.onAllMarketsReady = null;
     this.pariAdapter.onPriceUpdate = null;
@@ -198,7 +194,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
     // Reset readiness flags before adapters start re-fetching
     this.dexReady = false;
     this.pinnacleReady = false;
-    this.stakeReady = false;
+
     this.cloudbetReady = false;
     this.pariReady = false;
     this.fonbetReady = false;
@@ -231,30 +227,16 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       `relogin=${shouldReloginPinnacle}`,
     );
 
-    // Close existing Pinnacle + Stake WS connections BEFORE login so they don't
+    // Close existing Pinnacle WS connections BEFORE login so they don't
     // receive messages against a cleared cache during the Chrome login window.
     this.pinnacleAdapter.closeAll();
-    this.stakeAdapter.closeAll();
 
     if (shouldReloginPinnacle) {
-      // Full re-login: re-run Puppeteer to get fresh session + WS URL.
-      // Run in parallel with Stake login to save time.
-      await Promise.all([
-        this.pinnacleAdapter.login().then(() => { this.lastPinnacleLoginAt = Date.now(); }),
-        this.stakeAdapter.login(),
-      ]);
-    } else {
-      // Skip Puppeteer — reuse existing session cookies and WS URL.
-      // Stake still needs a fresh cf_clearance cookie.
-      await this.stakeAdapter.login();
+      await this.pinnacleAdapter.login().then(() => { this.lastPinnacleLoginAt = Date.now(); });
     }
 
     // Pinnacle: reconnect WS (with fresh or reused session)
     this.pinnacleAdapter.resetPhaseState();
-
-    // Stake: full reset — clear caches, re-fetch fixtures + initial odds, reconnect WS
-    // clearCache() handles the full async chain internally
-    this.stakeAdapter.clearCache();
 
     // Cloudbet: full reset — re-fetch events and reconnect WS
     this.cloudbetAdapter.clearCache();
@@ -311,7 +293,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   private checkAndTriggerMatchCycle(source: string): void {
-    if (this.dexReady && this.pinnacleReady && this.stakeReady && this.cloudbetReady && this.pariReady && this.fonbetReady && this.pmReady) {
+    if (this.dexReady && this.pinnacleReady && this.cloudbetReady && this.pariReady && this.fonbetReady && this.pmReady) {
       this.onBookmakerMarketsReady(source);
     }
   }
@@ -351,13 +333,13 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       const pmTokenSet = new Set<string>();
       const dexEntries: Array<{ eventId: string; marketId: string }> = [];
       const pinnacleEntries: Array<{ eventId: string; marketId: string }> = [];
-      const stakeEntries: Array<{ eventId: string; marketId: string }> = [];
+
       const cloudbetEntries: Array<{ eventId: string; marketId: string }> = [];
       const pariEntries: Array<{ eventId: string; marketId: string }> = [];
       const fonbetEntries: Array<{ eventId: string; marketId: string }> = [];
       const dexTracked = new Set<string>();
       const pinnacleTracked = new Set<string>();
-      const stakeTracked = new Set<string>();
+
       const cloudbetTracked = new Set<string>();
       const pariTracked = new Set<string>();
       const fonbetTracked = new Set<string>();
@@ -368,9 +350,6 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
           if (m.bookmakerPlatform === 'dexsport') {
             dexEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
             dexTracked.add(mp.dexMarket.marketId);
-          } else if (m.bookmakerPlatform === 'stake') {
-            stakeEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
-            stakeTracked.add(mp.dexMarket.marketId);
           } else if (m.bookmakerPlatform === 'cloudbet') {
             cloudbetEntries.push({ eventId: m.dexEvent.eventId, marketId: mp.dexMarket.marketId });
             cloudbetTracked.add(mp.dexMarket.marketId);
@@ -402,10 +381,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       if (pinnacleEntries.length > 0) {
         this.pinnacleAdapter.subscribeToMatchedMarkets(pinnacleEntries);
       }
-      // Stake/Cloudbet/Pari: subscribeToMatchedMarkets is a no-op (push-based)
-      if (stakeEntries.length > 0) {
-        this.stakeAdapter.subscribeToMatchedMarkets(stakeEntries);
-      }
+      // Cloudbet/Pari: subscribeToMatchedMarkets is a no-op (push-based)
       if (cloudbetEntries.length > 0) {
         this.cloudbetAdapter.subscribeToMatchedMarkets(cloudbetEntries);
       }
@@ -419,7 +395,7 @@ export class SportsScheduler implements OnModuleInit, OnModuleDestroy {
       // Update tracked market IDs for debug logging
       this.dexAdapter.trackedMarketIds = dexTracked;
       this.pinnacleAdapter.trackedMarketIds = pinnacleTracked;
-      this.stakeAdapter.trackedMarketIds = stakeTracked;
+
       this.cloudbetAdapter.trackedMarketIds = cloudbetTracked;
       this.pariAdapter.trackedMarketIds = pariTracked;
       this.fonbetAdapter.trackedMarketIds = fonbetTracked;
