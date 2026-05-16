@@ -77,6 +77,22 @@ export function useArbitrageSocket(options?: UseArbitrageSocketOptions) {
       setIsConnected(false)
     })
 
+    socket.on('connect_error', (err: Error) => {
+      const msg = err?.message?.toLowerCase() ?? ''
+      // Server rejected the namespace (module disabled) — stop reconnecting permanently.
+      if (msg.includes('invalid namespace')) {
+        socket.io.reconnection(false)
+        socket.disconnect()
+        return
+      }
+      if (msg.includes('subscription')) {
+        setAuthError('subscription_required')
+      } else {
+        setAuthError('auth_required')
+      }
+      socket.disconnect()
+    })
+
     socket.on('error', (err: { message?: string }) => {
       const msg = err?.message?.toLowerCase() ?? ''
       if (msg.includes('subscription')) {
