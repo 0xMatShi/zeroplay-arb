@@ -8,7 +8,7 @@ import { VersionModule } from './version/version.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
-import { ArbitrageModule } from './arbitrage/pm-pm-arb/arbitrage.module';
+// import { ArbitrageModule } from './arbitrage/pm-pm-arb/arbitrage.module';
 import { SportsArbModule } from './arbitrage/pm-bm-arb/sports-arb.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { DatabaseConfig } from './config/database.config';
@@ -47,7 +47,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     SubscriptionsModule,
     BotModule,
 
-    ArbitrageModule,
+    // ArbitrageModule,
     SportsArbModule,
     DashboardModule,
   ],

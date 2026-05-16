@@ -50,15 +50,26 @@ const PF_CHUNK_DELAY_MS = 300;
 export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PriceStreamService.name);
 
-  // ── Polymarket & Probable: token_id → Outcome ──
-  private readonly tokenOutcomes = new Map<string, Outcome>();
+  // ── Polymarket & Probable: token_id → {outcomeId, currentPrice} ──
+  // Storing only primitives, not full entities, to avoid holding the entity
+  // graph (Outcome → PlatformEvent[rawData] → outcomes[]) in memory.
+  private readonly tokenPrices = new Map<string, { id: string; price: number }>();
   private readonly polyTokens = new Set<string>();
   private readonly probTokens = new Set<string>();
 
-  // ── Predict.fun: marketId → { yes?, no? } outcomes ──
-  /** marketId (as string) → Yes/No outcome entities for that market */
-  private readonly pfMarketOutcomes = new Map<string, { yes?: Outcome; no?: Outcome }>();
+  // ── Predict.fun: marketId → {yes/no outcomeId + currentPrice} ──
+  private readonly pfMarketPrices = new Map<
+    string,
+    { yesId?: string; yesPrice?: number; noId?: string; noPrice?: number }
+  >();
   private readonly pfMarketIds = new Set<string>();
+
+  // ── Batched DB writes ──
+  // Accumulate price changes and flush to DB every 2s instead of saving on
+  // each WS tick — prevents hundreds of concurrent save() promises piling up
+  // on a slow server and leaking memory through pending closures.
+  private readonly pendingUpdates = new Map<string, { price: number; previousPrice: number }>();
+  private batchSaveTimer: NodeJS.Timeout | null = null;
 
   // ── Polymarket WS ──
   private polyWs: Ws.WebSocket | null = null;
@@ -234,10 +245,12 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
           const side = outcome.metadata?.side as 'yes' | 'no' | undefined;
           if (!marketId || !side) continue;
 
-          if (!this.pfMarketOutcomes.has(marketId)) {
-            this.pfMarketOutcomes.set(marketId, {});
+          if (!this.pfMarketPrices.has(marketId)) {
+            this.pfMarketPrices.set(marketId, {});
           }
-          this.pfMarketOutcomes.get(marketId)![side] = outcome;
+          const entry = this.pfMarketPrices.get(marketId)!;
+          if (side === 'yes') { entry.yesId = outcome.id; entry.yesPrice = Number(outcome.price); }
+          else { entry.noId = outcome.id; entry.noPrice = Number(outcome.price); }
 
           if (!this.pfMarketIds.has(marketId)) {
             this.pfMarketIds.add(marketId);
@@ -249,7 +262,9 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
         const tokenId: string = outcome.metadata?.tokenId || outcome.externalId;
         if (!tokenId) continue;
 
-        this.tokenOutcomes.set(tokenId, outcome);
+        // Store only primitives — not the full entity — to avoid holding the
+        // entire Outcome→PlatformEvent graph alive in memory indefinitely.
+        this.tokenPrices.set(tokenId, { id: outcome.id, price: Number(outcome.price) });
 
         if (slug === 'polymarket') {
           if (!this.polyTokens.has(tokenId)) {
@@ -466,19 +481,26 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
       const ob = msg.data as { asks?: [number, number][]; bids?: [number, number][] } | undefined;
       if (!ob) return;
 
-      const outcomes = this.pfMarketOutcomes.get(marketId);
-      if (!outcomes) return;
+      const mkt = this.pfMarketPrices.get(marketId);
+      if (!mkt) return;
 
       // Yes price = best ask (cheapest price to buy Yes)
-      if (outcomes.yes) {
+      if (mkt.yesId != null) {
         const bestAsk = ob.asks?.[0]?.[0];
-        if (bestAsk != null) this.applyPriceUpdateToOutcome(outcomes.yes, bestAsk);
+        if (bestAsk != null) {
+          this.applyPriceById({ id: mkt.yesId, price: mkt.yesPrice ?? 0 }, bestAsk);
+          mkt.yesPrice = bestAsk;
+        }
       }
 
       // No price = 1 - best bid for Yes (buying No = selling Yes at best bid price)
-      if (outcomes.no) {
+      if (mkt.noId != null) {
         const bestBid = ob.bids?.[0]?.[0];
-        if (bestBid != null) this.applyPriceUpdateToOutcome(outcomes.no, 1 - bestBid);
+        if (bestBid != null) {
+          const noPrice = 1 - bestBid;
+          this.applyPriceById({ id: mkt.noId, price: mkt.noPrice ?? 0 }, noPrice);
+          mkt.noPrice = noPrice;
+        }
       }
     }
   }
@@ -504,29 +526,46 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
 
   // ─────────────────────── Price Update ───────────────────────
 
-  /** Generic update by tokenId — used for Polymarket and Probable. */
+  /** Generic update by tokenId — used for Polymarket, Probable, and Opinion. */
   private applyPriceUpdate(tokenId: string, bestAsk: number): void {
-    const outcome = this.tokenOutcomes.get(tokenId);
-    if (!outcome) return;
-    this.applyPriceUpdateToOutcome(outcome, bestAsk);
+    const entry = this.tokenPrices.get(tokenId);
+    if (!entry) return;
+    this.applyPriceById(entry, bestAsk);
   }
 
   /** Core price update logic — shared by all platforms. */
-  private applyPriceUpdateToOutcome(outcome: Outcome, price: number): void {
+  private applyPriceById(entry: { id: string; price: number }, price: number): void {
     if (!isFinite(price) || price <= 0 || price > 1) return;
+    if (Math.abs(entry.price - price) < 0.0001) return;
 
-    const current = Number(outcome.price);
-    if (Math.abs(current - price) < 0.0001) return;
+    const previousPrice = entry.price;
+    entry.price = price;
 
-    outcome.previousPrice = outcome.price;
-    outcome.price = price;
-    outcome.lastUpdatedAt = new Date();
-
-    this.outcomeRepo.save(outcome).catch((err) => {
-      this.logger.warn(`Price save failed for outcome ${outcome.id}: ${err.message}`);
-    });
-
+    // Accumulate in pendingUpdates — flushed to DB in a batch every 2s.
+    // Avoids hundreds of concurrent save() promises on a slow server.
+    this.pendingUpdates.set(entry.id, { price, previousPrice });
+    this.scheduleBatchSave();
     this.scheduleScan();
+  }
+
+  private scheduleBatchSave(): void {
+    if (this.batchSaveTimer) return;
+    this.batchSaveTimer = setTimeout(async () => {
+      this.batchSaveTimer = null;
+      if (this.pendingUpdates.size === 0) return;
+
+      const snapshot = new Map(this.pendingUpdates);
+      this.pendingUpdates.clear();
+
+      const now = new Date();
+      await Promise.all(
+        Array.from(snapshot.entries()).map(([id, { price, previousPrice }]) =>
+          this.outcomeRepo
+            .update(id, { price, previousPrice, lastUpdatedAt: now })
+            .catch((err) => this.logger.warn(`Batch price update failed ${id}: ${err.message}`)),
+        ),
+      );
+    }, 2000);
   }
 
   private scheduleScan(): void {
@@ -568,6 +607,7 @@ export class PriceStreamService implements OnModuleInit, OnModuleDestroy {
     if (this.probReconnTimer) clearTimeout(this.probReconnTimer);
     if (this.pfReconnTimer) clearTimeout(this.pfReconnTimer);
     if (this.scanDebounce) clearTimeout(this.scanDebounce);
+    if (this.batchSaveTimer) clearTimeout(this.batchSaveTimer);
     if (this.polyWs) { this.polyWs.terminate(); this.polyWs = null; }
     if (this.probWs) { this.probWs.terminate(); this.probWs = null; }
     if (this.pfWs) { this.pfWs.terminate(); this.pfWs = null; }
