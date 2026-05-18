@@ -175,7 +175,7 @@ function getSections(t: TFunc): Section[] {
           id: 'community',
           name: s('support.community.name'),
           expandContent: <p>{s('support.community.expand')}</p>,
-          lite: 'cross', pro: 'check', max: 'check',
+          lite: 'cross', pro: 'cross', max: 'check',
         },
         {
           id: 'help',

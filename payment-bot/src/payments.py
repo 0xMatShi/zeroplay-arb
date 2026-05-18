@@ -15,7 +15,7 @@ PRIVATE_GROUP_ID = int(os.getenv("PRIVATE_GROUP_ID", "0"))  # Используе
 
 SUBSCRIPTION_PLANS = {
     "1week":   {"label": "LITE", "price": 35,  "duration_days": 7,  "invite_links": False},
-    "1month":  {"label": "PRO",  "price": 149, "duration_days": 30, "invite_links": True},
+    "1month":  {"label": "PRO",  "price": 149, "duration_days": 30, "invite_links": False},
     "3months": {"label": "MAX",  "price": 359, "duration_days": 90, "invite_links": True},
 }
 
