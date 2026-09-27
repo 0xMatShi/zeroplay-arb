@@ -122,8 +122,8 @@ flowchart LR
 ~~~bash
 cd andex-arb-be
 cp .env.example .env
-corepack pnpm install --frozen-lockfile
-docker compose up -d postgres
+corepack pnpm install
+docker compose up -d
 corepack pnpm migration:run
 corepack pnpm start:dev
 ~~~
@@ -137,7 +137,7 @@ Backend слушает порт 3000 по умолчанию. Для ручно�
 ~~~bash
 cd andex-arb-fe
 cp .env.example .env
-corepack pnpm install --frozen-lockfile
+corepack pnpm install
 corepack pnpm dev
 ~~~
 
